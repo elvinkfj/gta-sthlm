@@ -119,6 +119,8 @@ body.playing #hud { opacity: 1; }
 @keyframes beacon { 50% { background: var(--sign-red); box-shadow: 0 0 12px 4px rgba(200, 16, 46, 0.8); } }
 .tag.fine { padding: 5px 11px; }
 #wanted.calm { animation: none; box-shadow: 0 0 0 2px #2f6bff; }
+#fade { position: fixed; inset: 0; background: #05080b; opacity: 0; pointer-events: none; transition: opacity 0.4s ease; }
+#fade.on { opacity: 1; }
 
 /* the ordningsbot the constable hands you: a paper slip with the police band across the top */
 #ticket {
@@ -286,7 +288,7 @@ body.touch .tk-sign .key { display: none; }
     <dl class="tk-meta"><dt>Plats</dt><dd id="tkPlace"></dd><dt>Tid</dt><dd id="tkTime"></dd><dt>Fordon</dt><dd id="tkCar"></dd></dl>
     <ul id="tkRows"></ul>
     <div class="tk-sum"><span>Att betala inom 30 dagar</span><b id="tkSum"></b></div>
-    <div class="tk-foot"><span id="tkOfficer"></span><span class="tk-sign"><span class="key">E</span>Skriv under</span></div>
+    <div class="tk-foot"><span id="tkOfficer"></span><span class="tk-sign"><span class="key">E</span><span id="tkSignText">Skriv under</span></span></div>
   </div>
   <canvas id="map" aria-label="Karta, klicka för att se hela staden" title="Visa hela kartan (K)"></canvas>
   <div id="toast" hidden></div>
@@ -318,6 +320,8 @@ body.touch .tk-sign .key { display: none; }
     <span class="key">Esc</span><span>Släpp musen</span>
   </div>
 </div>
+
+<div id="fade" aria-hidden="true"></div>
 
 <div id="touch" hidden>
   <div id="stick"><div id="knob"></div></div>
@@ -1215,7 +1219,7 @@ body.touch .tk-sign .key { display: none; }
     ['Evert Taubes terrass', 'RH2 RH3', { hw: 5 }],
     ['Riddarholmen', 'RH3 RH4 RH1', { hw: 5 }],
     ['Slussen', 'SL0 SL1', { hw: 9, bridge: true }],
-    ['Centralbron', 'MB3 CB1', { hw: 8, bridge: true, limit: 50 }],
+    ['Centralbron', 'MB3 CB1', { hw: 8, bridge: true, limit: 70 }],
     // Södermalm
     ['Slussen', 'SL1 SMT', { hw: 8 }],
     ['Söder Mälarstrand', 'SL1 CB1 SMS2 SMS3', { hw: 7.5, walk: 8, trees: 'right' }],
@@ -1247,7 +1251,7 @@ body.touch .tk-sign .key { display: none; }
     if (nodeIndex.has(id)) return nodeIndex.get(id);
     const p = PTS[id];
     if (!p) throw new Error('unknown junction ' + id);
-    nodes.push({ id, x: p[0], z: p[1], nb: [], nbE: [], all: [], r: 0 });
+    nodes.push({ id, x: p[0], z: p[1], nb: [], nbE: [], nbW: [], all: [], r: 0 });
     nodeIndex.set(id, nodes.length - 1);
     return nodes.length - 1;
   }
@@ -1261,7 +1265,8 @@ body.touch .tk-sign .key { display: none; }
         a, b, name, kind, hw, len: Math.hypot(B.x - A.x, B.z - A.z),
         walk: o.walk !== undefined ? o.walk : kind === 'lane' ? 0.8 : kind === 'ped' ? 0.6 : hw >= 8 ? 6 : 4,
         bridge: !!o.bridge, stairs: !!o.stairs, drive: kind === 'street', trees: o.trees || null, median: !!o.median,
-        limit: o.limit || (o.bridge ? 50 : kind === 'lane' ? 20 : kind === 'ped' ? 10 : 40)
+        // speed limits: 40 in the lanes, 50 on ordinary streets, 60 on the big streets and the bridges, 20 where people walk
+        limit: o.limit || (o.bridge ? 60 : kind === 'lane' ? 40 : kind === 'ped' ? 20 : hw >= 7 ? 60 : 50)
       };
       // where cars drive: the right-hand lane, the inner lane for overtaking, and the kerb lane for parking
       e.lane = e.median ? hw * 0.62 : hw >= 8 ? hw * 0.6 : Math.min(LANE, hw * 0.5);
@@ -1274,6 +1279,7 @@ body.touch .tk-sign .key { display: none; }
       A.all.push(e.i); B.all.push(e.i);
       if (e.drive) { A.nb.push(b); B.nb.push(a); }
       if (e.emerg) { A.nbE.push(b); B.nbE.push(a); }
+      A.nbW.push(b); B.nbW.push(a); // on foot every street, lane and stair goes
       edgeKey.set(a + ',' + b, e); edgeKey.set(b + ',' + a, e);
     }
   }
@@ -1384,7 +1390,8 @@ body.touch .tk-sign .key { display: none; }
     for (let ix = gcell(x0); ix <= gcell(x1); ix++) for (let iz = gcell(z0); iz <= gcell(z1); iz++) {
       const cell = grid[ix * GN + iz];
       if (!cell) continue;
-      for (let i = 0; i < cell.length; i++) { const o = cell[i]; if (o.stamp === stamp) continue; o.stamp = stamp; fn(o); }
+      // an obstacle can be switched off (an open cell door)
+      for (let i = 0; i < cell.length; i++) { const o = cell[i]; if (o.stamp === stamp || o.off) continue; o.stamp = stamp; fn(o); }
     }
   }
   // push a circle of radius r out of a box given in its own frame; returns [push x, push z] in that frame or null
@@ -2113,6 +2120,170 @@ body.touch .tk-sign .key { display: none; }
     const B = landmark([-264, -6, 1, 0], 47, 48, 0x8f4a36, 15, { rh: 3, ri: 4, roofCol: 0x2b2b2d, name: 'Riddarhuset' });
     B.hip(-261, -3, -220, 39, 18.3, 5, 8, 8, 0x2b2b2d);
   }
+  /* ---------- Polisstationen on Stora Nygatan ---------- */
+  // A three-storey house with the blue POLIS sign and the police lamp over the door. The ground floor is open to walk
+  // into: the lobby with the counter, a corridor with three cells behind bars (one of them yours if you are arrested)
+  // and an interview room. While you are inside, the floors above are lifted off so the camera can see in.
+  const STATION = (() => {
+    const X0 = -227.0, X1 = -198.0, Z0 = 202.4, Z1 = 242.6, GH = 4.2, TOP = GH + 2 * FLOOR_H, T = 0.4, IT = 0.25;
+    const low = new Builder({ split: true, ao: AO }), high = new Builder({ split: true, ao: AO }), floorB = new Builder(), glassB = new Builder(), signB2 = new Builder();
+    const OUT = 0xd9c39a, PLINTH = 0xa8916a, IN = 0xe8e6e0, STEEL = 0x3a4047, WOOD = 0x7a5a3c, NAVY = 0x16305f;
+    const foot = axisPoly(X0, Z0, X1, Z1);
+    // walls: a box in the inside colour; outer walls get their outside face painted over in the facade colour
+    const wallBox = (x0, z0, x1, z1, h, col = IN) => { low.box(x0, 0, z0, x1, h, z1, col, false, true); addBox(x0, z0, x1, z1, h); };
+    const skin = (ax, az, bx, bz, y0, y1, nx, nz, col) => low.quad([ax + nx * 0.02, y0, az + nz * 0.02], [bx + nx * 0.02, y0, bz + nz * 0.02], [bx + nx * 0.02, y1, bz + nz * 0.02], [ax + nx * 0.02, y1, az + nz * 0.02], col, null, [nx, 0, nz]);
+    // the outer walls of the ground floor, the door gap in the east facade
+    const DZ0 = 220.2, DZ1 = 223.8;
+    for (const [x0, z0, x1, z1, nx, nz] of [[X0, Z0, X1, Z0 + T, 0, -1], [X0, Z1 - T, X1, Z1, 0, 1], [X0, Z0, X0 + T, Z1, -1, 0], [X1 - T, Z0, X1, DZ0, 1, 0], [X1 - T, DZ1, X1, Z1, 1, 0]]) {
+      low.box(x0, 0, z0, x1, GH, z1, IN, false, false);
+      addBox(x0, z0, x1, z1, TOP + 3);
+      if (nz) skin(x0, nz < 0 ? z0 : z1, x1, nz < 0 ? z0 : z1, 0, GH, 0, nz, OUT);
+      else skin(nx < 0 ? x0 : x1, z0, nx < 0 ? x0 : x1, z1, 0, GH, nx, 0, OUT);
+      if (nz) skin(x0, nz < 0 ? z0 : z1, x1, nz < 0 ? z0 : z1, 0, 0.7, 0, nz * 1.6, PLINTH);
+      else skin(nx < 0 ? x0 : x1, z0, nx < 0 ? x0 : x1, z1, 0, 0.7, nx * 1.6, 0, PLINTH);
+    }
+    low.box(X1 - T, 3.0, DZ0, X1, GH, DZ1, IN, false, false);
+    skin(X1, DZ0, X1, DZ1, 3.0, GH, 1, 0, OUT);
+    // door frame in police blue, the glass doors slid open to either side
+    low.box(X1 - 0.05, 0, DZ0 - 0.18, X1 + 0.12, 3.1, DZ0, NAVY); low.box(X1 - 0.05, 0, DZ1, X1 + 0.12, 3.1, DZ1 + 0.18, NAVY);
+    low.box(X1 - 0.05, 2.95, DZ0 - 0.18, X1 + 0.12, 3.15, DZ1 + 0.18, NAVY);
+    for (const [z0, z1] of [[DZ0 - 1.55, DZ0 - 0.1], [DZ1 + 0.1, DZ1 + 1.55]]) glassB.box(X1 - 0.22, 0.05, z0, X1 - 0.14, 2.9, z1, 0xffffff);
+    // windows in the ground floor facade: dark glass in blue frames
+    const winE = (z0, z1) => { low.box(X1, 0.9, z0 - 0.08, X1 + 0.06, 2.9, z1 + 0.08, NAVY); glassB.box(X1 + 0.06, 1.0, z0, X1 + 0.08, 2.8, z1, 0xffffff); };
+    for (const [z0, z1] of [[204.6, 208.6], [211.0, 215.0], [227.6, 231.6], [234.0, 238.0]]) winE(z0, z1);
+    // the floors above: plastered, with windows, a cornice and a pitched roof
+    high.box(X0, GH, Z0, X1, GH + 0.3, Z1, 0xf1f0ec, false, true);
+    high.setFrame(X0, Z0, 1, 0);
+    high.box(0, GH, 0, X1 - X0, TOP, Z1 - Z0, OUT, true, false);
+    high.box(-0.25, TOP - 0.1, -0.25, X1 - X0 + 0.25, TOP + 0.25, Z1 - Z0 + 0.25, shade(OUT, 1.1));
+    high.hip(0, 0, X1 - X0, Z1 - Z0, TOP + 0.25, 7.5, 9, 9, 0x3a3e42);
+    high.box(-0.08, GH - 0.25, -0.08, X1 - X0 + 0.08, GH + 0.05, Z1 - Z0 + 0.08, shade(OUT, 0.92));
+    high.setFrame();
+    // the big sign over the door and the blue police lamp beside it
+    const signTex = canvasTex(512, 96, (g, w, h) => {
+      g.fillStyle = '#16305f'; g.fillRect(0, 0, w, h);
+      g.fillStyle = '#f2c200'; g.fillRect(0, h - 10, w, 10);
+      g.beginPath(); g.arc(52, h / 2 - 4, 30, 0, TAU); g.fill();
+      g.fillStyle = '#16305f'; g.font = '900 34px Overpass, "Arial Black", Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('★', 52, h / 2 - 3);
+      g.fillStyle = '#ffffff'; g.font = '900 58px Overpass, "Arial Black", Arial, sans-serif'; g.textAlign = 'left'; g.fillText('POLISEN', 104, h / 2 - 2);
+    });
+    const lampTex = canvasTex(128, 128, (g, w, h) => {
+      g.fillStyle = '#1f5fd6'; g.fillRect(0, 0, w, h);
+      g.fillStyle = '#ffffff'; g.font = '900 38px Overpass, "Arial Black", Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('POLIS', w / 2, h / 2 + 2);
+      g.strokeStyle = '#0d2a63'; g.lineWidth = 8; g.strokeRect(4, 4, w - 8, h - 8);
+    });
+    const sq = (B, ax, az, bx, bz, y0, y1, nx, nz) => B.quad([ax, y0, az], [bx, y0, bz], [bx, y1, bz], [ax, y1, az], 0xffffff, [[0, 0], [1, 0], [1, 1], [0, 1]], [nx, 0, nz]);
+    sq(signB2, X1 + 0.06, DZ1 + 1.4, X1 + 0.06, DZ0 - 1.4, 3.3, 4.05, 1, 0);
+    const lampB = new Builder(), lx = X1 + 0.75, lz = DZ0 - 2.3, ly = 3.2, ls = 0.32;
+    low.box(X1, ly + ls - 0.06, lz - 0.04, lx, ly + ls - 0.02, lz + 0.04, STEEL);
+    sq(lampB, lx - ls, lz - ls, lx + ls, lz - ls, ly - ls, ly + ls, 0, -1); sq(lampB, lx + ls, lz + ls, lx - ls, lz + ls, ly - ls, ly + ls, 0, 1);
+    sq(lampB, lx + ls, lz - ls, lx + ls, lz + ls, ly - ls, ly + ls, 1, 0); sq(lampB, lx - ls, lz + ls, lx - ls, lz - ls, ly - ls, ly + ls, -1, 0);
+    low.box(lx - ls - 0.03, ly + ls, lz - ls - 0.03, lx + ls + 0.03, ly + ls + 0.07, lz + ls + 0.03, STEEL);
+    low.box(lx - ls - 0.03, ly - ls - 0.07, lz - ls - 0.03, lx + ls + 0.03, ly - ls, lz + ls + 0.03, STEEL);
+    // inside: the floor, the walls between the rooms
+    floorB.quad([X0 + T, 0.015, Z1 - T], [X1 - T, 0.015, Z1 - T], [X1 - T, 0.015, Z0 + T], [X0 + T, 0.015, Z0 + T], 0xffffff,
+      [[0, 0], [(X1 - X0) / 0.8, 0], [(X1 - X0) / 0.8, (Z1 - Z0) / 0.8], [0, (Z1 - Z0) / 0.8]], [0, 1, 0]);
+    const CZ = 219.6, CORR = 224.4, LW = -212.0, BACK = 211.0, SOUTH = 233.0;
+    wallBox(X0 + T, BACK - IT / 2, X1 - T, BACK + IT / 2, GH);                 // behind the cells and the counter
+    wallBox(X0 + T, SOUTH - IT / 2, X1 - T, SOUTH + IT / 2, GH);               // south of the lobby and the interview room
+    wallBox(LW - IT / 2, BACK, LW + IT / 2, CZ, GH);                            // lobby | cells
+    wallBox(LW - IT / 2, CORR, LW + IT / 2, SOUTH, GH);                         // lobby | store room
+    wallBox(-216.0 - IT / 2, CORR, -216.0 + IT / 2, SOUTH, GH);                 // interview room | store room
+    wallBox(X0 + T, CORR - IT / 2, -218.4, CORR + IT / 2, GH);                  // corridor south wall, the interview room door
+    wallBox(-217.0, CORR - IT / 2, LW, CORR + IT / 2, GH);
+    const CELLS = [[X0 + T, -222.2], [-222.2, -217.1], [-217.1, LW]];
+    for (const x of [-222.2, -217.1]) wallBox(x - IT / 2, BACK, x + IT / 2, CZ, GH);
+    // the bars along the corridor, with a sliding door into each cell
+    const barsB = new Builder(), doors = [];
+    const bars = (B, x0, x1) => {
+      for (let x = x0 + 0.07; x < x1 - 0.03; x += 0.14) B.box(x - 0.022, 0.02, CZ - 0.022, x + 0.022, GH - 0.25, CZ + 0.022, STEEL);
+      for (const y of [0.02, 1.15, GH - 0.35]) B.box(x0, y, CZ - 0.045, x1, y + 0.1, CZ + 0.045, STEEL);
+    };
+    CELLS.forEach(([cx0, cx1], i) => {
+      const dx0 = (cx0 + cx1) / 2 - 0.6, dx1 = dx0 + 1.2;
+      bars(barsB, cx0 + (i ? IT / 2 : 0), dx0); bars(barsB, dx1, cx1 - (i < 2 ? IT / 2 : 0));
+      barsB.box(cx0, GH - 0.25, CZ - 0.06, cx1, GH, CZ + 0.06, STEEL);
+      addBox(cx0, CZ - 0.06, dx0, CZ + 0.06, 2.4); addBox(dx1, CZ - 0.06, cx1, CZ + 0.06, 2.4);
+      const dB = new Builder();
+      bars(dB, 0, 1.2);
+      dB.box(1.08, 1.0, -0.09, 1.16, 1.3, 0.09, 0x1d2126);
+      const obst = { t: 0, x0: dx0, z0: CZ - 0.07, x1: dx1, z1: CZ + 0.07, h: 2.4 };
+      addObstacle(obst, obst.x0, obst.z0, obst.x1, obst.z1);
+      // a bunk along the side wall and a steel toilet in the corner
+      low.box(cx0 + 0.15 + (i ? IT / 2 : 0), 0, BACK + 0.4, cx0 + 1.0 + (i ? IT / 2 : 0), 0.45, BACK + 4.6, 0x5c6168);
+      low.box(cx0 + 0.18 + (i ? IT / 2 : 0), 0.45, BACK + 0.45, cx0 + 0.97 + (i ? IT / 2 : 0), 0.58, BACK + 4.55, 0x2f5f9e);
+      addBox(cx0 + 0.15, BACK + 0.4, cx0 + 1.0 + IT, BACK + 4.6, 0.58);
+      low.box(cx1 - 0.75, 0, BACK + 0.4, cx1 - 0.3, 0.48, BACK + 0.9, 0xc9ccd0);
+      addBox(cx1 - 0.75, BACK + 0.4, cx1 - 0.3, BACK + 0.9, 0.48);
+      doors.push({ x0: dx0, x1: dx1, geo: dB, obst, open: 0, want: i === 2 ? 1 : 0, inside: [cx0 + IT, BACK + 0.4, cx1 - IT, CZ - 0.25], door: { x: (dx0 + dx1) / 2, z: CZ } });
+    });
+    // the lobby: counter with a glass screen, a bench, the queue-ticket machine, the police plaque on the wall
+    low.box(-209.6, 0, 213.3, -202.8, 1.05, 214.3, WOOD); low.box(-209.7, 1.05, 213.2, -202.7, 1.12, 214.4, 0xd9d6cf);
+    glassB.box(-209.6, 1.12, 213.72, -202.8, 2.1, 213.8, 0xffffff);
+    addBox(-209.7, 213.2, -202.7, 214.4, 1.12);
+    low.box(-209.6, 0, 211.15, -209.4, 1.05, 213.3, WOOD); addBox(-209.6, 211.15, -209.4, 213.3, 1.05);
+    for (const [x0, x1] of [[-208.8, -202.8]]) {
+      low.box(x0, 0.42, 231.7, x1, 0.5, 232.7, WOOD); low.box(x0, 0.5, 232.55, x1, 1.0, 232.7, WOOD);
+      for (const x of [x0 + 0.2, x1 - 0.3]) low.box(x, 0, 231.8, x + 0.1, 0.42, 232.6, STEEL);
+      addBox(x0, 231.7, x1, 232.75, 0.5);
+    }
+    low.box(-200.2, 0, 216.2, -199.6, 1.4, 216.8, 0xd23b2b); low.box(-200.15, 1.0, 216.1, -199.65, 1.3, 216.2, 0x111111); addBox(-200.2, 216.2, -199.6, 216.8, 1.4);
+    sq(signB2, -208.0, BACK + IT / 2 + 0.01, -203.6, BACK + IT / 2 + 0.01, 2.25, 3.0, 0, 1);
+    // posters, a plant, and in the interview room a table with two chairs
+    for (const [x0, x1, c] of [[-207.5, -206.3, 0xf2c200], [-205.4, -204.2, 0x2f6fdb]]) low.box(x0, 1.4, SOUTH - IT / 2 - 0.02, x1, 2.3, SOUTH - IT / 2, c);
+    low.prism(-201.2, 231.6, 0.3, 0, 0.5, 8, 0x7a5a3c); low.prism(-201.2, 231.6, 0.55, 0.5, 1.4, 8, 0x2e7d4f, 0.2); addCircle(-201.2, 231.6, 0.4, 1.4);
+    low.box(-223.5, 0, 227.4, -220.5, 0.75, 229.0, 0xd9d6cf); addBox(-223.5, 227.4, -220.5, 229.0, 0.75);
+    for (const z of [226.6, 229.8]) { low.box(-222.4, 0, z - 0.25, -221.6, 0.45, z + 0.25, STEEL); low.box(-222.4, 0.45, z + (z < 228 ? -0.25 : 0.2), -221.6, 1.0, z + (z < 228 ? -0.2 : 0.25), STEEL); }
+    // offices behind the walls (only seen from above while you are inside): desks and lockers
+    for (let x = X0 + 2; x < X1 - 4; x += 5) { low.box(x, 0, Z0 + 2.5, x + 2.4, 0.75, Z0 + 3.7, 0xcfc9bd); low.box(x + 0.6, 0.75, Z0 + 2.6, x + 1.8, 1.2, Z0 + 2.7, 0x222428); }
+    for (let x = -215.5; x < -212.6; x += 0.7) low.box(x, 0, SOUTH - 0.75, x + 0.6, 1.9, SOUTH - 0.2, 0x8a939b);
+    take(foot);
+    mapPolys.push([foot, 0x6f86a8]);
+    mapLabels.push(['Polisstationen', (X0 + X1) / 2, (Z0 + Z1) / 2, 'landmark']);
+    landmarkList.push({ name: 'Polisstationen', poly: foot });
+    // the rooms as waypoints, for walking someone in or chasing you through the building
+    const dx = doors.map((d) => d.door.x);
+    const P = {
+      E0: [-196.9, 222.0], E1: [-200.0, 222.0], L: [-205.5, 222.6], C0: [-213.3, 222.0], C3: [dx[2], 222.0], CF: [-217.7, 222.0],
+      C2: [dx[1], 222.0], C1: [dx[0], 222.0], F0: [-217.7, 226.2], D1: [dx[0], 218.0], D2: [dx[1], 218.0], D3: [dx[2], 218.0]
+    };
+    const LINKS = [['E0', 'E1'], ['E1', 'L'], ['L', 'C0'], ['C0', 'C3'], ['C3', 'CF'], ['CF', 'C2'], ['C2', 'C1'], ['CF', 'F0'], ['C1', 'D1'], ['C2', 'D2'], ['C3', 'D3']];
+    const inside = (x, z) => x > X0 + 0.2 && x < X1 && z > Z0 + 0.2 && z < Z1 - 0.2;
+    let lowMesh = null, highMeshes = [], doorMeshes = [];
+    return {
+      X0, X1, Z0, Z1, GH, P, LINKS, inside, doors, desk: [-206.2, 212.3],
+      // a police car pulls up at the kerb outside the door: facing south on the near side, or north on the far side
+      curb: (h) => (Math.cos(h) >= 0 ? { x: -193.3, z: 221.0, h: 0 } : { x: -189.1, z: 223.5, h: Math.PI }),
+      finish(facade, solid, modern) {
+        const add = (B, mat, list) => { if (B.empty) return; const m = new THREE.Mesh(B.build(), mat); m.castShadow = true; m.receiveShadow = true; scene.add(m); list && list.push(m); return m; };
+        for (const [B, mat] of [[low, facade], [low.altB, modern], [low.solidB, solid]]) add(B, mat);
+        for (const [B, mat] of [[high, facade], [high.altB, modern], [high.solidB, solid]]) add(B, mat, highMeshes);
+        const tile = canvasTex(128, 128, (g, w, h) => {
+          g.fillStyle = '#c9ccce'; g.fillRect(0, 0, w, h);
+          grain(g, 0, 0, w, h, 2400, 'rgba(90,96,102,.25)', 'rgba(255,255,255,.3)', 1.2);
+          g.strokeStyle = 'rgba(80,86,92,.55)'; g.lineWidth = 2; g.strokeRect(1, 1, w - 2, h - 2);
+        }, true);
+        add(floorB, std({ map: tile, roughness: 0.45 }));
+        add(glassB, new THREE.MeshPhysicalMaterial({ color: 0x9fc4d6, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.35 }));
+        add(signB2, std({ map: signTex, roughness: 0.4, emissive: 0x334466, emissiveMap: signTex }));
+        add(lampB, std({ map: lampTex, roughness: 0.3, emissive: 0xffffff, emissiveMap: lampTex, emissiveIntensity: 0.9 }));
+        add(barsB, std({ color: 0xffffff, vertexColors: true, roughness: 0.4, metalness: 0.6 }));
+        const dmat = std({ vertexColors: true, roughness: 0.4, metalness: 0.6 });
+        for (const d of doors) { const m = new THREE.Mesh(d.geo.build(), dmat); m.position.set(d.x0, 0, 0); m.castShadow = true; scene.add(m); d.mesh = m; }
+      },
+      // the floors above come off while you are inside; cell doors slide towards where they are told to be
+      update(dt, px, pz) {
+        const show = !inside(px, pz);
+        for (const m of highMeshes) m.visible = show;
+        for (const d of doors) {
+          d.open += clamp(d.want - d.open, -dt * 1.2, dt * 1.2);
+          if (d.mesh) d.mesh.position.x = d.x0 - d.open * 1.1;
+          d.obst.off = d.open > 0.6;
+        }
+      }
+    };
+  })();
+
   // Tessinska palatset and Finska kyrkan across Slottsbacken from the palace, and Järnpojken, the smallest statue
   // in town, in the yard behind the church
   landmark([20, 91, 1, 0], 25, 36, 0xe7dcc4, 17, { rh: 3, ri: 4, roofCol: 0x3a3e42, name: 'Tessinska palatset' });
@@ -2371,6 +2542,7 @@ body.touch .tk-sign .key { display: none; }
   const facadeMat = std({ map: facadeTex, roughnessMap: facadeRough, roughness: 1, vertexColors: true });
   const modernMat = std({ map: modernTex, roughnessMap: modernRough, roughness: 1, metalness: 0.2, vertexColors: true });
   const solidMat = std({ vertexColors: true, roughness: 0.82 });
+  STATION.finish(facadeMat, solidMat, modernMat);
   for (const B of chunks.values()) {
     for (const [b, mat] of [[B, facadeMat], [B.altB, modernMat], [B.solidB, solidMat]]) {
       if (b.empty) continue;
@@ -2825,10 +2997,18 @@ body.touch .tk-sign .key { display: none; }
     };
     const wz = M.wb / 2, rA = M.R + 0.1, cA = M.R * 0.85;
     const archTop = cA + rA;
+    // the wing over each wheel: where the waist line is too low to clear the tyre (the Lamborghini's nose, the
+    // Porsche's front), the body swells into a rounded fender a few centimetres above the wheel arch
+    const fenderAt = (z) => {
+      let y = 0;
+      for (const az of [wz, -wz]) { const dz = z - az, rr = rA + 0.2; if (Math.abs(dz) < rr) y = Math.max(y, cA - 0.12 + Math.sqrt(rr * rr - dz * dz)); }
+      return y;
+    };
+    const beltF = (z) => Math.max(belt(z), fenderAt(z));
     const sillAt = (z) => {
       let y = sill(z);
       for (const az of [wz, -wz]) { const dz = z - az; if (Math.abs(dz) < rA) y = Math.max(y, cA + Math.sqrt(rA * rA - dz * dz)); }
-      return Math.min(y, belt(z) - 0.15);
+      return Math.min(y, beltF(z) - 0.075);
     };
     const topAt = (z) => {
       if (z < r0 - 1e-6 || z > r3 + 1e-6) return belt(z);
@@ -2875,7 +3055,9 @@ body.touch .tk-sign .key { display: none; }
     const Z = [...new Set(zs.filter((z) => z >= -hl - 1e-6 && z <= hl + 1e-6).map((z) => Math.round(clamp(z, -hl, hl) * 1000) / 1000))].sort((a, b) => a - b);
 
     function ring(z) {
-      const yb = sillAt(z), yt = Math.max(belt(z), yb + 0.15), w = halfW(z), top = topAt(z), h = top - yt;
+      const yb = sillAt(z), y0 = Math.max(belt(z), yb + 0.15), yt = Math.max(beltF(z), y0), w = halfW(z), top = Math.max(topAt(z), yt), h = top - yt;
+      // a fender raised over the wheel ahead of or behind the glasshouse keeps the bonnet low in the middle
+      const dip = z < r0 || z > r3 ? yt - y0 : 0;
       const k = clamp(h / 0.25, 0, 1);
       const gB = Math.max(0, w - S.shoulder), gT = Math.max(0, gB - S.tumble * clamp(h / 0.45, 0, 1));
       const xs = (y) => w * prof((y - yb) / (yt - yb));
@@ -2889,7 +3071,7 @@ body.touch .tk-sign .key { display: none; }
       pts.push([gB, yt, 'glass']);
       for (const y of glassLv) { const yy = clamp(y, yt, yg); pts.push([lerp(gB, gT, (yy - yt) / Math.max(1e-6, yg - yt)), yy, 'glass']); }
       pts.push([gT, yg, 'rail']);
-      const crown = lerp(z > 0 ? S.crown[1] : S.crown[0], S.crown[2], k);
+      const crown = lerp(z > 0 ? S.crown[1] : S.crown[0], S.crown[2], k) - dip;
       const xe = Math.max(0, gT - 0.1 * k - gB * 0.18 * (1 - k));
       const cy = (x) => top + crown * (1 - (xe > 0 ? (x / xe) * (x / xe) : 0));
       pts.push([xe, cy(xe), 'roof']);
@@ -2900,7 +3082,17 @@ body.touch .tk-sign .key { display: none; }
     const sideX = (z, y) => { const r = ring(z); return r.w * prof((y - r.yb) / (r.yt - r.yb)); };
     const surfY = (z, x) => { const r = ring(z); return r.top + r.crown * (1 - (r.xe > 0 ? Math.min(1, (x / r.xe) ** 2) : 1)); };
     const zone = (z) => (z > r2 && z < r3 ? 'wind' : z > r0 && z < r1 ? 'back' : z >= r1 && z <= r2 ? 'roof' : 'hood');
-    M._shape = { S, hl, hw, Z, ring, sill, belt, roof, sillAt, topAt, halfW, endZ, sideX, surfY, zone, lv, rA, cA, archTop, r0, r1, r2, r3 };
+    // the underside of the shell at (x, z): the roof and glass inside the glasshouse, the waist line elsewhere
+    const shellY = (x, z) => {
+      const r = ring(z), ax = Math.abs(x);
+      if (z < r0 || z > r3 || r.h <= 0.02) return r.yt;
+      const yg = r.yt + Math.max(0, r.h - Math.min(0.07, r.h * 0.3));
+      if (ax <= r.xe) return r.top + r.crown * (1 - (r.xe > 0 ? (ax / r.xe) ** 2 : 0));
+      if (ax <= r.gT) return yg;
+      if (ax <= r.gB) return r.yt + ((yg - r.yt) * (r.gB - ax)) / Math.max(1e-3, r.gB - r.gT);
+      return r.yt;
+    };
+    M._shape = { S, hl, hw, Z, ring, sill, belt, beltF, roof, sillAt, topAt, halfW, endZ, sideX, surfY, shellY, zone, lv, rA, cA, archTop, r0, r1, r2, r3 };
     return M._shape;
   }
 
@@ -3014,8 +3206,29 @@ body.touch .tk-sign .key { display: none; }
       mg.box(2 * x, y1 - y0, sh.rA * 1.7, UNDER, 0, (y0 + y1) / 2, az);
     }
     // interior: a dark tub up to the waist, seats and a steering wheel, seen through the windows
-    const seatZ = M.bus ? hl - 1.3 : r3 - (M.sport ? 0.98 : 0.92);
+    let seatZ = M.bus ? hl - 1.3 : r3 - (M.sport ? 0.98 : 0.92);
+    // a long raked windscreen (the Lamborghini's) would come down on the driver's head: sit further back, against the
+    // bulkhead in front of the engine
+    if (M.sport && seatZ > r2 + 0.05) seatZ = Math.max(r1 + 0.35, r2 - 0.2);
     const driver = { x: M.bus ? hw - 0.62 : Math.max(0.3, hw - S.shoulder - 0.42), y: (M.bus ? 2.3 : sh.roof(seatZ)) - 0.92, z: seatZ };
+    // whoever sits there has to fit under the roof: sink the seat, and in the lowest cars slide it inboard, until the
+    // head and the cap or beanie clear the glass and the roof all round (and the cap's peak the windscreen)
+    const HEAD = [[-0.17, 0.92, -0.17], [0.17, 0.92, -0.17], [-0.17, 0.92, 0.17], [0.17, 0.92, 0.17], [-0.16, 0.83, 0.31], [0.16, 0.83, 0.31], [0, 0.93, 0]];
+    const headRoom = (x, y, z) => Math.max(...HEAD.map(([hx, hy, hz]) => y + hy - (sh.shellY(x + hx, z + hz) - 0.035)));
+    const fitSeat = (x, y, z, minX) => {
+      // sinking is cheap (the doors hide the body) until the head drops below the window line; sliding inboard costs
+      // a little more. Take the cheapest mix that fits
+      let best = null;
+      const sill = sh.belt(z) + 0.2;
+      for (let xx = x; xx >= minX - 1e-6; xx -= 0.02) {
+        const d = Math.max(0, headRoom(xx, y, z)), cost = d + 1.5 * (x - xx) + 4 * Math.max(0, sill - (y - d + 0.8));
+        if (!best || cost < best.cost) best = { x: xx, d, cost };
+      }
+      return { x: best.x, y: y - best.d, z };
+    };
+    if (!M.bus) Object.assign(driver, fitSeat(driver.x, driver.y, driver.z, 0.22));
+    // the back seat, where an arrested driver is put (behind the driver, as the police do)
+    const rear = M.sport || M.bus ? null : fitSeat(driver.x, driver.y, seatZ - 0.88, 0.2);
     {
       const z0 = Math.max(r0, -hl + S.rc[0] * 0.7) + 0.05, z1 = Math.min(r3, hl - S.rc[1]) - 0.05;
       let yMin = 9;
@@ -3143,7 +3356,7 @@ body.touch .tk-sign .key { display: none; }
     const beltMax = Math.max(...sh.Z.filter((z) => Math.abs(z) < hl * 0.7).map(sh.belt)), roofMax = Math.max(...sh.Z.map(sh.topAt));
     const parts = M.bus ? [{ cz: 0, hw, hl, top: roofMax }]
       : [{ cz: 0, hw, hl, top: beltMax }, { cz: (Math.max(r1, -hl + 0.3) + r2) / 2, hw: hw - 0.12, hl: (r2 - Math.max(r1, -hl + 0.3)) / 2, top: roofMax + 0.03 }];
-    return { body: mg.build(), glass: gl.build(), decal, flashers, driver, parts };
+    return { body: mg.build(), glass: gl.build(), decal, flashers, driver, rear, parts };
   }
   // one geometry per model and colour, shared by every car like it until a crash dents one (see ownGeometry)
   const carGeoCache = new Map();
@@ -3203,6 +3416,9 @@ body.touch .tk-sign .key { display: none; }
     driver.position.set(geo.driver.x, geo.driver.y, geo.driver.z);
     driver.visible = false;
     body.add(driver);
+    // someone in the back seat (you, after an arrest)
+    let rearSeat = null;
+    if (geo.rear) { rearSeat = new THREE.Mesh(playerId.driverGeo, personMat); rearSeat.position.set(geo.rear.x, geo.rear.y, geo.rear.z); rearSeat.visible = false; body.add(rearSeat); }
     const spins = [], pivots = [], wheels = [], wg = wheelGeometry(M.R, M.rim);
     const wx = wheelX(M), wz = M.wb / 2;
     for (const sz of [1, -1]) for (const sx of [1, -1]) {
@@ -3223,7 +3439,7 @@ body.touch .tk-sign .key { display: none; }
     const offs = [];
     for (let i = 0; i < n; i++) offs.push(-span + (2 * span * i) / (n - 1));
     const c = {
-      M, color, group, body, driver, spins, pivots, wheels, geo, mat, bodyMesh, glass, decal, flashers,
+      M, color, group, body, driver, rearSeat, spins, pivots, wheels, geo, mat, bodyMesh, glass, decal, flashers,
       geoShared: true, x: 0, z: 0, h: 0, vx: 0, vz: 0, steer: 0, wheelRot: 0, roll: 0, pitch: 0,
       prevVf: 0, throttle: 0, r, offs, parts: geo.parts, bot: null, occupant: null, keep: false, input: null, px: 0, pz: 0,
       // gearbox
@@ -3744,7 +3960,8 @@ body.touch .tk-sign .key { display: none; }
         if (cvn > 4.5 && p.knockT <= 0) {
           p.vx = c.vx * 0.7 + wx * 3; p.vz = c.vz * 0.7 + wz * 3; p.vy = 5; p.grounded = false; p.knockT = 1.2;
           if (c === driving && p !== player) offense('påkörning', 0, p.x, p.z);
-          if (p.ai) { p.ai.state = 'flee'; p.ai.t = 4; p.ai.from = null; }
+          // knocked down: ordinary people run off afterwards, constables and the desk officer get up and carry on
+          if (p.ai && p.ai.state !== 'cop' && p.ai.state !== 'idle') { p.ai.state = 'flee'; p.ai.t = 4; p.ai.from = null; }
         } else {
           const vn = p.vx * wx + p.vz * wz;
           if (vn < cvn) { p.vx += (cvn - vn) * wx; p.vz += (cvn - vn) * wz; }
@@ -3779,9 +3996,10 @@ body.touch .tk-sign .key { display: none; }
   /* ================= traffic AI ================= */
   // shortest distance from every junction to one goal junction, along the streets (emerg: also lanes, squares and
   // pedestrian streets, the way police on blue lights drive). Worked out when first asked for, then remembered.
-  const distCache = [new Map(), new Map()];
+  const distCache = { nb: new Map(), nbE: new Map(), nbW: new Map() };
+  // graph: 'nb' streets for cars, 'nbE' also lanes and squares (blue lights), 'nbW' everything a person can walk
   function distTo(goal, emerg) {
-    const cache = distCache[emerg ? 1 : 0];
+    const graph = emerg === true ? 'nbE' : emerg || 'nb', cache = distCache[graph];
     if (cache.has(goal)) return cache.get(goal);
     const d = nodes.map(() => Infinity), done = nodes.map(() => false);
     d[goal] = 0;
@@ -3790,7 +4008,7 @@ body.touch .tk-sign .key { display: none; }
       for (let i = 0; i < nodes.length; i++) if (!done[i] && d[i] < Infinity && (u < 0 || d[i] < d[u])) u = i;
       if (u < 0) break;
       done[u] = true;
-      for (const v of emerg ? nodes[u].nbE : nodes[u].nb) d[v] = Math.min(d[v], d[u] + Math.hypot(nodes[u].x - nodes[v].x, nodes[u].z - nodes[v].z));
+      for (const v of nodes[u][graph]) d[v] = Math.min(d[v], d[u] + Math.hypot(nodes[u].x - nodes[v].x, nodes[u].z - nodes[v].z));
     }
     if (cache.size > 160) cache.delete(cache.keys().next().value);
     cache.set(goal, d);
@@ -3896,11 +4114,18 @@ body.touch .tk-sign .key { display: none; }
 
     // look for anything in the way: cars, the player, pedestrians
     let gap = Infinity, blocker = null;
+    // cars parked at the kerb are not in the way of a car keeping to its lane, however it happens to be angled
+    const ef = b.phase === 'edge' ? edgeFrame(b.from, b.to) : null, myLane = ef ? ef.lane : 0;
+    const atKerb = (o) => {
+      if (!ef || !ef.park || o.bot || o === driving || Math.hypot(o.vx, o.vz) > 0.5) return false;
+      const lat = (o.x - ef.A.x) * ef.rx + (o.z - ef.A.z) * ef.rz;
+      return Math.abs(Math.abs(lat) - ef.park) < 1.0 && Math.abs(lat - myLane) > 1.5;
+    };
     if (b.ignoreT <= 0) {
       for (const o of cars) {
         if (o === c || (c.police && o.bot && o.bot.yielding)) continue;
         const dx = o.x - c.x, dz = o.z - c.z, ah = dx * fx + dz * fz;
-        if (ah <= 0 || ah > 32) continue;
+        if (ah <= 0 || ah > 32 || atKerb(o)) continue;
         const lat = dx * lxv + dz * lzv;
         const dh = o.h - c.h, cs = Math.abs(Math.cos(dh)), sn = Math.abs(Math.sin(dh));
         if (Math.abs(lat) > M.W / 2 + cs * o.M.W / 2 + sn * o.M.L / 2 + 0.15) continue;
@@ -3919,6 +4144,7 @@ body.touch .tk-sign .key { display: none; }
         if (g < gap) { gap = g; blocker = p; }
       }
       if (blocker) vT = Math.min(vT, Math.max(0, (gap - 2.2) * 0.9));
+      b.blocker = blocker;
     }
     // with blue lights on the police go round whatever is in the way at once, oncoming traffic pulls over for them
     const urgent = c.police && c.police.state !== 'patrol' && c.siren;
@@ -3967,7 +4193,7 @@ body.touch .tk-sign .key { display: none; }
       if (!spotFree(M, x, z, h)) continue;
       const c = makeCar(M, rpick(M.colors));
       c.x = x; c.z = z; c.h = h; c.vx = f.ux * 6; c.vz = f.uz * 6;
-      c.bot = { from, to, next: chooseNext(from, to), phase: 'edge', t: 0, passT: 0, waitT: 0, ignoreT: 0, revT: 0, stuckT: 0, stuckTotal: 0, honkT: 0, turnAge: 0, cruise: M.bus ? 9 : M.sport ? 14 : 11 + Math.random() * 2 };
+      c.bot = { from, to, next: chooseNext(from, to), phase: 'edge', t: 0, passT: 0, waitT: 0, ignoreT: 0, revT: 0, stuckT: 0, stuckTotal: 0, honkT: 0, turnAge: 0, cruise: M.bus ? 10.5 : M.sport ? 16.5 : 12.5 + Math.random() * 2.5 };
       setOccupant(c, makeIdentity());
       return c;
     }
@@ -3981,7 +4207,8 @@ body.touch .tk-sign .key { display: none; }
 
   /* ---------- pedestrians ---------- */
   function npcThink(p, dt) {
-    if (p.ai.state === 'officer') return officerThink(p);
+    if (p.ai.state === 'cop') return copThink(p, dt);
+    if (p.ai.state === 'idle') { if (p.ai.face !== undefined) p.rot = lerpAngle(p.rot, p.ai.face, 0.1); return { mx: 0, mz: 0, speed: 0, jump: false }; }
     const ai = p.ai, out = { mx: 0, mz: 0, speed: 0, jump: false };
     if (ai.dodgeT > 0) { ai.dodgeT -= dt; out.mx = ai.dx; out.mz = ai.dz; out.speed = 6.5; return out; }
     if (p.grounded && p.knockT <= 0) {
@@ -4049,13 +4276,14 @@ body.touch .tk-sign .key { display: none; }
   // front of them or running someone over starts a chase: blue lights and siren, other cars pull over, and the police
   // follow the streets towards you, then drive straight at you once they have you in sight. Stop the car next to
   // them and you get a fine. Get out of sight for long enough and they give up.
-  const POLICE_TARGET = 4, CHASE_SPEED = 31, TOLERANCE = 8;
+  const POLICE_TARGET = 4, CHASE_SPEED = 33, PATROL_SPEED = 14, TOLERANCE = 8;
   const OFFICER = { shirt: 0x1f3a6e, pants: 0x1c2333, hat: 'cap', hatColor: 0x1b2b4f };
   let sirenCars = [], wanted = null, fines = 0, policeCool = 0, policeSpawnT = 0;
-  // Gamla stan's lanes are 30, bridges 50, the rest of the inner city 40
+  // the limit of the street you are on; off the streets (squares, quays, parks) 40 in Gamla stan and 50 elsewhere
   function limitAt(x, z) {
-    const d = districtAt(x, z);
-    return d === 'Gamla stan' ? 30 : d === 'Strömmen' || d === 'Söderström' ? 50 : 40;
+    const ne = nearestEdge(x, z);
+    if (ne.e && ne.d < ne.e.hw + ne.e.walk + 2) return ne.e.limit;
+    return districtAt(x, z) === 'Gamla stan' ? 40 : 50;
   }
   const fmtKr = (n) => n.toLocaleString('sv-SE') + ' kr';
   // a Swedish registration number, made up the first time anyone asks for it (ABC 12D)
@@ -4064,7 +4292,7 @@ body.touch .tk-sign .key { display: none; }
   function makePolice(c) {
     c.police = { state: 'patrol', direct: false, goalNode: -1, callIn: 15 + Math.random() * 40 };
     c.siren = false; c.yelp = false;
-    c.bot.cruise = 12;
+    c.bot.cruise = PATROL_SPEED;
     setOccupant(c, makeIdentity(OFFICER));
     return c;
   }
@@ -4108,19 +4336,20 @@ body.touch .tk-sign .key { display: none; }
   }
   function startChase(kind, over) {
     if (!wanted) {
-      wanted = { kinds: new Set(), over: 0, lostT: 0, searchT: 0, stopT: 0, t: 0, seen: playerTarget(), inSight: true };
+      wanted = { kinds: new Set(), over: 0, lostT: 0, searchT: 0, stopT: 0, t: 0, fleeT: 0, seen: playerTarget(), inSight: true };
       toast(kind === 'fart' ? 'Polisen såg dig köra för fort. Stanna bilen!' : 'Polisen är efter dig!');
     }
     wanted.kinds.add(kind);
     wanted.over = Math.max(wanted.over, over || 0);
-    for (const c of cars) if (c.police && !c.dead && c.police.state !== 'chase' && Math.hypot(c.x - player.x, c.z - player.z) < 400) setChase(c, true);
+    for (const c of cars) if (c.police && !c.dead && (c.police.state === 'patrol' || c.police.state === 'call') && Math.hypot(c.x - player.x, c.z - player.z) < 400) setChase(c, true);
   }
   function setChase(c, on) {
     const P = c.police, b = c.bot;
-    if (!P || !b) return;
+    // a car whose crew is out on foot, or which is busy with a stop or a prisoner, stays as it is
+    if (!P || !b || P.out || P.state === 'wait' || P.state === 'stop' || P.state === 'transport') return;
     P.state = on ? 'chase' : 'patrol';
     c.siren = on; c.yelp = false;
-    b.cruise = on ? CHASE_SPEED : 12; b.turnV = on ? 8.5 : 5.5; b.goal = null; b.passT = 0; P.goalNode = -1;
+    b.cruise = on ? CHASE_SPEED : PATROL_SPEED; b.turnV = on ? 8.5 : 5.5; b.goal = null; b.passT = 0; P.goalNode = -1;
     if (P.direct) { P.direct = false; resyncBot(c); }
     if (!on) b.next = chooseNext(b.from, b.to, null);
   }
@@ -4129,12 +4358,13 @@ body.touch .tk-sign .key { display: none; }
     const rows = [];
     if (w.kinds.has('fart')) {
       const o = Math.max(1, Math.round(w.over));
-      rows.push({ why: o + ' km/h för fort', text: 'Hastighetsöverträdelse, ' + o + ' km/h över ' + (w.limit || 40) + ' km/h', kr: o <= 10 ? 1500 : o <= 15 ? 2000 : o <= 20 ? 2400 : o <= 25 ? 2800 : o <= 30 ? 3200 : 4000 });
+      rows.push({ why: o + ' km/h för fort', text: 'Hastighetsöverträdelse, ' + o + ' km/h över ' + (w.limit || 50) + ' km/h', kr: o <= 10 ? 1500 : o <= 15 ? 2000 : o <= 20 ? 2400 : o <= 25 ? 2800 : o <= 30 ? 3200 : 4000 });
     }
     if (w.kinds.has('krock')) rows.push({ why: 'krock med polisbil', text: 'Vårdslöshet i trafik, krock med polisfordon', kr: 3000 });
     if (w.kinds.has('stöld')) rows.push({ why: 'bilstöld', text: 'Olovligt brukande av fordon', kr: 5000 });
     if (w.kinds.has('påkörning')) rows.push({ why: 'påkörning', text: 'Påkörning av fotgängare', kr: 4000 });
-    if (w.t > 20) rows.push({ why: 'du stannade inte', text: 'Underlåtenhet att stanna på polisens tecken', kr: 1500 });
+    if ((w.fleeT || 0) > 12) rows.push({ why: 'du stannade inte', text: 'Underlåtenhet att stanna på polisens tecken', kr: 1500 });
+    if (w.over >= 30) rows.push({ why: 'grov hastighetsöverträdelse', text: 'Grov hastighetsöverträdelse, körkortet dras in', kr: 2000 });
     if (w.kinds.has('smitning')) rows.push({ why: 'du smet från kontrollen', text: 'Avvikande från poliskontroll', kr: 3000 });
     if (!rows.length) rows.push({ why: 'ordningsstörning', text: 'Ordningsstörning', kr: 800 });
     return { f: rows.reduce((a, r) => a + r.kr, 0), why: rows.map((r) => r.why), rows };
@@ -4145,6 +4375,7 @@ body.touch .tk-sign .key { display: none; }
       fines += f;
       toast('Polisen stoppade dig: ' + why.join(', ') + '. Böter ' + fmtKr(f) + '.' + (wanted.over > 30 ? ' Körkortet dras in.' : ''));
     } else toast('Du kom undan polisen.');
+    for (const fc of footCops) fc.mode = 'return';
     wanted = null;
     policeCool = caught ? 30 : 15;
     for (const c of cars) if (c.police && c.police.state === 'chase') setChase(c, false);
@@ -4162,7 +4393,7 @@ body.touch .tk-sign .key { display: none; }
     const P = c.police, b = c.bot;
     P.state = on ? 'call' : 'patrol';
     c.siren = on; c.yelp = false;
-    b.cruise = on ? CHASE_SPEED * 0.85 : 12; b.turnV = on ? 8.5 : 5.5; b.passT = 0;
+    b.cruise = on ? CHASE_SPEED * 0.85 : PATROL_SPEED; b.turnV = on ? 8.5 : 5.5; b.passT = 0;
     if (on) {
       const far = nodes.map((n, i) => i).filter((i) => { const d = Math.hypot(nodes[i].x - c.x, nodes[i].z - c.z); return d > 250 && d < 700 && nodes[i].nbE.length; });
       const n = far.length ? rpick(far) : nearestNode(c.x, c.z);
@@ -4174,6 +4405,8 @@ body.touch .tk-sign .key { display: none; }
   function policeThink(c, dt) {
     const P = c.police;
     if (P.state === 'stop') return stopDrive(c, dt);
+    if (P.state === 'wait') return parkDrive(c, null);
+    if (P.state === 'transport') return transportDrive(c, dt);
     if (P.state === 'patrol' && !wanted && (P.callIn -= dt) <= 0) setCall(c, true);
     if (P.state === 'call') {
       const g = c.bot.goal;
@@ -4218,6 +4451,7 @@ body.touch .tk-sign .key { display: none; }
   function policeUpdate(dt) {
     if (policeCool > 0) policeCool -= dt;
     sirenCars = cars.filter((c) => c.siren);
+    updateFootCops(dt);
     if (stop) { stopUpdate(dt); return; }
     const T = playerTarget();
     // speeding where a patrol can see it
@@ -4228,33 +4462,47 @@ body.touch .tk-sign .key { display: none; }
     if (!wanted) return;
     wanted.t += dt;
     let nearest = Infinity, inSight = false, chasers = 0, nearCop = null;
+    // on foot somewhere a car can't follow (a park, the stairs, a lane too narrow, indoors)?
+    const ne = driving ? null : nearestEdge(T.x, T.z, (e) => e.emerg), offRoad = !driving && (!ne.e || ne.d > ne.e.hw + 1.5);
     for (const c of cars) {
       if (!c.police || c.dead) continue;
-      const d = Math.hypot(T.x - c.x, T.z - c.z);
-      if (c.police.state !== 'chase') { if (d < 400) setChase(c, true); else continue; }
+      const st = c.police.state, d = Math.hypot(T.x - c.x, T.z - c.z);
+      if (st === 'wait' || st === 'transport' || st === 'stop') continue;
+      if (st !== 'chase') { if (d < 400) setChase(c, true); else continue; }
       chasers++;
       if (d < nearest) { nearest = d; nearCop = c; }
       if (!inSight && d < 130 && clearView(c.x, c.z, T.x, T.z)) inSight = true;
+      // you are on foot close by, or out of reach of a car: pull up and send the constable after you
+      if (!driving && (d < 24 || (d < 90 && (offRoad || c.bot.stuckT > 1.5 || c.bot.stuckTotal > 5)))) { c.police.state = 'wait'; c.siren = false; c.beacon = true; c.police.direct = false; }
+    }
+    for (const fc of footCops) {
+      if (fc.mode !== 'chase') continue;
+      const d = Math.hypot(T.x - fc.p.x, T.z - fc.p.z);
+      chasers++;
+      if (!inSight && d < 90 && clearView(fc.p.x, fc.p.z, T.x, T.z)) inSight = true;
     }
     if (driving && inSight) {
       const lim = limitAt(driving.x, driving.z), over = Math.hypot(driving.vx, driving.vz) * 3.6 - lim;
       if (over > wanted.over) { wanted.over = over; wanted.limit = lim; }
     }
     wanted.inSight = inSight;
+    // running from them: on the move, fast, with the police on your tail
+    const sp = driving ? Math.hypot(driving.vx, driving.vz) : Math.hypot(player.vx, player.vz);
+    if ((driving ? sp > 6 : sp > 5.5) && (nearest < 130 || footCops.some((fc) => fc.mode === 'chase' && Math.hypot(fc.p.x - T.x, fc.p.z - T.z) < 60))) wanted.fleeT += dt;
     if (inSight) { wanted.seen = { x: T.x, z: T.z, vx: 0, vz: 0 }; wanted.lostT = 0; wanted.searchT = 0; }
     else {
       // they give up after searching where they last saw you without finding you, or after a long while without a trace
       wanted.lostT += dt;
-      for (const c of cars) if (c.police && c.police.state === 'chase' && Math.hypot(c.x - wanted.seen.x, c.z - wanted.seen.z) < 40) { wanted.searchT += dt; break; }
+      if (cars.some((c) => c.police && c.police.state === 'chase' && Math.hypot(c.x - wanted.seen.x, c.z - wanted.seen.z) < 40) || footCops.some((fc) => Math.hypot(fc.p.x - wanted.seen.x, fc.p.z - wanted.seen.z) < 12)) wanted.searchT += dt;
       if (wanted.searchT > 8 || wanted.lostT > 45 || (!chasers && wanted.lostT > 6)) { endChase(false); return; }
     }
-    // pull over (stop, ideally by the kerb) with a patrol close behind and in sight, and they pull in by you; on foot
-    // they stop when they reach you. Either way a constable gets out and comes over with the fine
-    const sp = driving ? Math.hypot(driving.vx, driving.vz) : 0;
-    if (nearCop && (driving ? nearest < 70 && inSight && sp < 2 : nearest < 28 && inSight)) {
+    // pull over (stop, ideally by the kerb) with a patrol close behind and in sight, and they pull in by you
+    if (driving && nearCop && nearest < 70 && inSight && sp < 2) {
       wanted.stopT += dt;
-      if (wanted.stopT > (driving ? 0.9 : 1.5)) beginStop(nearCop);
+      if (wanted.stopT > 0.9) beginStop(nearCop);
     } else wanted.stopT = Math.max(0, wanted.stopT - dt);
+    // on foot: caught when a constable reaches you
+    if (!driving) for (const fc of footCops) if (fc.mode === 'chase' && Math.hypot(fc.p.x - player.x, fc.p.z - player.z) < 1.1 && Math.abs(fc.p.y - player.y) < 1.2) { caughtOnFoot(fc); return; }
   }
   // blue lights flash left and right in double bursts
   function policeLights(c, dt) {
@@ -4279,14 +4527,116 @@ body.touch .tk-sign .key { display: none; }
     toast(driving.siren ? 'Blåljus och siren på. Trafiken väjer för dig.' : 'Blåljus av.');
   }
 
-  /* ---------- the traffic stop ---------- */
-  // When you pull over, the nearest patrol turns its siren off (blue lights stay on) and parks right behind you, or
-  // in front of you facing you if it is already ahead, lined up with your car and just as far out from the kerb.
-  // A constable gets out, walks up to your window and hands over an ordningsbot; E signs it. Drive off before that
-  // and it becomes a chase again, and a dearer one.
+  /* ---------- police on the ground: stops, constables on foot, arrests and the cells ---------- */
+  // Pull over and the nearest patrol turns its siren off (blue lights stay on) and parks right behind you, or in front
+  // of you facing you if it is already ahead, lined up with your car and just as far out from the kerb. A constable
+  // gets out and walks up to your window. For an ordinary offence that means an ordningsbot (E signs it). Drive far
+  // too fast (30 km/h or more over the limit) or run from them, and it is an arrest instead: out of the car, handcuffs,
+  // the back seat of the police car and a ride to the station on Stora Nygatan, where you are put in a cell.
+  // On foot the patrols pull up and the constables get out and run after you, along the streets, through the lanes,
+  // up the stairs and into buildings. Get into a car and they run back to theirs and chase you by car again.
   let stop = null;
+  const footCops = [];
   const CONSTABLES = ['Andersson', 'Lindqvist', 'Nyström', 'Berg', 'Holm', 'Karlsson', 'Ek', 'Sandberg', 'Öberg', 'Lundin'];
+  const COP_RUN = 9.7, ARREST_OVER = 30, IDLE = () => ({ mx: 0, mz: 0, speed: 0, jump: false });
+  const arrestable = (w) => w.over >= ARREST_OVER || w.kinds.has('smitning') || (w.fleeT || 0) > 12;
   const stopTarget = () => (driving ? { x: driving.x, z: driving.z, h: driving.h, L: driving.M.L } : { x: player.x, z: player.z, h: player.rot, L: 1 });
+  // the phases in which you have no say in where you go
+  const inCustody = () => !!(stop && stop.locked && stop.phase !== 'jail');
+
+  /* walking routes for people: straight there when nothing is in the way, through the station's rooms, or along the
+     streets, lanes and stairs (every street a person can walk) */
+  function walkLine(ax, az, bx, bz) {
+    const len = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(len / 0.8));
+    for (let i = 1; i <= n; i++) {
+      const x = lerp(ax, bx, i / n), z = lerp(az, bz, i / n);
+      if (!walkable(x, z) || blockedAt(x, z, 0.26)) return false;
+    }
+    return true;
+  }
+  const SP = STATION.P, CELL_GUARD = [STATION.P.C2[0] + 1.8, 223.2]; // where the constable waits while you go into cell 2
+  function stationPath(ka, kb) {
+    const dist = { [ka]: 0 }, prev = {}, todo = new Set(Object.keys(SP));
+    while (todo.size) {
+      let u = null;
+      for (const k of todo) if (dist[k] !== undefined && (u === null || dist[k] < dist[u])) u = k;
+      if (u === null || u === kb) break;
+      todo.delete(u);
+      for (const [a, b] of STATION.LINKS) {
+        const v = a === u ? b : b === u ? a : null;
+        if (!v || !todo.has(v)) continue;
+        const nd = dist[u] + Math.hypot(SP[u][0] - SP[v][0], SP[u][1] - SP[v][1]);
+        if (dist[v] === undefined || nd < dist[v]) { dist[v] = nd; prev[v] = u; }
+      }
+    }
+    const path = [kb];
+    while (path[0] !== ka && prev[path[0]]) path.unshift(prev[path[0]]);
+    return path;
+  }
+  function nearestRoomPoint(x, z) {
+    let best = null, bd = Infinity;
+    for (const k in SP) {
+      const d = Math.hypot(SP[k][0] - x, SP[k][1] - z) + (walkLine(x, z, SP[k][0], SP[k][1]) ? 0 : 50);
+      if (d < bd) { bd = d; best = k; }
+    }
+    return best;
+  }
+  let walkNode = null;
+  function streetWaypoint(x, z, tx, tz) {
+    if (!walkNode) walkNode = (px, pz) => { let b = 0, bd = Infinity; nodes.forEach((n, i) => { const d = Math.hypot(n.x - px, n.z - pz); if (d < bd && n.nbW.length) { bd = d; b = i; } }); return b; };
+    const goal = walkNode(tx, tz), D = distTo(goal, 'nbW'), ne = nearestEdge(x, z);
+    if (!ne.e) return { x: tx, z: tz };
+    const e = ne.e, A = nodes[e.a], B = nodes[e.b];
+    const t = clamp(((x - A.x) * (B.x - A.x) + (z - A.z) * (B.z - A.z)) / (e.len * e.len), 0, 1);
+    let n = t * e.len + D[e.a] <= (1 - t) * e.len + D[e.b] ? e.a : e.b;
+    if (n === goal && Math.hypot(nodes[n].x - x, nodes[n].z - z) < 4) return { x: tx, z: tz };
+    if (Math.hypot(nodes[n].x - x, nodes[n].z - z) < 2.5) {
+      let best = n, bv = Infinity;
+      for (const m of nodes[n].nbW) { const v = D[m] + Math.hypot(nodes[m].x - nodes[n].x, nodes[m].z - nodes[n].z); if (v < bv) { bv = v; best = m; } }
+      n = best;
+    }
+    return { x: nodes[n].x, z: nodes[n].z };
+  }
+  function walkWaypoint(nav, x, z, tx, tz, dt) {
+    if ((nav.t = (nav.t || 0) - dt) > 0 && nav.wp && Math.hypot(nav.wp.x - x, nav.wp.z - z) > 0.6) return nav.wp;
+    nav.t = 0.25;
+    const d = Math.hypot(tx - x, tz - z), aIn = STATION.inside(x, z), bIn = STATION.inside(tx, tz);
+    let wp;
+    if (d < 1 || (d < 80 && walkLine(x, z, tx, tz))) wp = { x: tx, z: tz };
+    else if (aIn || bIn) {
+      const E0 = SP.E0;
+      if (!aIn && Math.hypot(E0[0] - x, E0[1] - z) > 1.5) wp = walkLine(x, z, E0[0], E0[1]) ? { x: E0[0], z: E0[1] } : streetWaypoint(x, z, E0[0], E0[1]);
+      else {
+        // head for the furthest room point along the way that can be walked to in a straight line
+        const ka = aIn ? nearestRoomPoint(x, z) : 'E0', kb = bIn ? nearestRoomPoint(tx, tz) : 'E0', path = stationPath(ka, kb);
+        let k = path.length - 1;
+        while (k > 0 && !walkLine(x, z, SP[path[k]][0], SP[path[k]][1])) k--;
+        const P = SP[path[k]];
+        wp = k === path.length - 1 && Math.hypot(P[0] - x, P[1] - z) < 0.7 ? (bIn ? { x: tx, z: tz } : streetWaypoint(x, z, tx, tz)) : { x: P[0], z: P[1] };
+      }
+    } else wp = streetWaypoint(x, z, tx, tz);
+    nav.wp = wp;
+    return wp;
+  }
+  function seek(p, wp, speed, stopAt = 0.15) {
+    const dx = wp.x - p.x, dz = wp.z - p.z, d = Math.hypot(dx, dz);
+    if (d <= stopAt) return IDLE();
+    return { mx: dx / d, mz: dz / d, speed: Math.min(speed, (d - stopAt) * 3 + 0.4), jump: false };
+  }
+  function face(p, x, z) { if (p) p.rot = lerpAngle(p.rot, Math.atan2(x - p.x, z - p.z), 0.25); }
+  // a door of a car: the driver's (+1) or the passenger side (-1), at the front or the back seat
+  function doorSpot(c, side, rear) {
+    const co = Math.cos(c.h), si = Math.sin(c.h), lx = side * (c.M.W / 2 + 0.75), lz = rear && c.geo.rear ? c.geo.rear.z : c.driver.position.z;
+    return { x: c.x + lx * co + lz * si, z: c.z - lx * si + lz * co };
+  }
+  // the door on the side nearest a point, unless that side is up against something
+  function doorNear(c, x, z, rear) {
+    const a = doorSpot(c, 1, rear), b = doorSpot(c, -1, rear), free = (q) => personFits(q.x, q.z) && !blockedAt(q.x, q.z, 0.3);
+    const [first, second] = Math.hypot(a.x - x, a.z - z) <= Math.hypot(b.x - x, b.z - z) ? [a, b] : [b, a];
+    return free(first) || !free(second) ? first : second;
+  }
+
+  /* the stop itself */
   function stopSpot(pc, T) {
     const fx = Math.sin(T.h), fz = Math.cos(T.h), ahead = (pc.x - T.x) * fx + (pc.z - T.z) * fz > 4;
     const gap = T.L / 2 + 2.2 + pc.M.L / 2, sg = ahead ? 1 : -1, h = ahead ? T.h + Math.PI : T.h;
@@ -4296,47 +4646,64 @@ body.touch .tk-sign .key { display: none; }
     }
     return null;
   }
-  // where the constable stands: by the driver's window, or a step from you if you are on foot
-  function windowSpot() {
+  // where the constable stands to talk to you: by the driver's window, or a step from you if you are on foot
+  function windowSpot(o) {
     if (driving) {
       const co = Math.cos(driving.h), si = Math.sin(driving.h), lx = driving.M.W / 2 + 0.75, lz = driving.driver.position.z + 0.35;
       return { x: driving.x + lx * co + lz * si, z: driving.z - lx * si + lz * co, fx: driving.x, fz: driving.z };
     }
-    const o = stop.officer, dx = o.x - player.x, dz = o.z - player.z, d = Math.hypot(dx, dz) || 1;
-    return { x: player.x + (dx / d) * 1.1, z: player.z + (dz / d) * 1.1, fx: player.x, fz: player.z };
+    const dx = o.x - player.x, dz = o.z - player.z, d = Math.hypot(dx, dz) || 1;
+    return { x: player.x + (dx / d) * 1.0, z: player.z + (dz / d) * 1.0, fx: player.x, fz: player.z };
   }
-  function beginStop(c) {
+  function newStop(c, mode, phase, officer) {
     const T = stopTarget();
-    stop = { car: c, phase: 'approach', t: 0, spot: driving ? stopSpot(c, T) : null, at: { x: T.x, z: T.z }, officer: null, crew: c.occupant, name: rpick(CONSTABLES), ticket: null };
+    stop = {
+      car: c, mode, phase, t: 0, at: { x: T.x, z: T.z }, officer: officer || null, crew: c.occupant || makeIdentity(OFFICER), name: rpick(CONSTABLES),
+      ticket: null, nav: {}, pnav: {}, locked: false, spot: phase === 'approach' && driving ? stopSpot(c, T) : null, door: null,
+      vehicle: driving ? driving.M.name + ', ' + plateOf(driving) : 'Gående'
+    };
     c.police.state = 'stop'; c.siren = false; c.yelp = false; c.beacon = true; c.police.direct = false;
     for (const o of cars) if (o !== c && o.police && o.police.state === 'chase') setChase(o, false);
-    toast(driving ? (stop.spot && stop.spot.ahead ? 'Polisen stannar framför dig. Sitt kvar i bilen.' : 'Polisen kör in bakom dig. Sitt kvar i bilen.') : 'Polisen har hunnit ikapp dig. Stå kvar.');
+    for (const fc of footCops) fc.mode = 'return';
+    return stop;
+  }
+  function beginStop(c) {
+    newStop(c, arrestable(wanted) ? 'arrest' : 'ticket', 'approach');
+    toast(stop.spot && stop.spot.ahead ? 'Polisen stannar framför dig. Sitt kvar i bilen.' : 'Polisen kör in bakom dig. Sitt kvar i bilen.');
+  }
+  // a constable on foot has reached you
+  function caughtOnFoot(fc) {
+    footCops.splice(footCops.indexOf(fc), 1);
+    const S = newStop(fc.car, arrestable(wanted) ? 'arrest' : 'ticket', 'talk', fc.p);
+    S.crew = fc.crew; S.door = fc.door;
+    fc.p.ai.role = 'stop';
+    if (S.mode === 'arrest') { S.phase = 'cuff'; S.locked = true; toast('Konstapel ' + S.name + ': Stå still! Du är gripen.'); }
+    else showTicket();
   }
   // the patrol's driving while it pulls in: line up a few metres short of the spot, then roll into it and stop
-  function stopDrive(c, dt) {
+  function parkDrive(c, sp, slow) {
     const fx = Math.sin(c.h), fz = Math.cos(c.h), lxv = Math.cos(c.h), lzv = -Math.sin(c.h), vf = c.vx * fx + c.vz * fz;
     const halt = { fwd: vf > 0.3 ? -1 : vf < -0.3 ? 1 : 0, right: 0, brake: Math.abs(vf) < 0.3 };
-    if (!stop || stop.car !== c || stop.phase !== 'approach' || !stop.spot) return halt;
-    const sp = stop.spot, along = (c.x - sp.x) * sp.fx + (c.z - sp.z) * sp.fz, d = Math.hypot(sp.x - c.x, sp.z - c.z);
-    const tx = along < -8 ? sp.x - sp.fx * 6 : sp.x + sp.fx * 2, tz = along < -8 ? sp.z - sp.fz * 6 : sp.z + sp.fz * 2;
+    if (!sp) return halt;
+    const sfx = Math.sin(sp.h), sfz = Math.cos(sp.h), along = (c.x - sp.x) * sfx + (c.z - sp.z) * sfz, d = Math.hypot(sp.x - c.x, sp.z - c.z);
+    const tx = along < -8 ? sp.x - sfx * 6 : sp.x + sfx * 2, tz = along < -8 ? sp.z - sfz * 6 : sp.z + sfz * 2;
     if (d < 1.4 || along > 0.5) return halt;
     const dx = tx - c.x, dz = tz - c.z, lz = dx * fx + dz * fz, lx = dx * lxv + dz * lzv;
     const maxSteer = 0.6 / (1 + Math.abs(vf) * 0.03);
     const delta = lz < 0.3 ? Math.sign(lx || 1) * maxSteer : Math.atan((2 * c.M.wb * lx) / (lx * lx + lz * lz));
-    const vT = clamp(d * 0.7, 1.5, 11);
+    const vT = clamp(d * 0.7, 1.5, slow || 11);
     return { fwd: clamp((vT - vf) * 0.5, -1, 1), right: -clamp(delta / maxSteer, -1, 1), brake: false };
   }
-  function officerThink(p) {
-    const out = { mx: 0, mz: 0, speed: 0, jump: false };
+  function stopDrive(c) { return parkDrive(c, stop && stop.car === c && stop.phase === 'approach' ? stop.spot : null); }
+  // the ride to the station: along the streets at the limit, then into the kerb outside the door
+  const STATION_NODE = (() => { let b = -1, bd = Infinity; nodes.forEach((n, i) => { const d = Math.hypot(n.x - STATION.X1, n.z - 222); if (n.nb.length && d < bd) { bd = d; b = i; } }); return b; })();
+  function transportDrive(c, dt) {
     const S = stop;
-    if (!S || S.officer !== p) return out;
-    let tx, tz, speed = 1.6;
-    if (S.phase === 'walk' || S.phase === 'talk') { const w = windowSpot(); tx = w.x; tz = w.z; }
-    else { tx = S.door.x; tz = S.door.z; speed = S.phase === 'flee' ? 5.8 : 1.7; }
-    const dx = tx - p.x, dz = tz - p.z, d = Math.hypot(dx, dz);
-    if (d > 0.3) { out.mx = dx / d; out.mz = dz / d; out.speed = Math.min(speed, d * 2); }
-    p.arrived = d < 0.6;
-    return out;
+    if (!S || S.car !== c || S.phase !== 'transport') return parkDrive(c, S && S.car === c && S.phase === 'park' ? S.curb : null, 6);
+    const curb = STATION.curb(c.h), d = Math.hypot(curb.x - c.x, curb.z - c.z);
+    if (d < 40 && clearView(c.x, c.z, curb.x, curb.z)) { S.curb = STATION.curb(c.h); S.phase = 'park'; S.t = 0; return parkDrive(c, S.curb, 6); }
+    c.bot.goal = { node: STATION_NODE, x: curb.x, z: curb.z };
+    return botThink(c, dt);
   }
   function showTicket() {
     const S = stop, { f, rows } = fineFor(wanted), now = new Date();
@@ -4344,7 +4711,7 @@ body.touch .tk-sign .key { display: none; }
     const place = (el.locStreet.textContent ? el.locStreet.textContent + ', ' : '') + el.locDistrict.textContent;
     $('tkPlace').textContent = place;
     $('tkTime').textContent = now.toLocaleDateString('sv-SE') + ' ' + now.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
-    $('tkCar').textContent = driving ? driving.M.name + ', ' + plateOf(driving) : 'Gående';
+    $('tkCar').textContent = S.vehicle;
     const ul = $('tkRows');
     ul.textContent = '';
     for (const r of rows) {
@@ -4353,52 +4720,271 @@ body.touch .tk-sign .key { display: none; }
     }
     $('tkSum').textContent = fmtKr(f);
     $('tkOfficer').textContent = 'Konstapel ' + S.name;
+    $('tkTitle').textContent = S.mode === 'arrest' ? 'Gripen: anmälan om brott' : 'Föreläggande av ordningsbot';
+    $('tkSignText').textContent = S.mode === 'arrest' ? 'Tagen del' : 'Skriv under';
     $('ticket').hidden = false;
-    toast('Konstapel ' + S.name + ': ' + (wanted.kinds.has('fart') ? 'Hej, polisen här. Vet du hur fort du körde?' : 'Hej, polisen här. Det där gick inte bra.'));
+    if (S.mode !== 'arrest') toast('Konstapel ' + S.name + ': ' + (wanted.kinds.has('fart') ? 'Hej, polisen här. Vet du hur fort du körde?' : 'Hej, polisen här. Det där gick inte bra.'));
   }
   // E: sign the ticket. The fine is yours, and the constable walks back to the car
   function signTicket() {
     if (!stop || stop.phase !== 'talk' || !stop.ticket) return;
     fines += stop.ticket.f;
     $('ticket').hidden = true;
-    toast('Du skrev under. Böter ' + fmtKr(stop.ticket.f) + '.' + (wanted.over > 30 ? ' Körkortet dras in.' : ' Kör försiktigt nu!'));
+    toast('Du skrev under. Böter ' + fmtKr(stop.ticket.f) + '.' + (wanted.over > 20 ? ' Körkortet dras in.' : ' Kör försiktigt nu!'));
     stop.phase = 'back'; stop.t = 0;
+  }
+  // E during a stop or an arrest
+  function useKey() {
+    const S = stop;
+    if (S && S.phase === 'talk') { signTicket(); return true; }
+    if (S && (S.phase === 'transport' || S.phase === 'park') && !S.fade) { skipRide(); return true; }
+    if (S && S.phase === 'jail') { S.wait = !S.wait; toast(S.wait ? 'Du sover på britsen. Tiden går fortare.' : 'Du vaknar.'); return true; }
+    return inCustody();
+  }
+  // fade to black, do something, fade back
+  function fadeThen(fn) { if (stop) stop.fade = { t: 0, fn, done: false }; $('fade').classList.add('on'); }
+  function skipRide() {
+    fadeThen(() => {
+      const c = stop.car, curb = STATION.curb(0);
+      c.x = curb.x; c.z = curb.z - 4; c.h = curb.h; c.vx = c.vz = 0;
+      stop.curb = curb; stop.phase = 'park'; stop.t = 0;
+      camTarget.set(c.x, 1.7, c.z);
+    });
+  }
+  // the police car you are put in, or the cell, if the car was lost on the way
+  function jailDirect() {
+    const S = stop;
+    if (S.officer) { removePerson(S.officer); S.officer = null; }
+    const c = S.car;
+    if (c && cars.indexOf(c) >= 0) { if (c.rearSeat) c.rearSeat.visible = false; setOccupant(c, S.crew); c.beacon = false; c.police.state = 'patrol'; resyncBot(c); setChase(c, false); }
+    const cell = STATION.doors[1], [x0, z0, x1, z1] = cell.inside;
+    player.x = (x0 + x1) / 2; player.z = (z0 + z1) / 2; player.y = 0; player.vx = player.vz = 0;
+    player.model.group.visible = true; player.cuffed = false;
+    cell.want = 0;
+    camTarget.set(player.x, 1.6, player.z);
+    startJail();
+  }
+  function startJail() {
+    const S = stop, w = wanted || { over: 0, kinds: new Set(), fleeT: 0 };
+    S.jailT = Math.min(90, 30 + Math.max(0, Math.round((w.over - ARREST_OVER) / 10)) * 10 + (w.kinds.has('smitning') || (w.fleeT || 0) > 12 ? 15 : 0));
+    S.phase = 'jail'; S.t = 0; S.wait = false; S.locked = true;
+    if (!S.ticket) S.ticket = fineFor(w);
+    wanted = null;
+    toast('Du sitter i häktet på polisstationen i Gamla stan. Tryck E för att sova så går tiden fortare.');
   }
   function stopUpdate(dt) {
     const S = stop, c = S.car, T = stopTarget();
     S.t += dt;
-    if (c.dead || cars.indexOf(c) < 0) { endStop(false); return; }
+    if (S.fade) {
+      S.fade.t += dt;
+      if (!S.fade.done && S.fade.t > 0.45) { S.fade.done = true; S.fade.fn(); }
+      if (S.fade.t > 0.6) { $('fade').classList.remove('on'); S.fade = null; }
+      if (stop !== S) return;
+    }
+    const carOk = c && cars.indexOf(c) >= 0 && !c.dead;
+    if (!carOk && ['approach', 'parked', 'walk', 'talk', 'back', 'flee'].includes(S.phase)) { endStop(false); return; }
+    if (!carOk && ['escort', 'board', 'transport', 'park'].includes(S.phase)) { if (!S.fade) fadeThen(jailDirect); return; }
     // driving off (or running off) before the paperwork is done turns it back into a chase
-    const away = Math.hypot(T.x - S.at.x, T.z - S.at.z), moving = driving ? Math.hypot(driving.vx, driving.vz) > 3 : true;
-    if (S.phase !== 'back' && S.phase !== 'flee' && away > (driving ? 8 : 14) && moving) {
-      $('ticket').hidden = true;
-      wanted.kinds.add('smitning');
-      toast('Du smet från poliskontrollen! Nu blir det dyrare.');
-      if (S.officer) { S.phase = 'flee'; S.t = 0; } else { endStop(true); return; }
+    if (!S.locked && ['approach', 'parked', 'walk', 'talk'].includes(S.phase)) {
+      const away = Math.hypot(T.x - S.at.x, T.z - S.at.z);
+      if (driving ? away > 8 && Math.hypot(driving.vx, driving.vz) > 3 : away > 6) {
+        $('ticket').hidden = true;
+        wanted.kinds.add('smitning');
+        toast('Du smet från poliskontrollen! Nu blir du gripen om de får tag i dig.');
+        if (!S.officer) { endStop(true); return; }
+        if (driving) { S.phase = 'flee'; S.t = 0; }
+        else {
+          // you ran: the constable runs after you, the car waits for them
+          const fc = { p: S.officer, car: c, crew: S.crew, door: S.door || doorNear(c, S.officer.x, S.officer.z, false), mode: 'chase', retT: 0 };
+          S.officer.ai = { state: 'cop', role: 'foot', fc, nav: {}, dodgeT: 0 };
+          footCops.push(fc);
+          stop = null;
+          c.police.state = 'wait'; c.police.out = fc; c.beacon = true;
+          if (wanted) { wanted.lostT = 0; wanted.stopT = 0; wanted.seen = playerTarget(); }
+          return;
+        }
+      }
     }
-    if (S.phase === 'approach') {
-      const vs = Math.hypot(c.vx, c.vz);
-      if (S.spot ? (Math.hypot(S.spot.x - c.x, S.spot.z - c.z) < 1.6 || (S.spot.x - c.x) * S.spot.fx + (S.spot.z - c.z) * S.spot.fz < -0.5) && vs < 0.4 : vs < 0.4) S.phase = 'parked', S.t = 0;
-      else if (S.t > 14 && vs < 0.6) S.phase = 'parked', S.t = 0;
-    } else if (S.phase === 'parked' && S.t > 0.9) {
-      const ex = exitSpot(c) || { x: c.x + Math.cos(c.h) * (c.M.W / 2 + 0.8), z: c.z - Math.sin(c.h) * (c.M.W / 2 + 0.8) };
-      S.door = ex;
-      setOccupant(c, null);
-      S.officer = makePerson(S.crew || makeIdentity(OFFICER), ex.x, ex.z, { state: 'officer', dodgeT: 0 });
-      S.officer.rot = c.h;
-      S.phase = 'walk'; S.t = 0;
-    } else if (S.phase === 'walk') {
-      const o = S.officer;
-      if (S.t > 16) { const w = windowSpot(); if (personFits(w.x, w.z)) { o.x = w.x; o.z = w.z; } o.arrived = true; }
-      if (o.arrived) { S.phase = 'talk'; S.t = 0; showTicket(); }
-    } else if (S.phase === 'talk') {
-      const w = windowSpot();
-      S.officer.rot = Math.atan2(w.fx - S.officer.x, w.fz - S.officer.z);
-      if (S.t > 12) signTicket();
-    } else if (S.phase === 'back' || S.phase === 'flee') {
-      const near = Math.hypot(S.door.x - S.officer.x, S.door.z - S.officer.z) < 2.5;
-      if (S.officer.arrived || (near && S.t > 3) || S.t > 10) endStop(S.phase === 'flee');
+    const o = S.officer, arrived = o && o.arrived;
+    switch (S.phase) {
+      case 'approach': {
+        const vs = Math.hypot(c.vx, c.vz);
+        if (S.spot ? (Math.hypot(S.spot.x - c.x, S.spot.z - c.z) < 1.6 || (S.spot.x - c.x) * S.spot.fx + (S.spot.z - c.z) * S.spot.fz < -0.5) && vs < 0.4 : vs < 0.4) S.phase = 'parked', S.t = 0;
+        else if (S.t > 14 && vs < 0.6) S.phase = 'parked', S.t = 0;
+        break;
+      }
+      case 'parked':
+        if (S.t > 0.9) {
+          const ex = exitSpot(c) || doorSpot(c, 1, false);
+          S.door = ex;
+          setOccupant(c, null);
+          S.officer = makePerson(S.crew, ex.x, ex.z, { state: 'cop', role: 'stop', nav: {}, dodgeT: 0 });
+          S.officer.keep = true; S.officer.rot = c.h;
+          S.phase = 'walk'; S.t = 0;
+        }
+        break;
+      case 'walk':
+        if (S.t > 16) { const w = windowSpot(o); if (personFits(w.x, w.z)) { o.x = w.x; o.z = w.z; } o.arrived = true; }
+        if (o.arrived) {
+          S.t = 0;
+          if (S.mode === 'arrest') { S.phase = 'order'; S.locked = true; toast('Konstapel ' + S.name + ': Kliv ur bilen! Du är gripen' + (wanted.over >= ARREST_OVER ? ' för grov hastighetsöverträdelse.' : ' för att du försökte köra ifrån oss.')); }
+          else { S.phase = 'talk'; showTicket(); }
+        }
+        break;
+      case 'talk': {
+        const w = windowSpot(o);
+        face(o, w.fx, w.fz);
+        if (S.t > 12) signTicket();
+        break;
+      }
+      case 'order': {
+        const w = windowSpot(o);
+        face(o, w.fx, w.fz);
+        if (S.t > 1.8 && driving) exitCar();
+        if (S.t > 2.0) { S.phase = 'cuff'; S.t = 0; }
+        break;
+      }
+      case 'cuff':
+        if (Math.hypot(o.x - player.x, o.z - player.z) < 1.05 || S.t > 8) {
+          face(o, player.x, player.z);
+          S.cuffT = (S.cuffT || 0) + dt;
+          if (S.cuffT > 1.1) {
+            player.cuffed = true;
+            if (!S.ticket) showTicket();
+            S.rearDoor = doorNear(c, player.x, player.z, true);
+            S.phase = 'escort'; S.t = 0;
+            toast('Konstapel ' + S.name + ': Följ med till bilen.');
+            // a long way to the car: the patrol comes round instead (a short fade and you are both beside it)
+            if (Math.hypot(S.rearDoor.x - player.x, S.rearDoor.z - player.z) > 30) fadeThen(() => {
+              const rd = S.rearDoor;
+              player.x = rd.x; player.z = rd.z; player.vx = player.vz = 0;
+              if (S.officer) { S.officer.x = rd.x + Math.sin(c.h) * 1.3; S.officer.z = rd.z + Math.cos(c.h) * 1.3; }
+              camTarget.set(player.x, 1.6, player.z);
+            });
+          }
+        }
+        break;
+      case 'escort':
+        $('ticket').hidden = S.t > 6;
+        if ((Math.hypot(o.x - S.rearDoor.x, o.z - S.rearDoor.z) < 1.4 && Math.hypot(player.x - S.rearDoor.x, player.z - S.rearDoor.z) < 1.6) || S.t > 40) {
+          $('ticket').hidden = true;
+          player.model.group.visible = false; player.vx = player.vz = 0;
+          if (c.rearSeat) c.rearSeat.visible = true;
+          S.riding = true;
+          S.door = doorNear(c, o.x, o.z, false);
+          S.phase = 'board'; S.t = 0;
+        }
+        break;
+      case 'board':
+        if (arrived || S.t > 8) {
+          removePerson(o); S.officer = null;
+          setOccupant(c, S.crew);
+          c.beacon = false; c.police.state = 'transport';
+          resyncBot(c);
+          c.bot.cruise = 17; c.bot.turnV = 6; c.bot.passT = 5; c.bot.revT = 0.8; c.bot.waitT = 0;
+          S.phase = 'transport'; S.t = 0;
+          toast('Du sitter i baksätet på väg till polisstationen i Gamla stan. Tryck E för att hoppa fram.');
+        }
+        break;
+      case 'transport':
+        if ((S.t > 55 || (c.bot && c.bot.stuckTotal > 8)) && !S.fade) skipRide();
+        break;
+      case 'park':
+        if (Math.hypot(c.vx, c.vz) < 0.4 && (Math.hypot(S.curb.x - c.x, S.curb.z - c.z) < 3.5 || S.t > 10)) {
+          // out of the car: you from the back seat, the constable from the front, both on the side of the door
+          const E0 = { x: SP.E0[0], z: SP.E0[1] }, pd = doorNear(c, E0.x, E0.z, true), od = doorNear(c, E0.x, E0.z, false);
+          if (c.rearSeat) c.rearSeat.visible = false;
+          player.x = pd.x; player.z = pd.z; player.y = 0; player.rot = c.h; player.model.group.visible = true;
+          setOccupant(c, null);
+          S.door = od;
+          S.officer = makePerson(S.crew, od.x, od.z, { state: 'cop', role: 'stop', nav: {}, dodgeT: 0 });
+          S.officer.keep = true;
+          S.riding = false;
+          S.phase = 'walkin'; S.t = 0;
+        }
+        break;
+      case 'walkin': {
+        const C2 = CELL_GUARD;
+        if (Math.hypot(o.x - C2[0], o.z - C2[1]) < 0.9 || S.t > 45) {
+          if (S.t > 45) { o.x = C2[0]; o.z = C2[1]; }
+          STATION.doors[1].want = 1;
+          S.phase = 'incell'; S.t = 0;
+          toast('Konstapel ' + S.name + ': In i cellen.');
+        }
+        break;
+      }
+      case 'incell': {
+        face(o, SP.D2[0], SP.D2[1]);
+        const [x0, z0, x1, z1] = STATION.doors[1].inside;
+        if ((player.x > x0 && player.x < x1 && player.z > z0 && player.z < z1 - 0.6) || S.t > 25) {
+          if (S.t > 25) { player.x = (x0 + x1) / 2; player.z = (z0 + z1) / 2; }
+          STATION.doors[1].want = 0;
+          player.cuffed = false;
+          S.copLeaving = true;
+          startJail();
+        }
+        break;
+      }
+      case 'jail': {
+        S.jailT -= dt * (S.wait ? 8 : 1);
+        if (S.copLeaving && S.officer && (S.officer.arrived || S.t > 40)) {
+          removePerson(S.officer); S.officer = null; S.copLeaving = false;
+          if (cars.indexOf(c) >= 0) { setOccupant(c, S.crew); c.beacon = false; c.police.state = 'patrol'; resyncBot(c); setChase(c, false); }
+        }
+        if (S.jailT <= 0) {
+          STATION.doors[1].want = 1;
+          const f = S.ticket ? S.ticket.f : 0;
+          fines += f;
+          toast('Du är fri att gå. Böter ' + fmtKr(f) + ' har lagts till. Gå ut genom receptionen.');
+          if (S.officer) { removePerson(S.officer); if (cars.indexOf(c) >= 0) { setOccupant(c, S.crew); c.police.state = 'patrol'; resyncBot(c); setChase(c, false); } }
+          stop = null; wanted = null; policeCool = 60;
+        }
+        break;
+      }
+      case 'back':
+      case 'flee': {
+        const near = S.door && Math.hypot(S.door.x - o.x, S.door.z - o.z) < 2.5;
+        if (arrived || (near && S.t > 3) || S.t > 12) endStop(S.phase === 'flee');
+        break;
+      }
     }
+  }
+  // what the constable of the stop does, phase by phase
+  function stopOfficerIntent(S, p, dt) {
+    switch (S.phase) {
+      case 'walk': { const w = windowSpot(p), it = seek(p, walkWaypoint(S.nav, p.x, p.z, w.x, w.z, dt), 1.8, 0.1); p.arrived = Math.hypot(w.x - p.x, w.z - p.z) < 0.6; return it; }
+      case 'cuff': return seek(p, walkWaypoint(S.nav, p.x, p.z, player.x, player.z, dt), 2.2, 0.85);
+      case 'escort': { p.arrived = Math.hypot(S.rearDoor.x - p.x, S.rearDoor.z - p.z) < 0.6; return seek(p, walkWaypoint(S.nav, p.x, p.z, S.rearDoor.x, S.rearDoor.z, dt), 2.2, 0.1); }
+      case 'walkin': return seek(p, walkWaypoint(S.nav, p.x, p.z, CELL_GUARD[0], CELL_GUARD[1], dt), 2.0, 0.1);
+      case 'board': case 'back': case 'flee': {
+        const d = S.door || doorSpot(S.car, 1, false);
+        p.arrived = Math.hypot(d.x - p.x, d.z - p.z) < 0.6;
+        return seek(p, walkWaypoint(S.nav, p.x, p.z, d.x, d.z, dt), S.phase === 'flee' ? 5.8 : 1.7, 0.1);
+      }
+      case 'jail': {
+        if (!S.copLeaving) return IDLE();
+        const d = S.door;
+        p.arrived = Math.hypot(d.x - p.x, d.z - p.z) < 0.7;
+        return seek(p, walkWaypoint(S.nav, p.x, p.z, d.x, d.z, dt), 1.7, 0.1);
+      }
+      default: return IDLE();
+    }
+  }
+  // where you go while in custody: beside the constable, then into the cell
+  function custodyIntent(dt) {
+    const S = stop;
+    if (!S || !S.locked || S.phase === 'jail') return null;
+    const o = S.officer;
+    if (S.phase === 'escort' || S.phase === 'walkin') {
+      if (!o) return IDLE();
+      const d = Math.hypot(o.x - player.x, o.z - player.z);
+      return d < 1.5 ? IDLE() : seek(player, walkWaypoint(S.pnav, player.x, player.z, o.x, o.z, dt), d > 3 ? 3.4 : 2.3, 1.3);
+    }
+    if (S.phase === 'incell') {
+      const [x0, z0, x1, z1] = STATION.doors[1].inside;
+      return STATION.doors[1].open > 0.7 ? seek(player, walkWaypoint(S.pnav, player.x, player.z, (x0 + x1) / 2, (z0 + z1) / 2 - 1, dt), 1.7, 0.2) : IDLE();
+    }
+    return IDLE();
   }
   // the constable is back in the car: drive on (or, if you ran, give chase again)
   function endStop(chase) {
@@ -4406,7 +4992,7 @@ body.touch .tk-sign .key { display: none; }
     stop = null;
     $('ticket').hidden = true;
     if (S.officer) removePerson(S.officer);
-    if (cars.indexOf(c) >= 0) {
+    if (c && cars.indexOf(c) >= 0) {
       setOccupant(c, S.crew);
       c.beacon = false;
       c.police.state = 'patrol';
@@ -4415,6 +5001,58 @@ body.touch .tk-sign .key { display: none; }
     }
     if (chase) { if (wanted) { wanted.lostT = 0; wanted.stopT = 0; wanted.seen = playerTarget(); } }
     else { wanted = null; policeCool = 30; }
+  }
+
+  /* constables on foot */
+  function deployCop(c) {
+    const ex = exitSpot(c) || doorSpot(c, 1, false);
+    const crew = c.occupant || makeIdentity(OFFICER), fc = { p: null, car: c, crew, door: ex, mode: 'chase', retT: 0 };
+    fc.p = makePerson(crew, ex.x, ex.z, { state: 'cop', role: 'foot', fc, nav: {}, dodgeT: 0 });
+    fc.p.keep = true; fc.p.rot = c.h;
+    setOccupant(c, null);
+    c.police.out = fc; c.beacon = true; c.siren = false; c.yelp = false;
+    footCops.push(fc);
+  }
+  function copBoard(fc) {
+    removePerson(fc.p);
+    footCops.splice(footCops.indexOf(fc), 1);
+    const c = fc.car;
+    if (cars.indexOf(c) < 0 || c.dead) return;
+    setOccupant(c, fc.crew);
+    c.police.out = null; c.beacon = false; c.police.state = 'patrol';
+    resyncBot(c);
+    setChase(c, !!wanted && !stop);
+  }
+  function updateFootCops(dt) {
+    for (const c of cars) {
+      if (!c.police || c.police.state !== 'wait' || c.police.out) continue;
+      if (c.dead || driving || !wanted || stop) { c.police.state = 'patrol'; c.beacon = false; setChase(c, !!wanted && !stop); continue; }
+      if (Math.hypot(c.vx, c.vz) < 1.5) deployCop(c);
+    }
+    for (const fc of footCops.slice()) {
+      if (fc.mode === 'chase' && (driving || !wanted || stop)) fc.mode = 'return';
+      if (fc.mode === 'return') {
+        fc.retT += dt;
+        const gone = cars.indexOf(fc.car) < 0 || fc.car.dead;
+        if (gone && Math.hypot(fc.p.x - camTarget.x, fc.p.z - camTarget.z) > 90) { removePerson(fc.p); footCops.splice(footCops.indexOf(fc), 1); continue; }
+        if (!gone && (Math.hypot(fc.door.x - fc.p.x, fc.door.z - fc.p.z) < 1.4 || fc.retT > 45)) copBoard(fc);
+      }
+    }
+  }
+  function footCopIntent(fc, p, dt) {
+    if (fc.mode === 'chase') {
+      const seen = wanted && !wanted.inSight ? wanted.seen : player, d = Math.hypot(seen.x - p.x, seen.z - p.z);
+      return seek(p, walkWaypoint(p.ai.nav, p.x, p.z, seen.x, seen.z, dt), d > 3 ? COP_RUN : 5, 0.05);
+    }
+    if (cars.indexOf(fc.car) >= 0 && !fc.car.dead) fc.door = doorNear(fc.car, p.x, p.z, false);
+    return seek(p, walkWaypoint(p.ai.nav, p.x, p.z, fc.door.x, fc.door.z, dt), 6, 0.1);
+  }
+  // everyone in uniform on foot: the constable of a stop, constables running, the desk officer, the guards' cousin
+  function copThink(p, dt) {
+    const ai = p.ai;
+    if (ai.role === 'foot') return footCopIntent(ai.fc, p, dt);
+    if (ai.role === 'stop' && stop && stop.officer === p) return stopOfficerIntent(stop, p, dt);
+    return IDLE();
   }
 
   /* ---------- initial traffic ---------- */
@@ -4471,6 +5109,13 @@ body.touch .tk-sign .key { display: none; }
     p.keep = true;
   }
   mapLabels.push(['Högvakten', -79, 30, 'landmark']);
+  // at the station: the officer behind the counter, and somebody already sitting in the first cell
+  {
+    const desk = makePerson(makeIdentity(OFFICER), STATION.desk[0], STATION.desk[1], { state: 'idle', face: 0, dodgeT: 0 });
+    desk.keep = true;
+    const [x0, z0, x1, z1] = STATION.doors[0].inside, inmate = makePerson(makeIdentity({ shirt: 0xe46f2a, pants: 0x3b3f45 }), (x0 + x1) / 2 + 0.6, z1 - 1.2, { state: 'idle', face: 0, dodgeT: 0 });
+    inmate.keep = true;
+  }
 
   // Twenty Dalahästar are hidden around town, nine of them in the lanes of Gamla stan. Walk or drive into one to
   // collect it and learn something about the place. Find them all for fireworks over Strömmen and golden cars.
@@ -4580,7 +5225,7 @@ body.touch .tk-sign .key { display: none; }
   let touchBrake = false, isTouch = window.matchMedia('(pointer: coarse)').matches;
 
   function readInput() {
-    if (!started || paused()) return { fwd: 0, right: 0, run: false, brake: false };
+    if (!started || paused() || inCustody()) return { fwd: 0, right: 0, run: false, brake: false };
     const k = keys;
     const fwd = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0) - joy.y;
     const right = (k.KeyD || k.ArrowRight ? 1 : 0) - (k.KeyA || k.ArrowLeft ? 1 : 0) + joy.x;
@@ -4596,7 +5241,7 @@ body.touch .tk-sign .key { display: none; }
   }
 
   function findNearCar() {
-    if (driving || !started) return null;
+    if (driving || !started || (stop && stop.locked)) return null;
     let best = null, bd = Infinity;
     for (const c of cars) {
       const dx = player.x - c.x, dz = player.z - c.z;
@@ -4826,6 +5471,7 @@ body.touch .tk-sign .key { display: none; }
     carPairs();
     for (const c of cars) if (c === driving || c.vx !== 0 || c.vz !== 0) carWorld(c);
     if (driving) { player.x = driving.x; player.z = driving.z; player.rot = driving.h; player.y = 0; }
+    else if (stop && stop.riding) { player.x = stop.car.x; player.z = stop.car.z; player.vx = player.vz = 0; }
     else personMove(player, dt, pIntent);
     for (const p of persons) {
       // someone who climbed out of a wreck during this step gets their first plan next frame
@@ -4855,6 +5501,8 @@ body.touch .tk-sign .key { display: none; }
       lL = s * amp; lR = -s * amp; aL = -s * amp * 0.9; aR = s * amp * 0.9;
       bob = hs > 0.3 ? Math.abs(Math.cos(p.walkPhase)) * 0.07 * amp : Math.sin(clock * 2.2 + p.walkPhase) * 0.012;
     } else { lL = -0.55; lR = 0.35; aL = -2.6; aR = -2.6; az = 0.25; }
+    // handcuffed: both hands held together behind the back
+    if (p.cuffed && p.grounded) { aL = aR = 0.45; az = -0.32; }
     G.legL.rotation.x = lerp(G.legL.rotation.x, lL, k);
     G.legR.rotation.x = lerp(G.legR.rotation.x, lR, k);
     G.armL.rotation.x = lerp(G.armL.rotation.x, aL, k);
@@ -4906,17 +5554,19 @@ body.touch .tk-sign .key { display: none; }
     return Math.max(0.1, tmin);
   }
   function updateCamera(dt) {
-    const vf = driving ? driving.vx * Math.sin(driving.h) + driving.vz * Math.cos(driving.h) : 0;
+    // in the back of a police car the camera follows the car just as when you drive
+    const car = driving || (stop && stop.riding ? stop.car : null);
+    const vf = car ? car.vx * Math.sin(car.h) + car.vz * Math.cos(car.h) : 0;
     let tx, ty, tz, want;
-    if (driving) { tx = driving.x; ty = driving.M.bus ? 3.2 : 1.7; tz = driving.z; want = (driving.M.bus ? 15 : 9.5) + Math.abs(vf) * 0.05; }
-    else { tx = player.x; ty = player.y + 1.55; tz = player.z; want = 6; }
-    const kh = 1 - Math.exp(-(driving ? 10 : 14) * dt);
+    if (car) { tx = car.x; ty = car.M.bus ? 3.2 : 1.7; tz = car.z; want = (car.M.bus ? 15 : 9.5) + Math.abs(vf) * 0.05; }
+    else { tx = player.x; ty = player.y + 1.55; tz = player.z; want = STATION.inside(player.x, player.z) ? 4.2 : 6; }
+    const kh = 1 - Math.exp(-(car ? 10 : 14) * dt);
     camTarget.x += (tx - camTarget.x) * kh;
     camTarget.z += (tz - camTarget.z) * kh;
     camTarget.y += (ty - camTarget.y) * (1 - Math.exp(-8 * dt));
     camDist += (want - camDist) * (1 - Math.exp(-4 * dt));
     if (!started) camYaw += dt * 0.1;
-    else if (driving && performance.now() - lastLook > 1500 && Math.abs(vf) > 1) camYaw = lerpAngle(camYaw, driving.h, 1 - Math.exp(-2.5 * dt));
+    else if (car && performance.now() - lastLook > 1500 && Math.abs(vf) > 1) camYaw = lerpAngle(camYaw, car.h, 1 - Math.exp(-2.5 * dt));
     const cp = Math.cos(camPitch), sp = Math.sin(camPitch);
     const t = camClip(camTarget.x, camTarget.y, camTarget.z, camTarget.x - Math.sin(camYaw) * cp * camDist, camTarget.z - Math.cos(camYaw) * cp * camDist);
     clipT = t < clipT ? t : Math.min(t, clipT + dt * 1.5);
@@ -4967,9 +5617,10 @@ body.touch .tk-sign .key { display: none; }
       el.btnJump.textContent = driving ? 'Broms' : 'Hoppa';
       el.btnUp.hidden = el.btnDown.hidden = !driving;
     }
-    const use = stop && stop.phase === 'talk' ? 'Skriv under' : driving ? 'Kliv ur' : nearCar && nearCar.bot ? 'Ta bilen' : 'Kliv in';
+    const ph = stop && stop.phase;
+    const use = ph === 'talk' ? 'Skriv under' : ph === 'transport' || ph === 'park' ? 'Hoppa fram' : ph === 'jail' ? 'Sov' : driving ? 'Kliv ur' : nearCar && nearCar.bot ? 'Ta bilen' : 'Kliv in';
     if (use !== lastUse) { el.btnUse.textContent = use; lastUse = use; }
-    el.btnUse.classList.toggle('off', !driving && !nearCar && !(stop && stop.phase === 'talk'));
+    el.btnUse.classList.toggle('off', !driving && !nearCar && !['talk', 'transport', 'park', 'jail'].includes(ph));
     if (driving) {
       const c = driving, vf = c.vx * Math.sin(c.h) + c.vz * Math.cos(c.h);
       const kmh = Math.round(Math.abs(vf) * 3.6), rf = clamp(c.rpm / (c.M.red * 1.04), 0, 1);
@@ -4990,12 +5641,21 @@ body.touch .tk-sign .key { display: none; }
       el.limitNum.textContent = lim;
       el.limit.classList.toggle('over', kmh > lim + 3 && !c.siren);
     }
-    el.wanted.hidden = !wanted;
-    if (wanted) {
-      const title = stop ? 'Poliskontroll' : 'Polisen jagar dig';
-      const hint = stop ? (stop.phase === 'approach' || stop.phase === 'parked' ? 'Sitt kvar, polisen parkerar' : stop.phase === 'walk' ? 'Konstapeln kommer fram till dig'
-        : stop.phase === 'talk' ? 'Tryck E för att skriva under boten' : stop.phase === 'flee' ? 'Du smet! Konstapeln springer tillbaka' : 'Polisen kör snart vidare')
-        : wanted.stopT > 0.2 ? 'Stå still …' : driving ? 'Kör in till kanten och stanna' : 'Polisen letar efter dig';
+    // in the cell: how long until you are let out
+    const jail = stop && stop.phase === 'jail';
+    el.wanted.hidden = !wanted && !jail;
+    if (jail) {
+      const s = Math.max(0, Math.ceil(stop.jailT)), hint = 'Du släpps om ' + Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') + (stop.wait ? ' (du sover)' : '. E: sov så går tiden fortare');
+      if (hint !== lastHint) { el.wantedHint.textContent = hint; el.wantedTitle.textContent = 'Häktet'; lastHint = hint; }
+      el.wanted.classList.add('calm');
+    } else if (wanted) {
+      const title = stop ? (stop.mode === 'arrest' && stop.locked ? 'Gripen' : 'Poliskontroll') : 'Polisen jagar dig';
+      const ph = stop && stop.phase;
+      const hint = stop ? (ph === 'approach' || ph === 'parked' ? 'Sitt kvar, polisen parkerar' : ph === 'walk' ? 'Konstapeln kommer fram till dig'
+        : ph === 'talk' ? 'Tryck E för att skriva under boten' : ph === 'flee' ? 'Du smet! Konstapeln springer tillbaka'
+        : ph === 'order' ? 'Kliv ur bilen, du är gripen' : ph === 'cuff' ? 'Du får handbojor på dig' : ph === 'escort' || ph === 'board' ? 'Konstapeln för dig till polisbilen'
+        : ph === 'transport' || ph === 'park' ? 'På väg till polisstationen. E hoppar fram' : ph === 'walkin' || ph === 'incell' ? 'Du förs in på polisstationen' : 'Polisen kör snart vidare')
+        : wanted.stopT > 0.2 ? 'Stå still …' : driving ? 'Kör in till kanten och stanna' : footCops.some((f) => f.mode === 'chase') ? 'Polisen springer efter dig!' : 'Polisen letar efter dig';
       if (hint !== lastHint) { el.wantedHint.textContent = hint; el.wantedTitle.textContent = title; lastHint = hint; }
       el.wanted.classList.toggle('calm', !!stop);
     }
@@ -5502,7 +6162,9 @@ body.touch .tk-sign .key { display: none; }
     }
     if (!started) { if (code === 'Enter' || code === 'Space') startGame(); return; }
     if (repeat) return;
-    if (code === 'KeyE' || code === 'Enter') { if (stop && stop.phase === 'talk') signTicket(); else toggleCar(); }
+    // under arrest most keys do nothing: you can still look at the map, the help and the sound, and E moves things on
+    if (stop && stop.locked && !['KeyE', 'Enter', 'KeyH', 'KeyT', 'KeyK'].includes(code) && !(stop.phase === 'jail' && code === 'Space')) return;
+    if (code === 'KeyE' || code === 'Enter') { if (!useKey()) toggleCar(); }
     else if (code === 'Space') jumpQueued = true;
     else if (code === 'KeyH') el.help.hidden = !el.help.hidden;
     else if (code === 'KeyT') toggleMute();
@@ -5572,7 +6234,7 @@ body.touch .tk-sign .key { display: none; }
   stick.addEventListener('pointercancel', endStick);
   el.btnJump.addEventListener('pointerdown', (e) => { e.preventDefault(); touchBrake = true; jumpQueued = true; });
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.btnJump.addEventListener(ev, () => { touchBrake = false; });
-  el.btnUse.addEventListener('pointerdown', (e) => { e.preventDefault(); if (stop && stop.phase === 'talk') signTicket(); else toggleCar(); });
+  el.btnUse.addEventListener('pointerdown', (e) => { e.preventDefault(); if (!useKey()) toggleCar(); });
   $('btnCars').addEventListener('pointerdown', (e) => { e.preventDefault(); openPicker(); });
   el.btnUp.addEventListener('pointerdown', (e) => { e.preventDefault(); playerShift(1); });
   el.btnDown.addEventListener('pointerdown', (e) => { e.preventDefault(); playerShift(-1); });
@@ -5600,13 +6262,14 @@ body.touch .tk-sign .key { display: none; }
     if (!paused()) {
       for (const c of cars) c.input = c === driving ? inp : c.bot ? (c.police ? policeThink(c, dt) : botThink(c, dt)) : null;
       for (const p of persons) if (p !== player && !p.asleep) p.intent = npcThink(p, dt);
-      const pIntent = playerIntent(inp);
+      const pIntent = custodyIntent(dt) || playerIntent(inp);
       const steps = Math.max(1, Math.ceil(dt * 120));
       for (let i = 0; i < steps; i++) physicsStep(dt / steps, pIntent);
       jumpQueued = false;
       manageTraffic(dt);
       policeUpdate(dt);
       updateSurprises(dt);
+      STATION.update(dt, player.x, player.z);
       nearCar = findNearCar();
       animate(dt);
     }
@@ -5698,7 +6361,7 @@ body.touch .tk-sign .key { display: none; }
       });
     },
     get cars() { return cars; }, blockedAt: (x, z, r) => blockedAt(x, z, r), obstaclesNear(x, z, r) { const out = []; forNear(x - r, z - r, x + r, z + r, (o) => out.push({ ...o })); return out; }, distTo, get persons() { return persons; }, get player() { return player; }, get driving() { return driving; },
-    get wanted() { return wanted; }, get fines() { return fines; }, get audio() { return audio; }, get stop() { return stop; }, signTicket, beginStop, setCall, resyncBot, get horses() { return horses; }, fireworks(s) { fireworksT = s; },
+    get wanted() { return wanted; }, get fines() { return fines; }, get audio() { return audio; }, get stop() { return stop; }, footCops, STATION, useKey, walkWaypoint, walkLine, signTicket, beginStop, setCall, resyncBot, get horses() { return horses; }, fireworks(s) { fireworksT = s; },
     nodes, edges, walkable, fitsM, MODEL, driveAccel,
     state() {
       const bad = [];
