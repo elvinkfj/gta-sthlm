@@ -40,7 +40,7 @@ body.locked #game { cursor: none; }
 /* ---------- HUD ---------- */
 #hud { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.4s ease; }
 body.playing #hud { opacity: 1; }
-.tags { position: absolute; top: calc(14px + env(safe-area-inset-top, 0px)); left: calc(14px + env(safe-area-inset-left, 0px)); display: flex; gap: 8px; flex-wrap: wrap; max-width: 46vw; }
+.tags { position: absolute; top: calc(14px + env(safe-area-inset-top, 0px)); left: calc(14px + env(safe-area-inset-left, 0px)); display: flex; gap: 8px; flex-wrap: wrap; max-width: min(46vw, calc(50vw - 200px)); }
 .tag { display: flex; align-items: center; gap: 8px; padding: 5px 11px 5px 5px; border-radius: 9px; background: var(--glass); font-weight: 700; font-size: 0.82rem; letter-spacing: 0.02em; }
 
 #loc {
@@ -118,7 +118,32 @@ body.playing #hud { opacity: 1; }
 @keyframes wantedFlash { 50% { box-shadow: 0 0 0 2px var(--sign-red); } }
 @keyframes beacon { 50% { background: var(--sign-red); box-shadow: 0 0 12px 4px rgba(200, 16, 46, 0.8); } }
 .tag.fine { padding: 5px 11px; }
+#wanted.calm { animation: none; box-shadow: 0 0 0 2px #2f6bff; }
+
+/* the ordningsbot the constable hands you: a paper slip with the police band across the top */
+#ticket {
+  position: absolute; left: calc(18px + env(safe-area-inset-left, 0px)); bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  width: min(340px, calc(100vw - 36px)); box-sizing: border-box; padding: 0 0 12px; border-radius: 6px; overflow: hidden;
+  background: #fbfaf5; color: #1d232a; box-shadow: 0 14px 34px rgba(0, 0, 0, 0.4); transform: rotate(-1.2deg);
+  font-size: 0.82rem; animation: rise 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.tk-head { display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: #0b2f6b; color: #fff; font-weight: 700; font-size: 0.8rem; border-bottom: 4px solid var(--sign-yellow); }
+.tk-badge { padding: 3px 7px 1px; border-radius: 4px; background: var(--sign-yellow); color: #0b2f6b; font-weight: 900; letter-spacing: 0.12em; font-size: 0.74rem; }
+.tk-meta { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 10px 12px 8px; }
+.tk-meta dt { font-weight: 700; font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; color: #5c6670; }
+.tk-meta dd { margin: 0; font-weight: 700; }
+#tkRows { list-style: none; margin: 0 12px; padding: 8px 0; border-top: 1px dashed #b9bdc2; border-bottom: 1px dashed #b9bdc2; display: grid; gap: 5px; }
+#tkRows li { display: flex; justify-content: space-between; gap: 12px; }
+#tkRows b, .tk-sum b { font-family: var(--font-gauge); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tk-sum { display: flex; justify-content: space-between; align-items: baseline; margin: 8px 12px 6px; font-weight: 700; }
+.tk-sum b { font-size: 1.15rem; color: #b0101f; }
+.tk-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 0 12px; font-style: italic; color: #4a535c; }
+.tk-sign { display: flex; align-items: center; gap: 6px; font-style: normal; font-weight: 900; color: #0b2f6b; white-space: nowrap; }
+.tk-sign .key { background: #0b2f6b; color: #fff; }
 .tag.fine b { color: var(--sign-yellow); margin-left: 2px; }
+.dala-tag { padding: 5px 11px 5px 7px; }
+.dala-tag b { color: var(--sign-yellow); font-variant-numeric: tabular-nums; }
+.dala { width: 18px; height: 18px; display: block; }
 .dash-foot { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 0.74rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
 .dash-foot span:first-child { opacity: 0.75; }
 .dash-foot .hint { display: flex; align-items: center; gap: 6px; letter-spacing: 0.04em; text-transform: none; font-size: 0.8rem; white-space: nowrap; }
@@ -180,6 +205,7 @@ h1 { margin: 0; font: 900 clamp(2.2rem, 9vw, 3.1rem)/0.95 var(--font-sign); lett
 .lg-you { background: var(--snow); box-shadow: inset 0 0 0 2px var(--sign-blue), 0 0 0 1px var(--snow); }
 .lg-police { background: #2f6bff; box-shadow: 0 0 0 2px var(--snow); }
 .lg-car { border-radius: 2px !important; background: var(--sign-yellow); box-shadow: 0 0 0 2px var(--snow); }
+.lg-dala { border-radius: 2px !important; width: 10px !important; height: 10px !important; margin: 0 2px; transform: rotate(45deg); background: #c8102e; box-shadow: 0 0 0 2px var(--snow); }
 .lg-t { background: #1062b4; color: #fff; box-shadow: 0 0 0 2px var(--snow); }
 .lg-park { border-radius: 3px !important; background: #a9cf8c; }
 .lg-main { border-radius: 3px !important; background: #fbe7a6; }
@@ -226,15 +252,18 @@ body.touch .dash-foot .hint { display: none; }
 body.touch #limit { right: auto; bottom: auto; left: calc(186px + env(safe-area-inset-left, 0px)); top: calc(16px + env(safe-area-inset-top, 0px)); width: 46px; height: 46px; font-size: 1.15rem; box-shadow: inset 0 0 0 5px var(--sign-red), 0 0 0 2px var(--snow), 0 4px 12px rgba(0, 0, 0, 0.3); }
 body.touch #prompt { bottom: calc(190px + env(safe-area-inset-bottom, 0px)); }
 body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
+body.touch #ticket { left: 50%; bottom: auto; top: calc(70px + env(safe-area-inset-top, 0px)); transform: translateX(-50%) rotate(-1deg); }
+body.touch .tk-sign .key { display: none; }
 @media (max-width: 760px) {
   #map { width: 128px; height: 128px; }
   #loc { left: auto; right: calc(16px + env(safe-area-inset-right, 0px)); transform: none; top: calc(160px + env(safe-area-inset-top, 0px)); }
   body.touch #loc { top: calc(148px + env(safe-area-inset-top, 0px)); }
   #locStreet { font-size: 0.92rem; }
+  .tags { max-width: 46vw; }
   #wanted { top: calc(210px + env(safe-area-inset-top, 0px)); }
   body.touch #wanted { top: calc(198px + env(safe-area-inset-top, 0px)); }
 }
-@media (prefers-reduced-motion: reduce) { .sign { animation: none; } #hud { transition: none; } #limit.over, #wanted, .beacon { animation: none; } #limit.over { box-shadow: inset 0 0 0 7px var(--sign-red), 0 0 0 4px var(--sign-red); } }
+@media (prefers-reduced-motion: reduce) { .sign { animation: none; } #hud { transition: none; } #limit.over, #wanted, .beacon, #ticket { animation: none; } #limit.over { box-shadow: inset 0 0 0 7px var(--sign-red), 0 0 0 4px var(--sign-red); } }
 </style>
 </head>
 <body>
@@ -248,9 +277,17 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
     <div class="tag"><span class="key">K</span>Karta</div>
     <div class="tag"><span class="key">T</span><span id="soundLabel">Ljud på</span></div>
     <div class="tag fine" id="fineTag" hidden>Böter <b id="fines">0 kr</b></div>
+    <div class="tag dala-tag" title="Dalahästar du hittat"><svg class="dala" viewBox="0 0 20 20" aria-hidden="true"><path d="M4 18V11L3 10V8l2-1 1-4h3l1 2-2 1v1h7l1 1v8h-3v-4H8v4z" fill="#c8102e" stroke="#fff" stroke-width="1"/></svg><b id="horses">0/20</b></div>
   </div>
   <div id="loc"><span id="locStreet"></span><span id="locDistrict">Norrmalm</span></div>
-  <div id="wanted" hidden><span class="beacon" aria-hidden="true"></span><span><b>Polisen jagar dig</b><small id="wantedHint">Stanna bilen bredvid en polisbil</small></span></div>
+  <div id="wanted" hidden><span class="beacon" aria-hidden="true"></span><span><b id="wantedTitle">Polisen jagar dig</b><small id="wantedHint">Kör in till kanten och stanna</small></span></div>
+  <div id="ticket" hidden role="dialog" aria-labelledby="tkTitle">
+    <div class="tk-head"><span class="tk-badge">POLISEN</span><span id="tkTitle">Föreläggande av ordningsbot</span></div>
+    <dl class="tk-meta"><dt>Plats</dt><dd id="tkPlace"></dd><dt>Tid</dt><dd id="tkTime"></dd><dt>Fordon</dt><dd id="tkCar"></dd></dl>
+    <ul id="tkRows"></ul>
+    <div class="tk-sum"><span>Att betala inom 30 dagar</span><b id="tkSum"></b></div>
+    <div class="tk-foot"><span id="tkOfficer"></span><span class="tk-sign"><span class="key">E</span>Skriv under</span></div>
+  </div>
   <canvas id="map" aria-label="Karta, klicka för att se hela staden" title="Visa hela kartan (K)"></canvas>
   <div id="toast" hidden></div>
   <div id="prompt" hidden><span class="key">E</span><span id="promptText">Kliv in</span></div>
@@ -274,6 +311,8 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
     <span class="key">K</span><span>Stor karta (eller klicka på kartan)</span>
     <span class="key">F</span><span>Tuta</span>
     <span class="key">L</span><span>Blåljus, när du kör en polisbil</span>
+    <span class="key">Polis</span><span>Kör in till kanten och stanna, så kommer en konstapel fram. E skriver under boten</span>
+    <span class="key">Dalahäst</span><span>20 st gömda i stan, 9 i Gamla stan. Gå eller kör in i dem</span>
     <span class="key">R</span><span>Ställ bilen på gatan igen</span>
     <span class="key">T</span><span>Ljud av och på</span>
     <span class="key">Esc</span><span>Släpp musen</span>
@@ -299,7 +338,7 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
         <span>Globen</span><span id="dGloben">3,7 km</span>
       </div>
       <h1>Gubbe på Vägen</h1>
-      <p class="lede" id="lede">Gå runt i Stockholm, välj en bil och kör genom stan. Bilarna i trafiken kan du också springa fram och ta. Håll hastigheten, polisen patrullerar.</p>
+      <p class="lede" id="lede">Gå runt i Stockholm, välj en bil och kör genom stan. Bilarna i trafiken kan du också springa fram och ta. Håll hastigheten, polisen patrullerar. Och leta rätt på de 20 dalahästarna som gömt sig i stan, nio av dem i Gamla stans gränder.</p>
       <ul class="keys only-desk">
         <li><span class="k"><span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span></span><span>Gå, eller gasa och styr</span></li>
         <li><span class="k"><span class="key">Mus</span></span><span>Titta runt</span></li>
@@ -336,7 +375,7 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
     <canvas id="bigmapCanvas"></canvas>
     <div class="legend">
       <span><i class="lg-you"></i>Du</span><span><i class="lg-police"></i>Polis</span><span><i class="lg-car"></i>Din bil</span>
-      <span><i class="lg-t">T</i>Tunnelbana</span><span><i class="lg-park"></i>Park</span><span><i class="lg-main"></i>Huvudgata</span>
+      <span><i class="lg-t">T</i>Tunnelbana</span><span><i class="lg-dala"></i>Hittad dalahäst</span><span><i class="lg-park"></i>Park</span><span><i class="lg-main"></i>Huvudgata</span>
     </div>
   </div>
 </div>
@@ -1020,8 +1059,27 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
     // Helgeandsholmen and Gamla stan
     RB1: [-195, -208], RB2: [-190, -140], MT: [-180, -76], NB1: [-100, -205], NB2: [-95, -140], LB: [-90, -78],
     SBs: [165, -82], SK1: [210, 40], SK2: [222, 190], SK3: [212, 330], SK4: [175, 430], SL0: [60, 500],
-    SBk: [75, 80], STK: [-75, 82], VL1: [-160, 80], VL2: [-140, 220], VL3: [-100, 350], JT: [-25, 430], STT: [-60, 200], OL1: [90, 215], OL2: [80, 340],
-    RT: [-270, -30], MB1: [-312, 110], MB2: [-292, 260], MB3: [-245, 390], KH: [-130, 492],
+    SBk: [75, 80], STK: [-80, 84], gSB1: [105, 71],
+    RT: [-270, -30], MB1: [-312, 110], MB2: [-292, 260], MB3: [-245, 390], KH: [-130, 492], gMBg: [-277.5, 300],
+    // Gamla stan, lane by lane. West to east the long streets are Munkbron, Lilla Nygatan, Stora Nygatan,
+    // Västerlånggatan, Prästgatan, Stortorget with Skomakargatan, Svartmangatan, Österlånggatan and Skeppsbron;
+    // the gränder cross between them. Västerlånggatan (Vx):
+    gMT2: [-140, -77], gV0: [-142, -10], gV2: [-144, 78], gV3: [-148, 118], gV3b: [-149, 165], gV4: [-149, 200], gV4b: [-147, 245],
+    gV5: [-138, 290], gV6: [-118, 345], gV6b: [-102, 372], gV7: [-88, 398], gV8: [-58, 425], gJT: [-20, 440], gJT2: [8, 444], gJG: [34, 472],
+    gHV0: [-100, -10], gHV: [-70, 0], gRHN: [-194, -18], gRHT: [-194, 22],
+    // Prästgatan (P), Stora Nygatan (N), Lilla Nygatan (L) and Kornhamnstorg
+    gP0: [-108, 80], gP1: [-114, 118], gP1b: [-116, 165], gP2: [-116, 200], gP2b: [-113, 242], gP3: [-103, 290], gP4: [-85, 348], gP4b: [-73, 370],
+    gN0: [-174, 44], gN1: [-186, 118], gN1b: [-190, 165], gN2: [-192, 200], gN2b: [-190, 245], gN3: [-182, 290], gN4: [-165, 345], gN5: [-145, 400], gKHT: [-115, 458],
+    gL0: [-208, 40], gL1: [-226, 118], gL2: [-232, 200], gL2a: [-231, 245], gL3: [-222, 300], gL4: [-205, 355], gL5: [-180, 415],
+    // Stortorget's corners, Källargränd, Bollhusgränd, Köpmangatan, Skomakargatan, Svartmangatan and the lanes off them
+    gTNW: [-92, 190], gTNE: [-36, 190], gTE: [-36, 212], gTSE: [-52, 240], gTSW: [-98, 236], gKG0: [14, 84], gKG1: [12, 150], gBH0: [48, 82], gBH1: [52, 213],
+    gSM0: [30, 213], gSM1: [32, 262], gSM1b: [33, 280], gSKo1: [-47, 280], gTB3: [-46, 350], gTB5: [38, 352], gTB6: [64, 352], gTB7: [100, 350],
+    gBG0: [60, 264], gBT: [85, 265], gSJ1: [93, 300],
+    // Österlånggatan (O), and where each gränd meets Skeppsbron (Sz, z the distance south of the palace)
+    gOa: [112, 100], gO1: [118, 128], gO1b: [122, 156], gO2: [125, 184], gKT: [128, 220], gO2b: [131, 245], gO3: [134, 268], gO3b: [134, 294],
+    gO3c: [133, 312], gO5: [130, 345], gO6: [122, 370], gO6b: [110, 392], gO7: [88, 415], gO8: [50, 436],
+    gS100: [214.8, 100], gS128: [217.0, 128], gS156: [219.3, 156], gS220: [219.9, 220], gS245: [218.1, 245], gS268: [216.4, 268], gS294: [214.6, 294],
+    gS312: [213.3, 312], gS370: [197.2, 370], gS392: [189.1, 392], gS415: [180.6, 415], gS454: [135, 454], gS475: [100.3, 475.5],
     RH1: [-385, -15], RH2: [-470, 50], RH3: [-480, 240], RH4: [-400, 200],
     // Södermalm
     SL1: [50, 665], SMT: [30, 725], CB1: [-260, 705], SMS2: [-550, 745], SMS3: [-850, 768], KV1: [260, 695], KV2: [520, 735],
@@ -1087,19 +1145,70 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
     ['Norrbro', 'NB1 NB2', { hw: 6, walk: 2.5 }],
     ['Norrbro', 'NB2 LB', { hw: 6, bridge: true }],
     ['Strömbron', 'KT0 SBs', { hw: 6.5, bridge: true }],
-    ['Mynttorget', 'MT LB', { hw: 5 }],
+    ['Mynttorget', 'MT gMT2 LB', { hw: 5 }],
     ['Slottskajen', 'LB SBs', { hw: 6, walk: 5 }],
-    ['Skeppsbron', 'SBs SK1 SK2 SK3 SK4 SL0', { hw: 8, walk: 7 }],
-    ['Slottsbacken', 'SK1 SBk', { hw: 6 }],
-    ['Storkyrkobrinken', 'SBk STK VL1', { hw: 4.5, walk: 3 }],
-    ['Myntgatan', 'MT RT', { hw: 4.5 }],
-    ['Västerlånggatan', 'MT VL1 VL2 VL3 JT', { kind: 'lane' }],
-    ['Trångsund', 'STK STT', { kind: 'lane', hw: 3 }],
-    ['Köpmangatan', 'STT OL1', { kind: 'lane', hw: 3 }],
-    ['Österlånggatan', 'SBk OL1 OL2 JT', { kind: 'lane' }],
-    ['Järntorgsgatan', 'JT SL0', { kind: 'lane', hw: 3 }],
+    ['Skeppsbron', 'SBs SK1 gS100 gS128 gS156 SK2 gS220 gS245 gS268 gS294 gS312 SK3 gS370 gS392 gS415 SK4 gS454 gS475 SL0', { hw: 8, walk: 7 }],
+    ['Slottsbacken', 'SK1 gSB1 SBk', { hw: 6 }],
+    ['Storkyrkobrinken', 'SBk gBH0 gKG0 STK gP0 gV2 gN0 gRHT', { hw: 4, walk: 1.5 }],
+    ['Myntgatan', 'MT gRHN', { hw: 4.5, walk: 2 }],
+    ['Riddarhustorget', 'RT gRHN gRHT', { hw: 5, walk: 2 }],
+    ['Stora Nygatan', 'gN0 gN1 gN1b gN2 gN2b gN3 gN4 gN5 gKHT', { hw: 4, walk: 1.5 }],
+    ['Kornhamnstorg', 'gKHT KH', { hw: 5, walk: 2 }],
     ['Kornhamnstorg', 'KH SL0', { hw: 6 }],
-    ['Munkbroleden', 'RT MB1 MB2 MB3 KH', { hw: 7, walk: 6 }],
+    ['Munkbroleden', 'RT MB1 MB2 gMBg MB3 KH', { hw: 7, walk: 6 }],
+    // the lanes: cobbles, no through traffic (the police on blue lights take them anyway)
+    ['Västerlånggatan', 'gMT2 gV0 gV2 gV3 gV3b gV4 gV4b gV5 gV6 gV6b gV7 gV8 gJT', { kind: 'lane', hw: 3.2 }],
+    ['Högvaktsterrassen', 'gV0 gHV0', { kind: 'lane', hw: 3.5 }],
+    ['Yttre borggården', 'gHV0 gHV', { kind: 'lane', hw: 6, walk: 0 }],
+    ['Prästgatan', 'gP0 gP1 gP1b gP2 gP2b gP3 gP4 gP4b gV8', { kind: 'lane', hw: 2.4, walk: 0.4 }],
+    ['Lilla Nygatan', 'gRHT gL0 gL1 gL2 gL2a gL3 gL4 gL5 gKHT', { kind: 'lane', hw: 3 }],
+    ['Trångsund', 'STK gTNW', { kind: 'lane', hw: 2.6, walk: 0.5 }],
+    ['Källargränd', 'gKG0 gKG1 gTNE', { kind: 'lane', hw: 1.9, walk: 0.3 }],
+    ['Bollhusgränd', 'gBH0 gBH1', { kind: 'lane', hw: 1.8, walk: 0.3 }],
+    ['Stortorget', 'gTNW gTNE gTE gTSE gTSW gTNW', { kind: 'lane', hw: 2.6, walk: 0.4 }],
+    ['Köpmangatan', 'gTE gSM0 gBH1 gKT', { kind: 'lane', hw: 2.5, walk: 0.4 }],
+    ['Skomakargatan', 'gTSE gSKo1 gTB3', { kind: 'lane', hw: 2.4, walk: 0.4 }],
+    ['Svartmangatan', 'gSM0 gSM1 gSM1b gTB5', { kind: 'lane', hw: 2.6, walk: 0.4 }],
+    ['Kåkbrinken', 'gV4b gP2b gTSW', { kind: 'lane', hw: 2, walk: 0.3 }],
+    ['Tyska brinken', 'gV6 gP4 gTB3 gTB5 gTB6 gTB7 gO5 SK3', { kind: 'lane', hw: 2.8, walk: 0.5 }],
+    ['Tyska skolgränd', 'gSKo1 gSM1b', { kind: 'lane', hw: 1.5, walk: 0.3 }],
+    ['Kindstugatan', 'gSM1 gBG0 gBT gO3', { kind: 'lane', hw: 2.2, walk: 0.3 }],
+    ['Baggensgatan', 'gBG0 gTB6', { kind: 'lane', hw: 2, walk: 0.3 }],
+    ['Själagårdsgatan', 'gBT gSJ1 gTB7', { kind: 'lane', hw: 2.2, walk: 0.3 }],
+    ['Brunnsgränd', 'gSJ1 gO3b', { kind: 'lane', hw: 1.6, walk: 0.3 }],
+    ['Österlånggatan', 'gSB1 gOa gO1 gO1b gO2 gKT gO2b gO3 gO3b gO3c gO5 gO6 gO6b gO7 gO8 gJT2', { kind: 'lane', hw: 3 }],
+    ['Järntorget', 'gJT gJT2', { kind: 'lane', hw: 5, walk: 0.5 }],
+    ['Järntorget', 'gKHT gJT', { kind: 'lane', hw: 3.5 }],
+    ['Järntorgsgatan', 'gJT2 gJG SL0', { kind: 'lane', hw: 3 }],
+    // between Västerlånggatan and Prästgatan, north to south
+    ['Helga Lekamens gränd', 'gV3 gP1', { kind: 'lane', hw: 1.4, walk: 0.2 }],
+    ['Peder Fredags gränd', 'gV3b gP1b', { kind: 'lane', hw: 1.4, walk: 0.2 }],
+    ['Didrik Ficks gränd', 'gV4 gP2', { kind: 'lane', hw: 1.4, walk: 0.2 }],
+    ['Schönfeldts gränd', 'gV5 gP3', { kind: 'lane', hw: 1.4, walk: 0.2 }],
+    ['Mårten Trotzigs gränd', 'gV6b gP4b', { kind: 'lane', hw: 0.55, walk: 0.1, stairs: true }],
+    // west of Västerlånggatan, down to Stora and Lilla Nygatan and the quay at Munkbron
+    ['Sven Vintappares gränd', 'gV3 gN1', { kind: 'lane', hw: 1.5, walk: 0.2 }],
+    ['Gåsgränd', 'gV3b gN1b', { kind: 'lane', hw: 1.4, walk: 0.2 }],
+    ['Göran Hälsinges gränd', 'gV4 gN2 gL2', { kind: 'lane', hw: 1.5, walk: 0.2 }],
+    ['Ignatiigränd', 'gV4b gN2b', { kind: 'lane', hw: 1.5, walk: 0.2 }],
+    ['Funckens gränd', 'gN2b gL2a', { kind: 'lane', hw: 1.5, walk: 0.2 }],
+    ['Yxsmedsgränd', 'gV7 gN5', { kind: 'lane', hw: 1.5, walk: 0.2 }],
+    ['Munkbrogatan', 'gL3 gMBg', { kind: 'lane', hw: 2.6, walk: 0.4 }],
+    // from Österlånggatan down to Skeppsbron, north to south
+    ['Packhusgränd', 'gOa gS100', { kind: 'lane', hw: 1.6, walk: 0.2 }],
+    ['Ferkens gränd', 'gO1 gS128', { kind: 'lane', hw: 1.4, walk: 0.2 }],
+    ['Skeppar Karls gränd', 'gO1b gS156', { kind: 'lane', hw: 1.4, walk: 0.2 }],
+    ['Kråkgränd', 'gO2 SK2', { kind: 'lane', hw: 1.4, walk: 0.2 }],
+    ['Köpmanbrinken', 'gKT gS220', { kind: 'lane', hw: 2.4, walk: 0.3 }],
+    ['Gaffelgränd', 'gO2b gS245', { kind: 'lane', hw: 1.4, walk: 0.2 }],
+    ['Skottgränd', 'gO3 gS268', { kind: 'lane', hw: 1.4, walk: 0.2 }],
+    ['Bredgränd', 'gO3b gS294', { kind: 'lane', hw: 2.1, walk: 0.2 }],
+    ['Ankargränd', 'gO3c gS312', { kind: 'lane', hw: 1.4, walk: 0.2 }],
+    ['Kolmätargränd', 'gO6 gS370', { kind: 'lane', hw: 1.4, walk: 0.2 }],
+    ['Stora Hoparegränd', 'gO6b gS392', { kind: 'lane', hw: 1.5, walk: 0.2 }],
+    ['Telegrafgränd', 'gO7 gS415', { kind: 'lane', hw: 1.5, walk: 0.2 }],
+    ['Triewaldsgränd', 'gO8 gS454', { kind: 'lane', hw: 1.6, walk: 0.2 }],
+    ['Tullgränd', 'gJG gS475', { kind: 'lane', hw: 1.8, walk: 0.2 }],
     ['Vasabron', 'VB RT', { hw: 6.5, bridge: true }],
     ['Riddarholmsbron', 'RT RH1', { hw: 5, bridge: true }],
     ['Birger jarls torg', 'RH1 RH2', { hw: 5 }],
@@ -1138,7 +1247,7 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
     if (nodeIndex.has(id)) return nodeIndex.get(id);
     const p = PTS[id];
     if (!p) throw new Error('unknown junction ' + id);
-    nodes.push({ id, x: p[0], z: p[1], nb: [], all: [], r: 0 });
+    nodes.push({ id, x: p[0], z: p[1], nb: [], nbE: [], all: [], r: 0 });
     nodeIndex.set(id, nodes.length - 1);
     return nodes.length - 1;
   }
@@ -1151,17 +1260,20 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
       const e = {
         a, b, name, kind, hw, len: Math.hypot(B.x - A.x, B.z - A.z),
         walk: o.walk !== undefined ? o.walk : kind === 'lane' ? 0.8 : kind === 'ped' ? 0.6 : hw >= 8 ? 6 : 4,
-        bridge: !!o.bridge, drive: kind === 'street', trees: o.trees || null, median: !!o.median,
+        bridge: !!o.bridge, stairs: !!o.stairs, drive: kind === 'street', trees: o.trees || null, median: !!o.median,
         limit: o.limit || (o.bridge ? 50 : kind === 'lane' ? 20 : kind === 'ped' ? 10 : 40)
       };
       // where cars drive: the right-hand lane, the inner lane for overtaking, and the kerb lane for parking
       e.lane = e.median ? hw * 0.62 : hw >= 8 ? hw * 0.6 : Math.min(LANE, hw * 0.5);
       e.pass = hw >= 8 ? hw * 0.26 : -e.lane;
       e.park = hw >= 6 && !e.bridge ? hw - 1.1 : null;
+      // police on blue lights may also take the lanes, the pedestrian streets and the squares, if a car fits
+      e.emerg = e.drive || (!e.stairs && hw >= 1.35);
       e.i = edges.length;
       edges.push(e);
       A.all.push(e.i); B.all.push(e.i);
       if (e.drive) { A.nb.push(b); B.nb.push(a); }
+      if (e.emerg) { A.nbE.push(b); B.nbE.push(a); }
       edgeKey.set(a + ',' + b, e); edgeKey.set(b + ',' + a, e);
     }
   }
@@ -1461,7 +1573,13 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
     { name: 'Gustav Adolfs torg', poly: [[-166, -345], [-112, -345], [-112, -292], [-166, -292]], statue: [-140, -320] },
     { name: 'Hötorget', poly: (() => { const f = edgeFrame(nodeIndex.get('S2'), nodeIndex.get('S3')); return rectPoly(lotFrame(f, -1, 33, 66, f.e.hw + f.e.walk + 0.5 + 33), 0, 0, 66, 22); })(), market: true },
     { name: 'Sergels torg', poly: [[-308, -622], [-200, -622], [-200, -590], [-308, -590]], plaza: true },
-    { name: 'Stortorget', poly: [[-100, 185], [-15, 185], [-15, 240], [-100, 240]], cobble: true, well: [-57, 212] },
+    { name: 'Stortorget', poly: [[-94, 193], [-39, 193], [-39, 211], [-53, 237], [-95, 234]], cobble: true, well: [-68, 214] },
+    { name: 'Slottsbacken', poly: [[64, -58], [150, -66], [188, 10], [188, 30], [100, 58], [64, 58]], cobble: true, obelisk: [128, 18] },
+    { name: 'Yttre borggården', poly: [[-95, -39], [-63, -39], [-63, 39], [-95, 39]], cobble: true },
+    { name: 'Järntorget', poly: [[-36, 432], [4, 436], [10, 452], [-34, 452]], cobble: true },
+    { name: 'Köpmantorget', poly: [[100, 224], [118, 224], [118, 240], [100, 240]], cobble: true, statue: [109, 232] },
+    { name: 'Brända tomten', poly: [[78, 270], [92, 270], [92, 282], [78, 282]], cobble: true, tree: [85, 276] },
+    { name: 'Riddarhustorget', poly: [[-213, -10], [-201, -10], [-201, 26], [-213, 26]], statue: [-207, 8] },
     { name: 'Medborgarplatsen', poly: [[100, 1385], [205, 1385], [205, 1460], [100, 1460]] },
     { name: 'Norrmalmstorg', poly: [[150, -700], [200, -700], [200, -668], [150, -668]] }
   ];
@@ -1523,6 +1641,16 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
     if (q.plaza) triangulate(plazaB, q.poly, 0.03, 0xffffff, 4);
     else triangulate(q.cobble ? cobbleB : slabB, q.poly, 0.03, 0xffffff, 4);
     if (q.statue) statue(q.statue[0], q.statue[1], 5.5);
+    if (q.tree) { lindens.push({ x: q.tree[0], z: q.tree[1], s: 1.05, r: 0.3, v: 0.5 }); addCircle(q.tree[0], q.tree[1], 0.4); }
+    // the obelisk on Slottsbacken: a granite needle on a stepped plinth
+    if (q.obelisk) {
+      const [x, z] = q.obelisk, B = cityAt(x, z);
+      B.box(x - 3, 0, z - 3, x + 3, 0.5, z + 3, 0x9a968e);
+      B.box(x - 2.2, 0.5, z - 2.2, x + 2.2, 4, z + 2.2, 0x8a867f);
+      B.prism(x, z, 1.75, 4, 26, 4, 0x8f8a84, 1.0, false);
+      B.prism(x, z, 1.0, 26, 28, 4, 0x8f8a84, 0.01);
+      addBox(x - 3, z - 3, x + 3, z + 3, 28);
+    }
     if (q.well) { const B = cityAt(...q.well); B.prism(q.well[0], q.well[1], 2.2, 0, 1.0, 12, 0x8f8a80); B.prism(q.well[0], q.well[1], 0.5, 1, 3.4, 8, 0x8f8a80); addCircle(q.well[0], q.well[1], 2.4); }
     if (q.market) {
       // Hötorget's market stalls with striped awnings, in two rows across the square
@@ -1563,6 +1691,12 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
     if (e.kind === 'lane' || e.kind === 'ped') {
       const uv = corners.map((p) => [p[0] / 4, -p[2] / 4]);
       (e.kind === 'lane' ? cobbleB : slabB).quad(corners[0], corners[1], corners[2], corners[3], 0xffffff, uv, [0, 1, 0]);
+      if (e.stairs) for (let s = c0 + 0.4; s < c1 - 0.4; s += 0.9) {
+        const Bs = cityAt(A.x + ux * s, A.z + uz * s);
+        Bs.setFrame(A.x + ux * s - rx * e.hw, A.z + uz * s - rz * e.hw, rx, rz);
+        Bs.box(0, 0, -0.18, e.hw * 2, 0.07, 0.18, 0x8d877d);
+        Bs.setFrame();
+      }
     } else {
       const B2 = e.median ? medianB : e.hw >= 8 ? avenueB : roadB;
       B2.quad(corners[0], corners[1], corners[2], corners[3], 0xffffff, [[0, c0 / 12], [0, c1 / 12], [1, c1 / 12], [1, c0 / 12]], [0, 1, 0]);
@@ -1842,6 +1976,7 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
     for (const z0 of [-61, 57]) B.box(-16, 0, z0, 16, H + 3, z0 + 4, shade(col, 1.04), true, true);
     for (const x0 of [-65, 61]) B.box(x0, 0, -14, x0 + 4, H + 3, 14, shade(col, 1.04), true, true);
     mapLabels.push(['Kungliga slottet', 0, 0, 'landmark']);
+    take(axisPoly(-40, -36, 40, 36));
   }
   landmark([-176, -222, 1, 0], 64, 94, 0xb3aea3, 24, { rh: 4, roofCol: 0x5f9c86, name: 'Riksdagshuset' });
   landmark([-285, -218, 1, 0], 82, 90, 0xc4bcaa, 20, { rh: 3, roofCol: 0x5f9c86 });
@@ -1966,17 +2101,29 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
     mapPolys.push([axisPoly(x0, z0, x1, z1), wall]);
   }
   {
-    const B = landmark([-40, 92, 1, 0], 60, 46, 0xc58f5a, 18, { rh: 9, ri: 22, roofCol: 0x4b3b2c, name: 'Storkyrkan' });
-    steeple(B, -54, 108, -40, 122, 44, 22, 0xc58f5a, 0x4a4038, true);
+    const B = landmark([-50, 95, 1, 0], 57, 45, 0xc58f5a, 18, { rh: 9, ri: 22, roofCol: 0x4b3b2c, name: 'Storkyrkan' });
+    steeple(B, -64, 110, -50, 124, 44, 22, 0xc58f5a, 0x4a4038, true);
   }
-  landmark([-55, 150, 1, 0], 73, 32, 0xebe2c8, 16, { rh: 3, roofCol: 0x5f9c86, name: 'Börshuset' }).prism(-18.5, 166, 4, 19.3, 25, 12, 0x5f9c86, 1);
+  landmark([-84, 154, 1, 0], 46, 32, 0xebe2c8, 16, { rh: 3, roofCol: 0x5f9c86, name: 'Börshuset' }).prism(-61, 170, 4, 19.3, 25, 12, 0x5f9c86, 1);
   {
-    const B = landmark([-15, 300, 1, 0], 55, 52, 0x9c5a3c, 17, { rh: 11, ri: 26, roofCol: 0x3a3e42, name: 'Tyska kyrkan' });
-    steeple(B, -29, 319, -15, 333, 40, 56, 0x9c5a3c, 0x5f9c86, false);
+    const B = landmark([-30, 292, 1, 0], 50, 50, 0x9c5a3c, 17, { rh: 11, ri: 25, roofCol: 0x3a3e42, name: 'Tyska kyrkan' });
+    steeple(B, -30, 320, -16, 334, 40, 56, 0x9c5a3c, 0x5f9c86, false);
   }
   {
-    const B = landmark([-262, -8, 1, 0], 47, 50, 0x8f4a36, 15, { rh: 3, ri: 4, roofCol: 0x2b2b2d, name: 'Riddarhuset' });
-    B.hip(-259, -5, -218, 39, 18.3, 5, 8, 8, 0x2b2b2d);
+    const B = landmark([-264, -6, 1, 0], 47, 48, 0x8f4a36, 15, { rh: 3, ri: 4, roofCol: 0x2b2b2d, name: 'Riddarhuset' });
+    B.hip(-261, -3, -220, 39, 18.3, 5, 8, 8, 0x2b2b2d);
+  }
+  // Tessinska palatset and Finska kyrkan across Slottsbacken from the palace, and Järnpojken, the smallest statue
+  // in town, in the yard behind the church
+  landmark([20, 91, 1, 0], 25, 36, 0xe7dcc4, 17, { rh: 3, ri: 4, roofCol: 0x3a3e42, name: 'Tessinska palatset' });
+  landmark([56, 91, 1, 0], 44, 24, 0xf0e2b6, 12, { rh: 6, ri: 8, roofCol: 0x3a3e42, name: 'Finska kyrkan' }).box(76, 12.4, 98, 80, 16, 102, 0xf0e2b6);
+  {
+    const B = cityAt(66, 122);
+    B.box(65.6, 0, 121.6, 66.4, 0.5, 122.4, 0x8a867f);
+    B.box(65.85, 0.5, 121.9, 66.15, 0.65, 122.1, 0x3b4a44);
+    addCircle(66, 122, 0.45, 0.7);
+    take(axisPoly(53, 116, 72, 130));
+    mapLabels.push(['Järnpojken', 66, 122, 'landmark']);
   }
   {
     const B = landmark([-455, 80, 1, 0], 40, 90, 0x9a4a32, 18, { rh: 10, ri: 20, roofCol: 0x3a3e42, name: 'Riddarholmskyrkan' });
@@ -2049,6 +2196,22 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
           if (fits(rectPoly(fr, 0, 0, lot, depth))) { addBuilding(fr, lot, depth, S); built = true; break; }
         }
         s += built ? lot : 3;
+      }
+    }
+  }
+  // the old town is built solid: whatever is left inside the blocks behind the street fronts gets houses too, turned
+  // to line up with the nearest lane, so from above Gamla stan is one sea of roofs cut by narrow lanes
+  for (const L of LANDS) {
+    if (L.name !== 'Gamla stan') continue;
+    const [x0, z0, x1, z1] = polyBox(L.poly);
+    for (let z = z0 + 3; z < z1; z += 4) for (let x = x0 + 3; x < x1; x += 4) {
+      if (!solidLand(x, z)) continue;
+      const ne = nearestEdge(x, z);
+      if (!ne.e) continue;
+      const A = nodes[ne.e.a], B = nodes[ne.e.b], c = (B.x - A.x) / ne.e.len, s = (B.z - A.z) / ne.e.len;
+      for (const [w, d] of [[11, 10], [8, 8], [6, 6], [4.5, 4.5]]) {
+        const fr = [x - (w / 2) * c + (d / 2) * s, z - (w / 2) * s - (d / 2) * c, c, s];
+        if (fits(rectPoly(fr, 0, 0, w, d))) { addBuilding(fr, w, d, STYLE.gamla, { simple: true }); break; }
       }
     }
   }
@@ -2337,6 +2500,8 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
   function headwear(m, id, top, s) {
     if (id.hat === 'cap') { m.box(0.48 * s, 0.12 * s, 0.48 * s, id.hatColor, 0, top + 0.04 * s, 0); m.box(0.44 * s, 0.05 * s, 0.22 * s, id.hatColor, 0, top, 0.32 * s); }
     else if (id.hat === 'beanie') m.box(0.47 * s, 0.2 * s, 0.47 * s, id.hatColor, 0, top + 0.06 * s, 0);
+    // Högvakten's spiked helmet (pickelhuva), black with a brass spike
+    else if (id.hat === 'helmet') { m.box(0.5 * s, 0.22 * s, 0.5 * s, 0x15171a, 0, top + 0.06 * s, 0); m.box(0.44 * s, 0.04 * s, 0.2 * s, 0x15171a, 0, top - 0.04 * s, 0.32 * s); m.box(0.07 * s, 0.22 * s, 0.07 * s, 0xd4a53a, 0, top + 0.28 * s, 0); m.box(0.16 * s, 0.14 * s, 0.03 * s, 0xd4a53a, 0, top + 0.08 * s, 0.26 * s); }
     else { m.box(0.47 * s, 0.1 * s, 0.47 * s, id.hair, 0, top + 0.03 * s, 0); m.box(0.47 * s, 0.3 * s, 0.1 * s, id.hair, 0, top - 0.12 * s, -0.2 * s); }
   }
   function makeIdentity(o = {}) {
@@ -2352,6 +2517,7 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
     b.box(0.07, 0.09, 0.02, 0x15181c, 0.1, 1.99, 0.225);
     b.box(0.07, 0.09, 0.02, 0x15181c, -0.1, 1.99, 0.225);
     headwear(b, id, 2.16, 1);
+    if (o.belts) { b.box(0.08, 0.76, 0.03, 0xf2f2ee, 0.12, 1.33, 0.19); b.box(0.08, 0.76, 0.03, 0xf2f2ee, -0.12, 1.33, 0.19); b.box(0.64, 0.08, 0.38, 0xf2f2ee, 0, 1.02, 0); b.box(0.1, 0.1, 0.03, 0xd4a53a, 0, 1.02, 0.2); }
     id.bodyGeo = b.build();
     const l = new Merger(); l.box(0.26, 0.9, 0.3, id.pants, 0, -0.45, 0); l.box(0.28, 0.14, 0.38, 0x1c1c1c, 0, -0.9, 0.05); id.legGeo = l.build();
     const a = new Merger(); a.box(0.2, 0.62, 0.22, id.shirt, 0, -0.3, 0); a.box(0.18, 0.16, 0.2, id.skin, 0, -0.68, 0); id.armGeo = a.build();
@@ -3611,35 +3777,53 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
   }
 
   /* ================= traffic AI ================= */
-  // shortest road distance between every pair of junctions, for police heading somewhere on purpose
-  const nodeDist = nodes.map((_, s) => {
+  // shortest distance from every junction to one goal junction, along the streets (emerg: also lanes, squares and
+  // pedestrian streets, the way police on blue lights drive). Worked out when first asked for, then remembered.
+  const distCache = [new Map(), new Map()];
+  function distTo(goal, emerg) {
+    const cache = distCache[emerg ? 1 : 0];
+    if (cache.has(goal)) return cache.get(goal);
     const d = nodes.map(() => Infinity), done = nodes.map(() => false);
-    d[s] = 0;
+    d[goal] = 0;
     for (;;) {
       let u = -1;
       for (let i = 0; i < nodes.length; i++) if (!done[i] && d[i] < Infinity && (u < 0 || d[i] < d[u])) u = i;
       if (u < 0) break;
       done[u] = true;
-      for (const v of nodes[u].nb) d[v] = Math.min(d[v], d[u] + Math.hypot(nodes[u].x - nodes[v].x, nodes[u].z - nodes[v].z));
+      for (const v of emerg ? nodes[u].nbE : nodes[u].nb) d[v] = Math.min(d[v], d[u] + Math.hypot(nodes[u].x - nodes[v].x, nodes[u].z - nodes[v].z));
     }
+    if (cache.size > 160) cache.delete(cache.keys().next().value);
+    cache.set(goal, d);
     return d;
+  }
+  // a junction only lanes lead to (where a police car can end up after a chase): the nearest one cars can leave from
+  const driveExit = nodes.map((n) => {
+    if (n.nb.length || !n.nbE.length) return null;
+    let best = -1, bd = Infinity;
+    nodes.forEach((m, i) => { const d = Math.hypot(m.x - n.x, m.z - n.z); if (m.nb.length && d < bd) { bd = d; best = i; } });
+    return best < 0 ? null : { node: best, x: nodes[best].x, z: nodes[best].z };
   });
   function nearestNode(x, z) {
     let best = 0, bd = Infinity;
-    nodes.forEach((n, i) => { const d = Math.hypot(n.x - x, n.z - z); if (d < bd) { bd = d; best = i; } });
+    nodes.forEach((n, i) => { const d = Math.hypot(n.x - x, n.z - z); if (d < bd && n.nbE.length) { bd = d; best = i; } });
     return best;
   }
-  // goal: { node, x, z } to head for, or nothing to wander at random
-  function chooseNext(from, to, goal) {
-    const nb = nodes[to].nb.filter((n) => n !== from);
+  // goal: { node, x, z } to head for, or nothing to wander at random. emerg: blue lights on, so lanes and squares
+  // are fine and so is a U-turn if the way back is clearly shorter
+  function chooseNext(from, to, goal, emerg) {
+    if (!emerg && !nodes[to].nb.length && driveExit[to]) { emerg = true; goal = goal || driveExit[to]; }
+    const all = emerg ? nodes[to].nbE : nodes[to].nb, nb = all.filter((n) => n !== from);
     if (!nb.length) return from;
     if (!goal) return nb[Math.floor(Math.random() * nb.length)];
-    const cost = (n) => (to === goal.node ? Math.hypot(nodes[n].x - goal.x, nodes[n].z - goal.z) : nodeDist[n][goal.node] + Math.hypot(nodes[n].x - nodes[to].x, nodes[n].z - nodes[to].z));
-    // no U-turns: the way back goes round the block, which the traffic AI handles far better
+    const D = distTo(goal.node, emerg);
+    const cost = (n) => (to === goal.node ? Math.hypot(nodes[n].x - goal.x, nodes[n].z - goal.z) : D[n] + Math.hypot(nodes[n].x - nodes[to].x, nodes[n].z - nodes[to].z));
     let best = nb[0];
     for (const n of nb) if (cost(n) < cost(best)) best = n;
+    // traffic never turns back: the way back goes round the block, which the AI handles far better
+    if (emerg && all.includes(from) && cost(from) + 60 < cost(best)) return from;
     return best;
   }
+  const onBlueLights = (c) => !!(c.police && (c.police.state === 'chase' || c.police.state === 'call'));
   function startTurn(b) {
     const e1 = edgeFrame(b.from, b.to), e2 = edgeFrame(b.to, b.next), B = e1.B, off = B.r + 4;
     b.P0 = [B.x - e1.ux * off + e1.rx * e1.lane, B.z - e1.uz * off + e1.rz * e1.lane];
@@ -3684,16 +3868,21 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
         if (d < bd) { bd = d; bt = t; }
       }
       b.t = bt;
-      if (b.t >= 0.96 || b.turnAge > 9) { b.from = b.to; b.to = b.next; b.next = chooseNext(b.from, b.to, b.goal); b.phase = 'edge'; }
+      if (b.t >= 0.96 || b.turnAge > 9) { b.from = b.to; b.to = b.next; b.next = chooseNext(b.from, b.to, b.goal, onBlueLights(c)); b.phase = 'edge'; }
     }
     if (b.phase === 'edge') {
       const e = edgeFrame(b.from, b.to);
       const s = (c.x - e.A.x) * e.ux + (c.z - e.A.z) * e.uz, remain = e.len - (e.B.r + 4) - s;
       if (remain < 20) b.passT = Math.min(b.passT, 0);
-      const chasing = c.police && c.police.state !== 'patrol';
-      // traffic keeps to the speed limit; police on a call don't
+      const chasing = onBlueLights(c);
+      // traffic keeps to the speed limit; police on blue lights don't, but even they slow down in the narrow lanes
       if (!chasing) vT = Math.min(vT, (e.e.limit / 3.6) * 1.08);
-      const lane = yieldTo ? e.e.hw - 0.8 : b.passT > 0 ? e.pass : chasing ? (e.e.hw >= 8 ? e.pass : 1.0) : e.lane, st = s + look;
+      else if (!e.e.drive) vT = Math.min(vT, e.e.hw < 2.2 ? 8 : 12);
+      // police on blue lights drive on the crown of the road, straddling the solid line, and swing right over into
+      // the oncoming lane to get past; in a lane they keep to the middle
+      const narrow = !e.e.drive || e.e.hw < 4.5;
+      const lane = yieldTo ? e.e.hw - 0.8 : chasing ? (narrow ? 0 : b.passT > 0 ? -(e.e.hw >= 8 ? e.e.hw * 0.45 : e.lane) : e.e.hw >= 8 ? e.pass * 0.5 : 0.4)
+        : b.passT > 0 ? e.pass : e.lane, st = s + look;
       tx = e.A.x + e.ux * st + e.rx * lane; tz = e.A.z + e.uz * st + e.rz * lane;
       const B = nodes[b.to], n = nodes[b.next];
       const dot = ((n.x - B.x) * e.ux + (n.z - B.z) * e.uz) / (Math.hypot(n.x - B.x, n.z - B.z) || 1);
@@ -3739,7 +3928,7 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
     if (blocker === player && slow && b.waitT > 1.2 && b.honkT <= 0) { honkAt(c.x, c.z); b.honkT = 3.5; }
     // police closing in on you stay behind you instead of overtaking or pushing through
     const holdBehind = c.police && c.police.state === 'chase' && (blocker === driving || blocker === player);
-    const urgentPass = urgent && !holdBehind && blocker && b.phase === 'edge' && gap < 26 && b.passT <= 0 && (!blocker.M || Math.hypot(blocker.vx, blocker.vz) < vf - 2 || slow);
+    const urgentPass = urgent && !holdBehind && blocker && b.phase === 'edge' && gap < 40 && b.passT <= 0 && (!blocker.M || Math.hypot(blocker.vx, blocker.vz) < vf - 2 || slow);
     if (urgentPass) { b.passT = 5; if (gap < 4.5 && slow) b.revT = 0.8; }
     else if (blocker && slow && b.waitT > 2.5 && b.passT <= 0 && b.phase === 'edge' && !holdBehind) {
       if (!blocker.M || Math.hypot(blocker.vx, blocker.vz) < 0.5) {
@@ -3792,6 +3981,7 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
 
   /* ---------- pedestrians ---------- */
   function npcThink(p, dt) {
+    if (p.ai.state === 'officer') return officerThink(p);
     const ai = p.ai, out = { mx: 0, mz: 0, speed: 0, jump: false };
     if (ai.dodgeT > 0) { ai.dodgeT -= dt; out.mx = ai.dx; out.mz = ai.dz; out.speed = 6.5; return out; }
     if (p.grounded && p.knockT <= 0) {
@@ -3828,7 +4018,11 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
       const dx = p.x - player.x, dz = p.z - player.z, d = Math.hypot(dx, dz) || 1;
       out.mx = dx / d; out.mz = dz / d; out.speed = 6.2;
       ai.t -= dt;
-      if (ai.t <= 0) { ai.state = 'wander'; ai.wx = out.mx; ai.wz = out.mz; ai.t = 25; }
+      if (ai.t <= 0) { if (ai.post) ai.state = 'guard'; else { ai.state = 'wander'; ai.wx = out.mx; ai.wz = out.mz; ai.t = 25; } }
+    } else if (ai.state === 'guard') {
+      const g = guardTarget(ai.post, clock), dx = g.x - p.x, dz = g.z - p.z, d = Math.hypot(dx, dz);
+      if (d > 0.15) { out.mx = dx / d; out.mz = dz / d; out.speed = Math.min(1.25, d * 2.5); }
+      else p.rot = lerpAngle(p.rot, g.face, 0.2);
     } else {
       if (p.blocked) { const a = Math.atan2(ai.wx, ai.wz) + (Math.random() < 0.5 ? 1 : -1) * (Math.PI / 2); ai.wx = Math.sin(a); ai.wz = Math.cos(a); }
       out.mx = ai.wx; out.mz = ai.wz; out.speed = 1.5;
@@ -3864,6 +4058,9 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
     return d === 'Gamla stan' ? 30 : d === 'Strömmen' || d === 'Söderström' ? 50 : 40;
   }
   const fmtKr = (n) => n.toLocaleString('sv-SE') + ' kr';
+  // a Swedish registration number, made up the first time anyone asks for it (ABC 12D)
+  const PLATE_L = 'ABCDEFGHJKLMNOPRSTUWXYZ';
+  const plateOf = (c) => c.reg || (c.reg = [0, 0, 0].map(() => PLATE_L[Math.floor(Math.random() * PLATE_L.length)]).join('') + ' ' + Math.floor(Math.random() * 100).toString().padStart(2, '0') + (Math.random() < 0.5 ? Math.floor(Math.random() * 10) : PLATE_L[Math.floor(Math.random() * PLATE_L.length)]));
   function makePolice(c) {
     c.police = { state: 'patrol', direct: false, goalNode: -1, callIn: 15 + Math.random() * 40 };
     c.siren = false; c.yelp = false;
@@ -3927,19 +4124,20 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
     if (P.direct) { P.direct = false; resyncBot(c); }
     if (!on) b.next = chooseNext(b.from, b.to, null);
   }
+  // the fine, line by line as it goes on the ticket (rough Swedish ordningsbot amounts)
   function fineFor(w) {
-    let f = 0;
-    const why = [];
+    const rows = [];
     if (w.kinds.has('fart')) {
-      const o = Math.round(w.over);
-      f += o <= 10 ? 1500 : o <= 15 ? 2000 : o <= 20 ? 2400 : o <= 25 ? 2800 : o <= 30 ? 3200 : 4000;
-      why.push(o + ' km/h för fort');
+      const o = Math.max(1, Math.round(w.over));
+      rows.push({ why: o + ' km/h för fort', text: 'Hastighetsöverträdelse, ' + o + ' km/h över ' + (w.limit || 40) + ' km/h', kr: o <= 10 ? 1500 : o <= 15 ? 2000 : o <= 20 ? 2400 : o <= 25 ? 2800 : o <= 30 ? 3200 : 4000 });
     }
-    if (w.kinds.has('krock')) { f += 3000; why.push('krock med polisbil'); }
-    if (w.kinds.has('stöld')) { f += 5000; why.push('bilstöld'); }
-    if (w.kinds.has('påkörning')) { f += 4000; why.push('påkörning'); }
-    if (w.t > 20) { f += 1500; why.push('du stannade inte'); }
-    return { f, why };
+    if (w.kinds.has('krock')) rows.push({ why: 'krock med polisbil', text: 'Vårdslöshet i trafik, krock med polisfordon', kr: 3000 });
+    if (w.kinds.has('stöld')) rows.push({ why: 'bilstöld', text: 'Olovligt brukande av fordon', kr: 5000 });
+    if (w.kinds.has('påkörning')) rows.push({ why: 'påkörning', text: 'Påkörning av fotgängare', kr: 4000 });
+    if (w.t > 20) rows.push({ why: 'du stannade inte', text: 'Underlåtenhet att stanna på polisens tecken', kr: 1500 });
+    if (w.kinds.has('smitning')) rows.push({ why: 'du smet från kontrollen', text: 'Avvikande från poliskontroll', kr: 3000 });
+    if (!rows.length) rows.push({ why: 'ordningsstörning', text: 'Ordningsstörning', kr: 800 });
+    return { f: rows.reduce((a, r) => a + r.kr, 0), why: rows.map((r) => r.why), rows };
   }
   function endChase(caught) {
     if (caught) {
@@ -3953,11 +4151,11 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
   }
   // put a bot back on the street it is closest to, facing the way it points
   function resyncBot(c) {
-    const b = c.bot, ne = nearestEdge(c.x, c.z);
+    const b = c.bot, ne = nearestEdge(c.x, c.z, c.police ? (e) => e.emerg : (e) => e.drive);
     if (!b || !ne.e) return;
     const A = nodes[ne.e.a], B = nodes[ne.e.b], fwd = (B.x - A.x) * Math.sin(c.h) + (B.z - A.z) * Math.cos(c.h) >= 0;
     b.from = fwd ? ne.e.a : ne.e.b; b.to = fwd ? ne.e.b : ne.e.a;
-    b.next = chooseNext(b.from, b.to, b.goal); b.phase = 'edge'; b.t = 0;
+    b.next = chooseNext(b.from, b.to, b.goal, onBlueLights(c)); b.phase = 'edge'; b.t = 0;
   }
   // now and then a patrol gets a call somewhere in town and goes there on blue lights (utryckning), then back to patrol
   function setCall(c, on) {
@@ -3966,15 +4164,16 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
     c.siren = on; c.yelp = false;
     b.cruise = on ? CHASE_SPEED * 0.85 : 12; b.turnV = on ? 8.5 : 5.5; b.passT = 0;
     if (on) {
-      const far = nodes.map((n, i) => i).filter((i) => { const d = Math.hypot(nodes[i].x - c.x, nodes[i].z - c.z); return d > 250 && d < 700 && nodes[i].nb.length; });
+      const far = nodes.map((n, i) => i).filter((i) => { const d = Math.hypot(nodes[i].x - c.x, nodes[i].z - c.z); return d > 250 && d < 700 && nodes[i].nbE.length; });
       const n = far.length ? rpick(far) : nearestNode(c.x, c.z);
       b.goal = { node: n, x: nodes[n].x, z: nodes[n].z };
       P.callT = 45; P.goalNode = -1;
     } else { b.goal = null; P.callIn = 40 + Math.random() * 60; }
-    if (b.phase === 'edge') b.next = chooseNext(b.from, b.to, b.goal);
+    if (b.phase === 'edge') b.next = chooseNext(b.from, b.to, b.goal, on);
   }
   function policeThink(c, dt) {
     const P = c.police;
+    if (P.state === 'stop') return stopDrive(c, dt);
     if (P.state === 'patrol' && !wanted && (P.callIn -= dt) <= 0) setCall(c, true);
     if (P.state === 'call') {
       const g = c.bot.goal;
@@ -3984,14 +4183,15 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
     const T = playerTarget(), d = Math.hypot(T.x - c.x, T.z - c.z);
     c.yelp = d < 70;
     if (P.banT > 0) P.banT -= dt;
-    if (d < 45 && P.banT <= 0 && clearView(c.x, c.z, T.x, T.z) && drivableLine(c.x, c.z, T.x, T.z, c, driving)) { P.direct = true; return policeDirect(c, dt, T, d); }
+    // in sight and nothing in the way: straight for you, across pavements, squares and the wrong side of the road
+    if (d < 80 && P.banT <= 0 && clearView(c.x, c.z, T.x, T.z) && drivableLine(c.x, c.z, T.x, T.z, c, driving)) { P.direct = true; return policeDirect(c, dt, T, d); }
     if (P.direct) { P.direct = false; resyncBot(c); }
     // along the streets: full speed while far away, easing off to pull up a few metres from you
     c.bot.cruise = d < 45 ? clamp((d - 10) * 0.9, 0, CHASE_SPEED) : CHASE_SPEED;
     // out of sight they head for where you were last seen; while any of them can see you, the radio keeps them updated
     const G = wanted && !wanted.inSight ? wanted.seen : T, gn = nearestNode(G.x, G.z);
     c.bot.goal = { node: gn, x: G.x, z: G.z };
-    if (gn !== P.goalNode && c.bot.phase === 'edge') { c.bot.next = chooseNext(c.bot.from, c.bot.to, c.bot.goal); P.goalNode = gn; }
+    if (gn !== P.goalNode && c.bot.phase === 'edge') { c.bot.next = chooseNext(c.bot.from, c.bot.to, c.bot.goal, true); P.goalNode = gn; }
     return botThink(c, dt);
   }
   // in sight: drive straight for the target, aiming a little ahead of it, and stop beside it once it stops
@@ -4018,6 +4218,7 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
   function policeUpdate(dt) {
     if (policeCool > 0) policeCool -= dt;
     sirenCars = cars.filter((c) => c.siren);
+    if (stop) { stopUpdate(dt); return; }
     const T = playerTarget();
     // speeding where a patrol can see it
     if (driving && !wanted && policeCool <= 0 && !driving.siren) {
@@ -4026,16 +4227,19 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
     }
     if (!wanted) return;
     wanted.t += dt;
-    let nearest = Infinity, inSight = false, chasers = 0;
+    let nearest = Infinity, inSight = false, chasers = 0, nearCop = null;
     for (const c of cars) {
       if (!c.police || c.dead) continue;
       const d = Math.hypot(T.x - c.x, T.z - c.z);
       if (c.police.state !== 'chase') { if (d < 400) setChase(c, true); else continue; }
       chasers++;
-      nearest = Math.min(nearest, d);
+      if (d < nearest) { nearest = d; nearCop = c; }
       if (!inSight && d < 130 && clearView(c.x, c.z, T.x, T.z)) inSight = true;
     }
-    if (driving && inSight) wanted.over = Math.max(wanted.over, Math.hypot(driving.vx, driving.vz) * 3.6 - limitAt(driving.x, driving.z));
+    if (driving && inSight) {
+      const lim = limitAt(driving.x, driving.z), over = Math.hypot(driving.vx, driving.vz) * 3.6 - lim;
+      if (over > wanted.over) { wanted.over = over; wanted.limit = lim; }
+    }
     wanted.inSight = inSight;
     if (inSight) { wanted.seen = { x: T.x, z: T.z, vx: 0, vz: 0 }; wanted.lostT = 0; wanted.searchT = 0; }
     else {
@@ -4044,18 +4248,19 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
       for (const c of cars) if (c.police && c.police.state === 'chase' && Math.hypot(c.x - wanted.seen.x, c.z - wanted.seen.z) < 40) { wanted.searchT += dt; break; }
       if (wanted.searchT > 8 || wanted.lostT > 45 || (!chasers && wanted.lostT > 6)) { endChase(false); return; }
     }
-    // caught: in a car you must stand still next to them; on foot the officers get out and reach you if they can see you
+    // pull over (stop, ideally by the kerb) with a patrol close behind and in sight, and they pull in by you; on foot
+    // they stop when they reach you. Either way a constable gets out and comes over with the fine
     const sp = driving ? Math.hypot(driving.vx, driving.vz) : 0;
-    if (driving ? nearest < 15 && sp < 1.5 : nearest < 25 && inSight) {
+    if (nearCop && (driving ? nearest < 70 && inSight && sp < 2 : nearest < 28 && inSight)) {
       wanted.stopT += dt;
-      if (wanted.stopT > (driving ? 2.2 : 2.5)) endChase(true);
+      if (wanted.stopT > (driving ? 0.9 : 1.5)) beginStop(nearCop);
     } else wanted.stopT = Math.max(0, wanted.stopT - dt);
   }
   // blue lights flash left and right in double bursts
   function policeLights(c, dt) {
     const g = c.mat.userData.glow;
     if (c.flashSeed === undefined) c.flashSeed = Math.random();
-    if (!c.siren || c.dead) {
+    if (!(c.siren || c.beacon) || c.dead) {
       g.z = g.w = 0.05;
       if (c.flashers) for (const s of c.flashers) s.material.opacity = 0;
       return;
@@ -4072,6 +4277,144 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
     if (!driving || !driving.M.police) return;
     driving.siren = !driving.siren; driving.yelp = false;
     toast(driving.siren ? 'Blåljus och siren på. Trafiken väjer för dig.' : 'Blåljus av.');
+  }
+
+  /* ---------- the traffic stop ---------- */
+  // When you pull over, the nearest patrol turns its siren off (blue lights stay on) and parks right behind you, or
+  // in front of you facing you if it is already ahead, lined up with your car and just as far out from the kerb.
+  // A constable gets out, walks up to your window and hands over an ordningsbot; E signs it. Drive off before that
+  // and it becomes a chase again, and a dearer one.
+  let stop = null;
+  const CONSTABLES = ['Andersson', 'Lindqvist', 'Nyström', 'Berg', 'Holm', 'Karlsson', 'Ek', 'Sandberg', 'Öberg', 'Lundin'];
+  const stopTarget = () => (driving ? { x: driving.x, z: driving.z, h: driving.h, L: driving.M.L } : { x: player.x, z: player.z, h: player.rot, L: 1 });
+  function stopSpot(pc, T) {
+    const fx = Math.sin(T.h), fz = Math.cos(T.h), ahead = (pc.x - T.x) * fx + (pc.z - T.z) * fz > 4;
+    const gap = T.L / 2 + 2.2 + pc.M.L / 2, sg = ahead ? 1 : -1, h = ahead ? T.h + Math.PI : T.h;
+    for (const k of [1, 1.35, 1.8]) {
+      const x = T.x + fx * gap * k * sg, z = T.z + fz * gap * k * sg;
+      if (spotFree(pc.M, x, z, h, pc)) return { x, z, h, fx: Math.sin(h), fz: Math.cos(h), ahead };
+    }
+    return null;
+  }
+  // where the constable stands: by the driver's window, or a step from you if you are on foot
+  function windowSpot() {
+    if (driving) {
+      const co = Math.cos(driving.h), si = Math.sin(driving.h), lx = driving.M.W / 2 + 0.75, lz = driving.driver.position.z + 0.35;
+      return { x: driving.x + lx * co + lz * si, z: driving.z - lx * si + lz * co, fx: driving.x, fz: driving.z };
+    }
+    const o = stop.officer, dx = o.x - player.x, dz = o.z - player.z, d = Math.hypot(dx, dz) || 1;
+    return { x: player.x + (dx / d) * 1.1, z: player.z + (dz / d) * 1.1, fx: player.x, fz: player.z };
+  }
+  function beginStop(c) {
+    const T = stopTarget();
+    stop = { car: c, phase: 'approach', t: 0, spot: driving ? stopSpot(c, T) : null, at: { x: T.x, z: T.z }, officer: null, crew: c.occupant, name: rpick(CONSTABLES), ticket: null };
+    c.police.state = 'stop'; c.siren = false; c.yelp = false; c.beacon = true; c.police.direct = false;
+    for (const o of cars) if (o !== c && o.police && o.police.state === 'chase') setChase(o, false);
+    toast(driving ? (stop.spot && stop.spot.ahead ? 'Polisen stannar framför dig. Sitt kvar i bilen.' : 'Polisen kör in bakom dig. Sitt kvar i bilen.') : 'Polisen har hunnit ikapp dig. Stå kvar.');
+  }
+  // the patrol's driving while it pulls in: line up a few metres short of the spot, then roll into it and stop
+  function stopDrive(c, dt) {
+    const fx = Math.sin(c.h), fz = Math.cos(c.h), lxv = Math.cos(c.h), lzv = -Math.sin(c.h), vf = c.vx * fx + c.vz * fz;
+    const halt = { fwd: vf > 0.3 ? -1 : vf < -0.3 ? 1 : 0, right: 0, brake: Math.abs(vf) < 0.3 };
+    if (!stop || stop.car !== c || stop.phase !== 'approach' || !stop.spot) return halt;
+    const sp = stop.spot, along = (c.x - sp.x) * sp.fx + (c.z - sp.z) * sp.fz, d = Math.hypot(sp.x - c.x, sp.z - c.z);
+    const tx = along < -8 ? sp.x - sp.fx * 6 : sp.x + sp.fx * 2, tz = along < -8 ? sp.z - sp.fz * 6 : sp.z + sp.fz * 2;
+    if (d < 1.4 || along > 0.5) return halt;
+    const dx = tx - c.x, dz = tz - c.z, lz = dx * fx + dz * fz, lx = dx * lxv + dz * lzv;
+    const maxSteer = 0.6 / (1 + Math.abs(vf) * 0.03);
+    const delta = lz < 0.3 ? Math.sign(lx || 1) * maxSteer : Math.atan((2 * c.M.wb * lx) / (lx * lx + lz * lz));
+    const vT = clamp(d * 0.7, 1.5, 11);
+    return { fwd: clamp((vT - vf) * 0.5, -1, 1), right: -clamp(delta / maxSteer, -1, 1), brake: false };
+  }
+  function officerThink(p) {
+    const out = { mx: 0, mz: 0, speed: 0, jump: false };
+    const S = stop;
+    if (!S || S.officer !== p) return out;
+    let tx, tz, speed = 1.6;
+    if (S.phase === 'walk' || S.phase === 'talk') { const w = windowSpot(); tx = w.x; tz = w.z; }
+    else { tx = S.door.x; tz = S.door.z; speed = S.phase === 'flee' ? 5.8 : 1.7; }
+    const dx = tx - p.x, dz = tz - p.z, d = Math.hypot(dx, dz);
+    if (d > 0.3) { out.mx = dx / d; out.mz = dz / d; out.speed = Math.min(speed, d * 2); }
+    p.arrived = d < 0.6;
+    return out;
+  }
+  function showTicket() {
+    const S = stop, { f, rows } = fineFor(wanted), now = new Date();
+    S.ticket = { f, rows };
+    const place = (el.locStreet.textContent ? el.locStreet.textContent + ', ' : '') + el.locDistrict.textContent;
+    $('tkPlace').textContent = place;
+    $('tkTime').textContent = now.toLocaleDateString('sv-SE') + ' ' + now.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+    $('tkCar').textContent = driving ? driving.M.name + ', ' + plateOf(driving) : 'Gående';
+    const ul = $('tkRows');
+    ul.textContent = '';
+    for (const r of rows) {
+      const li = document.createElement('li'), a = document.createElement('span'), b = document.createElement('b');
+      a.textContent = r.text; b.textContent = fmtKr(r.kr); li.append(a, b); ul.append(li);
+    }
+    $('tkSum').textContent = fmtKr(f);
+    $('tkOfficer').textContent = 'Konstapel ' + S.name;
+    $('ticket').hidden = false;
+    toast('Konstapel ' + S.name + ': ' + (wanted.kinds.has('fart') ? 'Hej, polisen här. Vet du hur fort du körde?' : 'Hej, polisen här. Det där gick inte bra.'));
+  }
+  // E: sign the ticket. The fine is yours, and the constable walks back to the car
+  function signTicket() {
+    if (!stop || stop.phase !== 'talk' || !stop.ticket) return;
+    fines += stop.ticket.f;
+    $('ticket').hidden = true;
+    toast('Du skrev under. Böter ' + fmtKr(stop.ticket.f) + '.' + (wanted.over > 30 ? ' Körkortet dras in.' : ' Kör försiktigt nu!'));
+    stop.phase = 'back'; stop.t = 0;
+  }
+  function stopUpdate(dt) {
+    const S = stop, c = S.car, T = stopTarget();
+    S.t += dt;
+    if (c.dead || cars.indexOf(c) < 0) { endStop(false); return; }
+    // driving off (or running off) before the paperwork is done turns it back into a chase
+    const away = Math.hypot(T.x - S.at.x, T.z - S.at.z), moving = driving ? Math.hypot(driving.vx, driving.vz) > 3 : true;
+    if (S.phase !== 'back' && S.phase !== 'flee' && away > (driving ? 8 : 14) && moving) {
+      $('ticket').hidden = true;
+      wanted.kinds.add('smitning');
+      toast('Du smet från poliskontrollen! Nu blir det dyrare.');
+      if (S.officer) { S.phase = 'flee'; S.t = 0; } else { endStop(true); return; }
+    }
+    if (S.phase === 'approach') {
+      const vs = Math.hypot(c.vx, c.vz);
+      if (S.spot ? (Math.hypot(S.spot.x - c.x, S.spot.z - c.z) < 1.6 || (S.spot.x - c.x) * S.spot.fx + (S.spot.z - c.z) * S.spot.fz < -0.5) && vs < 0.4 : vs < 0.4) S.phase = 'parked', S.t = 0;
+      else if (S.t > 14 && vs < 0.6) S.phase = 'parked', S.t = 0;
+    } else if (S.phase === 'parked' && S.t > 0.9) {
+      const ex = exitSpot(c) || { x: c.x + Math.cos(c.h) * (c.M.W / 2 + 0.8), z: c.z - Math.sin(c.h) * (c.M.W / 2 + 0.8) };
+      S.door = ex;
+      setOccupant(c, null);
+      S.officer = makePerson(S.crew || makeIdentity(OFFICER), ex.x, ex.z, { state: 'officer', dodgeT: 0 });
+      S.officer.rot = c.h;
+      S.phase = 'walk'; S.t = 0;
+    } else if (S.phase === 'walk') {
+      const o = S.officer;
+      if (S.t > 16) { const w = windowSpot(); if (personFits(w.x, w.z)) { o.x = w.x; o.z = w.z; } o.arrived = true; }
+      if (o.arrived) { S.phase = 'talk'; S.t = 0; showTicket(); }
+    } else if (S.phase === 'talk') {
+      const w = windowSpot();
+      S.officer.rot = Math.atan2(w.fx - S.officer.x, w.fz - S.officer.z);
+      if (S.t > 12) signTicket();
+    } else if (S.phase === 'back' || S.phase === 'flee') {
+      const near = Math.hypot(S.door.x - S.officer.x, S.door.z - S.officer.z) < 2.5;
+      if (S.officer.arrived || (near && S.t > 3) || S.t > 10) endStop(S.phase === 'flee');
+    }
+  }
+  // the constable is back in the car: drive on (or, if you ran, give chase again)
+  function endStop(chase) {
+    const S = stop, c = S.car;
+    stop = null;
+    $('ticket').hidden = true;
+    if (S.officer) removePerson(S.officer);
+    if (cars.indexOf(c) >= 0) {
+      setOccupant(c, S.crew);
+      c.beacon = false;
+      c.police.state = 'patrol';
+      resyncBot(c);
+      setChase(c, !!chase);
+    }
+    if (chase) { if (wanted) { wanted.lostT = 0; wanted.stopT = 0; wanted.seen = playerTarget(); } }
+    else { wanted = null; policeCool = 30; }
   }
 
   /* ---------- initial traffic ---------- */
@@ -4109,6 +4452,121 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
     for (let i = 0; i < BOT_TARGET; i++) spawnBot(25, null, 260);
     for (let i = 0; i < POLICE_TARGET; i++) { const c = spawnBot(80, MODEL.polis, 600); if (c) makePolice(c); }
     for (let i = 0; i < NPC_COUNT; i++) spawnWalker(4, 130, SPAWN.x, SPAWN.z);
+  }
+
+  /* ================= Högvakten and the Dalahäst hunt ================= */
+  // The royal guard marches up and down Yttre borggården in two files, turning at either end of the courtyard.
+  const GUARD_ID = makeIdentity({ skin: 0xf0c08a, shirt: 0x1d2c5a, pants: 0x1d2c5a, hat: 'helmet', belts: true });
+  function guardTarget(post, t) {
+    const T = 64, ph = (t % T) / T, hold = 0.09;
+    // a triangle wave with a halt at each end: march north, halt, about turn, march south, halt
+    const s = ph < 0.5 ? clamp((ph - hold) / (0.5 - hold), 0, 1) : 1 - clamp((ph - 0.5 - hold) / (0.5 - hold), 0, 1);
+    const dir = ph < hold || (ph >= 0.5 && ph < 0.5 + hold) ? (ph < 0.5 ? 1 : -1) : ph < 0.5 ? 1 : -1;
+    const lead = lerp(-24, 24, s);
+    return { x: post.x, z: lead - dir * post.rank * 2.3, face: dir > 0 ? 0 : Math.PI };
+  }
+  for (let i = 0; i < 8; i++) {
+    const post = { x: i % 2 ? -73 : -85, rank: Math.floor(i / 2) }, g = guardTarget(post, 0);
+    const p = makePerson(GUARD_ID, g.x, g.z, { state: 'guard', post, dodgeT: 0 });
+    p.keep = true;
+  }
+  mapLabels.push(['Högvakten', -79, 30, 'landmark']);
+
+  // Twenty Dalahästar are hidden around town, nine of them in the lanes of Gamla stan. Walk or drive into one to
+  // collect it and learn something about the place. Find them all for fireworks over Strömmen and golden cars.
+  const HORSES = [
+    ['Mårten Trotzigs gränd', -87.5, 371, 'Gamla stans smalaste gränd, bara 90 cm bred på det smalaste stället. Den är en enda lång trappa.'],
+    ['Järnpojken', 59, 124, 'Järnpojken bakom Finska kyrkan är Stockholms minsta staty. På vintern får han stickade mössor och mynt.'],
+    ['Brända tomten', 80, 279, 'Här brann ett hus för länge sedan och tomten fick stå tom. Nu är den ett litet torg med ett träd.'],
+    ['Stortorget', -55, 226, 'Stockholms äldsta torg. Här skedde Stockholms blodbad 1520.'],
+    ['Köpmantorget', 103, 237, 'Sankt Göran och draken på Köpmantorget är en kopia av skulpturen inne i Storkyrkan.'],
+    ['Slottsbacken', 141, 2, 'Obelisken på Slottsbacken restes år 1800 som tack till Stockholms borgare.'],
+    ['Mynttorget', -118, -78, 'Mynttorget har fått sitt namn efter Myntet, där Sveriges mynt präglades.'],
+    ['Gåsgränd', -170, 165, 'Gränderna väster om Västerlånggatan går ner mot Stora Nygatan och vattnet vid Munkbron.'],
+    ['Skeppar Karls gränd', 171, 156, 'Gränderna öster om Österlånggatan ledde förr ner till hamnen där skeppen lade till.'],
+    ['Tyska brinken', 76, 351, 'Tyska kyrkans klockspel spelar flera gånger om dagen över Gamla stans tak.'],
+    ['Evert Taubes terrass', -478, 236, 'Från Evert Taubes terrass på Riddarholmen har man en av Stockholms finaste utsikter över Riddarfjärden.'],
+    ['Kungsträdgården', 29.5, -545, 'Kungsträdgården var från början kungens köksträdgård. På våren blommar körsbärsträden.'],
+    ['Sergels torg', -225, -600, 'Glasobelisken på Sergels torg heter Kristallvertikalaccent och är 37 meter hög.'],
+    ['Skeppsholmen', 780, 5, 'På Skeppsholmen hade flottan sin bas i flera hundra år.'],
+    ['Djurgården', 1220, -90, 'Djurgården var kungens jaktpark. Här finns Skansen och Gröna Lund.'],
+    ['Mariatorget', -520, 1082, 'Fontänen på Mariatorget föreställer Tor som fiskar upp Midgårdsormen.'],
+    ['Humlegården', 150, -1100, 'Humlegården var kungens humleodling. Här ligger Kungliga biblioteket.'],
+    ['Medborgarplatsen', 150, 1422, 'Medborgarplatsen är Södermalms stora torg, uppkallat efter Medborgarhuset.'],
+    ['Stadshuset', -1000, -32, 'Stadshusets torn är 106 meter högt och har tre kronor i toppen.'],
+    ['Slussen', 30, 725, 'Vid Slussen möts Mälaren och Saltsjön. Mälaren ligger lite högre, så båtarna slussas mellan dem.']
+  ];
+  const HORSE_KEY = 'gubbe-dalahastar';
+  let horsesFound = new Set(), goldCars = false, fireworksT = 0, rocketT = 0;
+  const bursts = [];
+  try { horsesFound = new Set(JSON.parse(localStorage.getItem(HORSE_KEY) || '[]')); } catch (e) { /* private window: the hunt just starts over */ }
+  goldCars = horsesFound.size >= HORSES.length;
+  const horseGeo = (() => {
+    const m = new Merger(), red = 0xc8102e, yel = 0xf2c200, blu = 0x1f5fa8, grn = 0x2e8b57, wht = 0xf4f1ea;
+    m.box(0.34, 0.42, 1.0, red, 0, 0.95, 0);
+    m.box(0.32, 0.62, 0.24, red, 0, 0.44, 0.34); m.box(0.32, 0.62, 0.24, red, 0, 0.44, -0.36);
+    m.box(0.3, 0.6, 0.32, red, 0, 1.36, 0.4); m.box(0.28, 0.3, 0.52, red, 0, 1.62, 0.6); m.box(0.24, 0.14, 0.08, red, 0, 1.82, 0.44);
+    m.box(0.36, 0.06, 0.44, blu, 0, 1.18, -0.08); m.box(0.37, 0.04, 0.46, yel, 0, 1.13, -0.08);
+    m.box(0.36, 0.05, 0.5, yel, 0, 1.6, 0.66); m.box(0.32, 0.46, 0.06, 0x1d1d1f, 0, 1.42, 0.24);
+    for (const sx of [1, -1]) {
+      m.box(0.02, 0.16, 0.16, yel, sx * 0.172, 0.98, 0.18); m.box(0.02, 0.08, 0.08, wht, sx * 0.174, 0.98, 0.18);
+      m.box(0.02, 0.06, 0.28, grn, sx * 0.172, 0.84, 0.12); m.box(0.02, 0.12, 0.12, blu, sx * 0.172, 0.98, -0.3);
+      m.box(0.02, 0.05, 0.05, wht, sx * 0.142, 1.66, 0.74);
+    }
+    return m.build();
+  })();
+  const horseMat = std({ vertexColors: true, roughness: 0.32, emissive: 0x2a0606 });
+  const horses = HORSES.map(([name, x, z, fact], i) => {
+    const mesh = new THREE.Mesh(horseGeo, horseMat), glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xffcf5a, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
+    mesh.scale.setScalar(1.45); mesh.castShadow = true; glow.scale.set(3.2, 3.2, 1);
+    const g = new THREE.Group(); g.add(mesh, glow); g.position.set(x, 0, z); glow.position.y = 1.2;
+    const found = horsesFound.has(name);
+    g.visible = !found; scene.add(g);
+    return { name, x, z, fact, g, mesh, found, ph: i * 0.7 };
+  });
+  const fireFx = new Particles(1800, THREE.AdditiveBlending, false);
+  const FIRE_COLS = [0x2f7bff, 0xf7c600, 0xe0203a, 0x3fd06a, 0xffffff, 0xff7ad9];
+  function launchRocket() {
+    const x = rr(-60, 320), z = rr(-220, -110), top = rr(55, 85), col = new THREE.Color(rpick(FIRE_COLS));
+    fireFx.spawn({ x, y: 2, z, vx: rr(-1, 1), vy: top / 1.4, vz: rr(-1, 1), life: 1.4, size: [0.9, 0.5], alpha: 1, color: 0xffe0a0, drag: 0.7 });
+    bursts.push({ t: 1.4, fn: () => {
+      for (let i = 0; i < 90; i++) {
+        const u = Math.random() * 2 - 1, a = Math.random() * TAU, r = Math.sqrt(1 - u * u), s = rr(11, 15);
+        fireFx.spawn({ x, y: top, z, vx: r * Math.cos(a) * s, vy: u * s, vz: r * Math.sin(a) * s, life: rr(1.8, 2.6), size: [3.6, 1.0], alpha: 1, c: col, grav: 3.5, drag: 0.9 });
+      }
+      if (audio && !muted) { const ps = placeSound(x, z, 2500); noiseBurst(audio.ctx.currentTime + ps.d / 340, 1.1, 0.5 * Math.max(0.15, ps.level), 'lowpass', 320, 0.7, ps.pan, 0.003); }
+    } });
+  }
+  function collectHorse(h) {
+    h.found = true; h.g.visible = false;
+    horsesFound.add(h.name);
+    try { localStorage.setItem(HORSE_KEY, JSON.stringify([...horsesFound])); } catch (e) { /* not saved, still counted */ }
+    const n = horsesFound.size;
+    for (let i = 0; i < 26; i++) {
+      const a = Math.random() * TAU, s = rr(2, 5);
+      sparkFx.spawn({ x: h.x, y: 1.2, z: h.z, vx: Math.cos(a) * s, vy: rr(2, 6), vz: Math.sin(a) * s, life: rr(0.5, 0.9), size: [0.14, 0.04], alpha: 1, color: rpick([0xf2c200, 0xc8102e, 0xffffff]), grav: 9, drag: 1 });
+    }
+    beep([784, 988, 1319], 0.035, 0.32);
+    if (n >= HORSES.length) {
+      goldCars = true; fireworksT = 60;
+      toast('Alla ' + HORSES.length + ' dalahästar hittade! Fyrverkeri över Strömmen, och nu finns alla bilar i guld (tryck B).');
+    } else toast('Dalahäst ' + n + ' av ' + HORSES.length + ': ' + h.name + '. ' + h.fact);
+  }
+  function updateSurprises(dt) {
+    const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z, reach = driving ? 3.4 : 1.7;
+    for (const h of horses) {
+      if (h.found) continue;
+      const d = Math.hypot(h.x - px, h.z - pz);
+      if (d > 220) continue;
+      h.mesh.rotation.y = clock * 1.1 + h.ph;
+      h.mesh.position.y = 0.25 + Math.sin(clock * 2.2 + h.ph) * 0.18;
+      if (d < reach && (driving || player.y < 2.5)) collectHorse(h);
+    }
+    if (fireworksT > 0) {
+      fireworksT = Math.max(0, fireworksT - dt);
+      if ((rocketT -= dt) <= 0) { launchRocket(); rocketT = rr(0.25, 0.9); }
+    }
+    for (let i = bursts.length - 1; i >= 0; i--) if ((bursts[i].t -= dt) <= 0) { bursts[i].fn(); bursts.splice(i, 1); }
   }
 
   /* ================= game state ================= */
@@ -4312,7 +4770,8 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
     if (spawnedCar) removeCar(spawnedCar);
     const spot = findSpawnSpot(M);
     if (!spot) { toast('Det finns ingen plats för ' + M.def + ' här. Gå ut på en gata och försök igen.'); return; }
-    const c = makeCar(M, M.colors[Math.floor(Math.random() * M.colors.length)]);
+    // found every Dalahäst: your cars come in gold
+    const c = makeCar(M, goldCars && !M.police && M.id !== 'taxi' ? 0xc9a227 : M.colors[Math.floor(Math.random() * M.colors.length)]);
     c.x = spot.x; c.z = spot.z; c.h = spot.h;
     spawnedCar = c;
     enterCar(c);
@@ -4353,6 +4812,7 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
         const d = Math.hypot(p.x - camTarget.x, p.z - camTarget.z);
         p.asleep = d > 150;
         p.model.group.visible = !p.asleep;
+        if (p.keep) continue;
         if (d > 170 || (p.ai.state === 'wander' && p.ai.t <= 0 && d > 40)) { removePerson(p); continue; }
         if (p.ai.state === 'walk') walkers++;
       }
@@ -4429,7 +4889,7 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
       if (!p.asleep) animatePerson(p, dt);
     }
     const pointScale = renderer.domElement.height / (2 * Math.tan((camera.fov * Math.PI) / 360));
-    for (const fx of [smokeFx, sparkFx, bitsFx]) { fx.mat.uniforms.scale.value = pointScale; fx.update(dt); }
+    for (const fx of [smokeFx, sparkFx, bitsFx, fireFx]) { fx.mat.uniforms.scale.value = pointScale; fx.update(dt); }
     waterNormal.offset.x += dt * 0.006; waterNormal.offset.y += dt * 0.0035;
     sky.material.uniforms.time.value = clock;
     if (nkSign) nkSign.rotation.y = clock * 0.5;
@@ -4479,12 +4939,12 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
   /* ================= HUD ================= */
   const el = {
     prompt: $('prompt'), promptText: $('promptText'), dash: $('dash'), kmh: $('kmh'), gear: $('gear'), bar: $('revbar'), rpm: $('rpm'), mode: $('gearMode'),
-    engineRow: $('engineRow'), hpbar: $('hpbar'), hpText: $('hpText'), limit: $('limit'), limitNum: $('limitNum'), wanted: $('wanted'), wantedHint: $('wantedHint'),
-    fineTag: $('fineTag'), fines: $('fines'), btnUp: $('btnUp'), btnDown: $('btnDown'),
+    engineRow: $('engineRow'), hpbar: $('hpbar'), hpText: $('hpText'), limit: $('limit'), limitNum: $('limitNum'), wanted: $('wanted'), wantedHint: $('wantedHint'), wantedTitle: $('wantedTitle'),
+    fineTag: $('fineTag'), fines: $('fines'), horses: $('horses'), btnUp: $('btnUp'), btnDown: $('btnDown'),
     carName: $('carName'), help: $('help'), sound: $('soundLabel'), btnUse: $('btnUse'), btnJump: $('btnJump'), touch: $('touch'),
     start: $('start'), locStreet: $('locStreet'), locDistrict: $('locDistrict'), toast: $('toast')
   };
-  let lastPrompt = null, lastDriving, locT = 0, toastT = 0, lastUse = '', lastFines = -1, lastHint = '';
+  let lastPrompt = null, lastDriving, locT = 0, toastT = 0, lastUse = '', lastFines = -1, lastHint = '', lastHorses = -1;
   function toast(msg) { el.toast.textContent = msg; el.toast.hidden = false; toastT = Math.min(6.5, 2.2 + msg.length * 0.035); }
   function gearOf(c, vf) {
     if (c.reversing || c.inR) return 'R';
@@ -4507,9 +4967,9 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
       el.btnJump.textContent = driving ? 'Broms' : 'Hoppa';
       el.btnUp.hidden = el.btnDown.hidden = !driving;
     }
-    const use = driving ? 'Kliv ur' : nearCar && nearCar.bot ? 'Ta bilen' : 'Kliv in';
+    const use = stop && stop.phase === 'talk' ? 'Skriv under' : driving ? 'Kliv ur' : nearCar && nearCar.bot ? 'Ta bilen' : 'Kliv in';
     if (use !== lastUse) { el.btnUse.textContent = use; lastUse = use; }
-    el.btnUse.classList.toggle('off', !driving && !nearCar);
+    el.btnUse.classList.toggle('off', !driving && !nearCar && !(stop && stop.phase === 'talk'));
     if (driving) {
       const c = driving, vf = c.vx * Math.sin(c.h) + c.vz * Math.cos(c.h);
       const kmh = Math.round(Math.abs(vf) * 3.6), rf = clamp(c.rpm / (c.M.red * 1.04), 0, 1);
@@ -4532,10 +4992,15 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
     }
     el.wanted.hidden = !wanted;
     if (wanted) {
-      const hint = wanted.stopT > 0.2 ? 'Stå still …' : driving ? 'Stanna bilen bredvid en polisbil' : 'Polisen letar efter dig';
-      if (hint !== lastHint) { el.wantedHint.textContent = hint; lastHint = hint; }
+      const title = stop ? 'Poliskontroll' : 'Polisen jagar dig';
+      const hint = stop ? (stop.phase === 'approach' || stop.phase === 'parked' ? 'Sitt kvar, polisen parkerar' : stop.phase === 'walk' ? 'Konstapeln kommer fram till dig'
+        : stop.phase === 'talk' ? 'Tryck E för att skriva under boten' : stop.phase === 'flee' ? 'Du smet! Konstapeln springer tillbaka' : 'Polisen kör snart vidare')
+        : wanted.stopT > 0.2 ? 'Stå still …' : driving ? 'Kör in till kanten och stanna' : 'Polisen letar efter dig';
+      if (hint !== lastHint) { el.wantedHint.textContent = hint; el.wantedTitle.textContent = title; lastHint = hint; }
+      el.wanted.classList.toggle('calm', !!stop);
     }
     if (fines !== lastFines) { lastFines = fines; el.fineTag.hidden = !fines; el.fines.textContent = fmtKr(fines); }
+    if (horsesFound.size !== lastHorses) { lastHorses = horsesFound.size; el.horses.textContent = lastHorses + '/' + HORSES.length; }
     locT -= dt;
     if (locT <= 0) {
       locT = 0.3;
@@ -4679,6 +5144,12 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
       } else if ((kind === 'park' || kind === 'square') && k > 0.45) text(t, toX(x), toY(z), 'italic 600 11px Overpass, sans-serif', kind === 'park' ? '#3b6e2a' : '#6b6255');
     }
     for (const [t, x, z] of DISTRICT_LABELS) text(t, toX(x), toY(z), '900 ' + clamp(14 * Math.sqrt(k / 0.25), 12, 26) + 'px Overpass, sans-serif', 'rgba(40,36,30,.62)', 0, 'rgba(255,255,255,.6)');
+    // the Dalahästar you have found
+    if (k > 0.25) for (const h of horses) if (h.found) {
+      const X = toX(h.x), Y = toY(h.z);
+      g.fillStyle = '#c8102e'; g.strokeStyle = '#fff'; g.lineWidth = 1.5;
+      g.beginPath(); g.moveTo(X, Y - 6); g.lineTo(X + 5, Y); g.lineTo(X, Y + 6); g.lineTo(X - 5, Y); g.closePath(); g.fill(); g.stroke();
+    }
     // police and you
     for (const c of cars) {
       if (!c.M.police || c === driving) continue;
@@ -5031,7 +5502,7 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
     }
     if (!started) { if (code === 'Enter' || code === 'Space') startGame(); return; }
     if (repeat) return;
-    if (code === 'KeyE' || code === 'Enter') toggleCar();
+    if (code === 'KeyE' || code === 'Enter') { if (stop && stop.phase === 'talk') signTicket(); else toggleCar(); }
     else if (code === 'Space') jumpQueued = true;
     else if (code === 'KeyH') el.help.hidden = !el.help.hidden;
     else if (code === 'KeyT') toggleMute();
@@ -5101,7 +5572,7 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
   stick.addEventListener('pointercancel', endStick);
   el.btnJump.addEventListener('pointerdown', (e) => { e.preventDefault(); touchBrake = true; jumpQueued = true; });
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.btnJump.addEventListener(ev, () => { touchBrake = false; });
-  el.btnUse.addEventListener('pointerdown', (e) => { e.preventDefault(); toggleCar(); });
+  el.btnUse.addEventListener('pointerdown', (e) => { e.preventDefault(); if (stop && stop.phase === 'talk') signTicket(); else toggleCar(); });
   $('btnCars').addEventListener('pointerdown', (e) => { e.preventDefault(); openPicker(); });
   el.btnUp.addEventListener('pointerdown', (e) => { e.preventDefault(); playerShift(1); });
   el.btnDown.addEventListener('pointerdown', (e) => { e.preventDefault(); playerShift(-1); });
@@ -5135,6 +5606,7 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
       jumpQueued = false;
       manageTraffic(dt);
       policeUpdate(dt);
+      updateSurprises(dt);
       nearCar = findNearCar();
       animate(dt);
     }
@@ -5225,8 +5697,8 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
         return { rms: +Math.sqrt(sum / d.length).toFixed(4), peak: +peak.toFixed(3), centroid: Math.round(num / den), strongest: Math.round(bestF), firing: Math.round((rpm / 60) * (ENGINE_SOUNDS[key].cyl / 2)) };
       });
     },
-    get cars() { return cars; }, blockedAt: (x, z, r) => blockedAt(x, z, r), obstaclesNear(x, z, r) { const out = []; forNear(x - r, z - r, x + r, z + r, (o) => out.push({ ...o })); return out; }, get nodeDist() { return nodeDist; }, get persons() { return persons; }, get player() { return player; }, get driving() { return driving; },
-    get wanted() { return wanted; }, get fines() { return fines; }, get audio() { return audio; },
+    get cars() { return cars; }, blockedAt: (x, z, r) => blockedAt(x, z, r), obstaclesNear(x, z, r) { const out = []; forNear(x - r, z - r, x + r, z + r, (o) => out.push({ ...o })); return out; }, distTo, get persons() { return persons; }, get player() { return player; }, get driving() { return driving; },
+    get wanted() { return wanted; }, get fines() { return fines; }, get audio() { return audio; }, get stop() { return stop; }, signTicket, beginStop, setCall, resyncBot, get horses() { return horses; }, fireworks(s) { fireworksT = s; },
     nodes, edges, walkable, fitsM, MODEL, driveAccel,
     state() {
       const bad = [];
