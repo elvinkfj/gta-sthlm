@@ -4669,9 +4669,11 @@ body.touch .tk-sign .key { display: none; }
       chasers++;
       if (!inSight && d < 90 && clearView(fc.p.x, fc.p.z, T.x, T.z)) inSight = true;
     }
+    // speeding in front of them during the chase goes on the ticket too
     if (driving && inSight) {
       const lim = limitAt(driving.x, driving.z), over = Math.hypot(driving.vx, driving.vz) * 3.6 - lim;
       if (over > wanted.over) { wanted.over = over; wanted.limit = lim; }
+      if (over > TOLERANCE) wanted.kinds.add('fart');
     }
     wanted.inSight = inSight;
     // running from them: on the move, fast, with the police on your tail
