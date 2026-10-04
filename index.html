@@ -970,7 +970,7 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
     { name: 'Helgeandsholmen', poly: [[-300, -228], [-55, -232], [-40, -180], [-55, -120], [-290, -118], [-310, -170]] },
     {
       name: 'Gamla stan',
-      poly: [[-300, -98], [-120, -100], [40, -102], [160, -98], [205, -62], [232, 60], [238, 200], [226, 330], [192, 430], [142, 505], [60, 528], [-40, 528],
+      poly: [[-300, -98], [-120, -100], [40, -102], [160, -98], [205, -62], [245.8, 29.1], [258.5, 188.6], [240, 214], [226, 330], [192, 430], [142, 505], [60, 528], [-40, 528],
         [-140, 518], [-215, 480], [-270, 400], [-310, 280], [-330, 140], [-335, 20], [-320, -60]]
     },
     { name: 'Riddarholmen', poly: [[-360, -20], [-450, -55], [-540, -10], [-590, 110], [-570, 260], [-480, 350], [-395, 370], [-362, 300], [-358, 120]] },
@@ -1660,6 +1660,67 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
   }
   for (const p of PARKS) if (p.trees) treesIn(p.poly, p.trees, lindens);
 
+  /* ---------- the car park on the quay at Skeppsbron ---------- */
+  // Two rows of marked bays between the pavement and the water with an aisle down the middle, a bus bay at the north
+  // end and a way in from the street at either end. s runs along Skeppsbron from Slottsbacken, d out towards the water.
+  const LOT = (() => {
+    const f = edgeFrame(nodeIndex.get('SK1'), nodeIndex.get('SK2')), wx = -f.rx, wz = -f.rz;
+    const at = (s, d) => [f.A.x + f.ux * s + wx * d, f.A.z + f.uz * s + wz * d];
+    const BAY = 2.6, rows = [{ s0: 26, s1: 128, d0: 15.5, d1: 21.5 }, { s0: 34, s1: 136, d0: 28.5, d1: 34.5 }], bays = [];
+    rows.forEach((r, row) => {
+      r.n = Math.floor((r.s1 - r.s0) / BAY);
+      for (let k = 0; k < r.n; k++) bays.push({ row, s: r.s0 + (k + 0.5) * BAY });
+    });
+    return { f, wx, wz, at, BAY, rows, bays, s0: 16, s1: 138, d0: 15.2, d1: 35.2, aisle: 25, bus: { s0: 18, s1: 32, d0: 30.8, d1: 34.2 } };
+  })();
+  {
+    const { f, at, BAY, rows, bus } = LOT;
+    const corners = (s0, s1, d0, d1) => [at(s0, d0), at(s1, d0), at(s1, d1), at(s0, d1)];
+    const flatQuad = (B, P, y, uvScale) => B.quad(...P.map(([x, z]) => [x, y, z]), 0xffffff, uvScale ? P.map(([x, z]) => [x / uvScale, -z / uvScale]) : null, [0, 1, 0]);
+    const paint = (s0, s1, d0, d1) => flatQuad(zebraB, corners(s0, s1, d0, d1), 0.036);
+    const lotPoly = corners(LOT.s0, LOT.s1, LOT.d0, LOT.d1);
+    flatQuad(junctionB, lotPoly, 0.024, 12);
+    const W = 0.06;
+    for (const r of rows) {
+      const back = r === rows[0] ? r.d0 : r.d1, end = r.s0 + r.n * BAY;
+      for (let k = 0; k <= r.n; k++) paint(r.s0 + k * BAY - W, r.s0 + k * BAY + W, r.d0, r.d1);
+      paint(r.s0 - W, end + W, back - W, back + W);
+    }
+    for (const [s0, s1, d0, d1] of [[bus.s0, bus.s1, bus.d0 - W, bus.d0 + W], [bus.s0, bus.s1, bus.d1 - W, bus.d1 + W], [bus.s0 - W, bus.s0 + W, bus.d0, bus.d1], [bus.s1 - W, bus.s1 + W, bus.d0, bus.d1]]) paint(s0, s1, d0, d1);
+    // a blue P sign at each way in, facing the street
+    const pTex = canvasTex(128, 128, (g, w, h) => {
+      g.fillStyle = '#fff'; g.fillRect(0, 0, w, h);
+      g.fillStyle = '#1d5fae'; roundRect(g, 6, 6, w - 12, h - 12, 10); g.fill();
+      g.fillStyle = '#fff'; g.font = 'bold 96px Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('P', w / 2, h / 2 + 5);
+    });
+    const pB = new Builder(), y0 = 2.2, y1 = 2.85, hs = 0.33;
+    for (const s of [rows[0].s0 - 1, rows[0].s0 + rows[0].n * BAY + 1]) {
+      const [x, z] = at(s, LOT.d0 + 0.3), B = cityAt(x, z);
+      B.prism(x, z, 0.045, 0, y1, 6, 0x8a8f94);
+      addCircle(x, z, 0.12);
+      for (const side of [1, -1]) {
+        const ox = x - LOT.wx * 0.06 * side, oz = z - LOT.wz * 0.06 * side, a = [ox + f.ux * hs * side, oz + f.uz * hs * side], b = [ox - f.ux * hs * side, oz - f.uz * hs * side];
+        pB.quad([a[0], y0, a[1]], [b[0], y0, b[1]], [b[0], y1, b[1]], [a[0], y1, a[1]], 0xffffff, [[1, 0], [0, 0], [0, 1], [1, 1]], [-LOT.wx * side, 0, -LOT.wz * side]);
+      }
+    }
+    scene.add(new THREE.Mesh(pB.build(), std({ map: pTex, roughness: 0.5 })));
+    // ticket machines on the pavement edge, and lamps along the quay
+    for (const s of [52, 102]) {
+      const [x, z] = at(s, 14.6), B = cityAt(x, z);
+      B.setFrame(x, z, f.ux, f.uz);
+      B.box(-0.25, 0, -0.18, 0.25, 1.45, 0.18, 0x3a3d41);
+      B.box(-0.2, 1.0, -0.19, 0.2, 1.3, -0.17, 0xc9d6c0);
+      B.box(-0.3, 1.45, -0.24, 0.3, 1.55, 0.24, 0x1d5fae);
+      B.setFrame();
+      addOBox(x, z, f.ux, f.uz, 0.3, 0.24, 1.55);
+    }
+    for (let s = 30; s < 136; s += 26) { const [x, z] = at(s, 35.7); lamps.push({ x, z, rot: Math.atan2(-LOT.wx, -LOT.wz) }); addCircle(x, z, 0.2); }
+    // no houses on the quay
+    take(corners(-40, 175, LOT.d0, 60));
+    mapSquares.push(lotPoly);
+    mapLabels.push(['Parkering', ...centroid(lotPoly), 'square']);
+  }
+
   /* ---------- buildings ---------- */
   const STYLE = {
     norr: {
@@ -2035,7 +2096,8 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
   }
   // moored along Strandvägen, just off the quay (which runs slightly south-east)
   for (const x of [450, 530, 610, 690, 780, 860, 940]) boat(x, -632 + (x - 420) * 0.0897 + 10, 20, 0.09);
-  for (const z of [10, 70, 250, 310]) boat(250, z, 20, Math.PI / 2);
+  for (const z of [10, 250, 310]) boat(250, z, 20, Math.PI / 2);
+  for (const s of [45, 110]) boat(...LOT.at(s, 39.5), 20, Math.atan2(LOT.f.uz, LOT.f.ux));
   // af Chapman, the white full-rigged ship moored at Skeppsholmen
   {
     const B = cityAt(426, 60), x = 426;
@@ -2323,10 +2385,10 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
     if (i >= 0) persons.splice(i, 1);
   }
   const playerId = makeIdentity({ skin: 0xf0c08a, shirt: 0x2f6fdb, pants: 0x27324a, hat: 'cap', hatColor: 0xf7c600 });
-  // you start on the quay at Skeppsbron, looking along it towards the palace
+  // you start in the car park on the quay at Skeppsbron, in the aisle between the bays, looking along it towards the palace
   const SPAWN = (() => {
-    const f = edgeFrame(nodeIndex.get('SK1'), nodeIndex.get('SK2')), lat = -(f.e.hw + f.e.walk * 0.5), s = 14;
-    return { x: f.A.x + f.ux * s + f.rx * lat, z: f.A.z + f.uz * s + f.rz * lat, rot: Math.atan2(-f.ux, -f.uz) };
+    const [x, z] = LOT.at(58, LOT.aisle);
+    return { x, z, s: 58, rot: Math.atan2(-LOT.f.ux, -LOT.f.uz) };
   })();
   const player = makePerson(playerId, SPAWN.x, SPAWN.z, null);
   player.rot = SPAWN.rot;
@@ -4027,15 +4089,22 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
     return null;
   }
   {
-    // every model lined up along the water side of Skeppsbron, facing the palace, where you start
-    const f = edgeFrame(nodeIndex.get('SK1'), nodeIndex.get('SK2')), lat = -(f.e.hw - 1.1), hN = Math.atan2(-f.ux, -f.uz);
-    let s = 20;
-    for (const id of ['superbil', 'sport', 'muskel', 'halvkombi', 'sedan', 'kombi', 'taxi', 'suv', 'skapbil', 'buss']) {
-      const M = MODEL[id];
-      s += M.L / 2;
-      spawnParked(M, M.colors[0], f.A.x + f.ux * s + f.rx * lat, f.A.z + f.uz * s + f.rz * lat, hN, true);
-      s += M.L / 2 + 1.5;
+    // the car park where you start: one of every model in the bays nearest you, backed in so they face the aisle,
+    // the bus in its bay at the north end, and here and there another car in the other bays
+    const { f, wx, wz, at, rows, bus } = LOT;
+    const inBay = (M, color, b, faceAisle) => {
+      const r = rows[b.row], d = b.row === 0 ? r.d0 + 0.3 + M.L / 2 : r.d1 - 0.3 - M.L / 2, out = (b.row === 0) === faceAisle ? 1 : -1;
+      spawnParked(M, color, ...at(b.s, d), Math.atan2(wx * out, wz * out), true);
+    };
+    const bays = LOT.bays.slice().sort((a, b) => Math.abs(a.s - SPAWN.s + 8) - Math.abs(b.s - SPAWN.s + 8));
+    const show = ['superbil', 'sport', 'muskel', 'halvkombi', 'sedan', 'kombi', 'taxi', 'suv', 'skapbil'];
+    show.forEach((id, i) => inBay(MODEL[id], MODEL[id].colors[0], bays[i], true));
+    for (const b of bays.slice(show.length)) {
+      if (Math.random() > 0.27) continue;
+      const M = Math.random() < 0.2 ? rpick(SPORTS) : rpick(REGULARS);
+      inBay(M, rpick(M.colors), b, Math.random() < 0.4);
     }
+    spawnParked(MODEL.buss, MODEL.buss.colors[0], ...at((bus.s0 + bus.s1) / 2, (bus.d0 + bus.d1) / 2), Math.atan2(-f.ux, -f.uz), true);
     for (let i = 0; i < PARKED_TARGET; i++) spawnParkedNear(30, 260);
     for (let i = 0; i < BOT_TARGET; i++) spawnBot(25, null, 260);
     for (let i = 0; i < POLICE_TARGET; i++) { const c = spawnBot(80, MODEL.polis, 600); if (c) makePolice(c); }
