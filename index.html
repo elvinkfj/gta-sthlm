@@ -313,7 +313,7 @@ body.touch .tk-sign .key { display: none; }
     <span class="key">K</span><span>Stor karta (eller klicka på kartan)</span>
     <span class="key">F</span><span>Tuta</span>
     <span class="key">L</span><span>Blåljus, när du kör en polisbil</span>
-    <span class="key">Polis</span><span>Kör in till kanten och stanna, så kommer en konstapel fram. E skriver under boten</span>
+    <span class="key">Polis</span><span>Kör in till kanten och stanna, så kommer en konstapel fram. E skriver under boten. 30 km/h för fort eller flykt: du blir gripen och hamnar i cellen på polisstationen i Gamla stan</span>
     <span class="key">Dalahäst</span><span>20 st gömda i stan, 9 i Gamla stan. Gå eller kör in i dem</span>
     <span class="key">R</span><span>Ställ bilen på gatan igen</span>
     <span class="key">T</span><span>Ljud av och på</span>
@@ -1246,6 +1246,146 @@ body.touch .tk-sign .key { display: none; }
     ['Galärvarvsvägen', 'DJ3 DJ5 DJ6 DJ1', { hw: 5 }]
   ];
 
+
+  // The rest of the inner city: streets drawn through real points rather than between named junctions. Wherever one
+  // crosses another, or ends on it, a junction is made there, so the network stays joined up however it was drawn.
+  const MORE = [
+    ['Karduansmakargatan', [[-562.7, -368], [-241.2, -378]], { hw: 4.5 }],
+    ['Klara Södra Kyrkogata', [[-594.7, -462], 'D2'], { hw: 4.5 }],
+    ['Klara Östra Kyrkogata', [[-333.7, -375.1], [-434.7, -591.1]], { hw: 4.5 }],
+    ['Klara Västra Kyrkogata', [[-431.6, -372.1], [-523.7, -569.0]], { hw: 4.5 }],
+    ['Klara Norra Kyrkogata', [[-635.1, -605.1], [-377.5, -669.3]], { hw: 4.5 }],
+    ['Vattugatan', [[-678.8, -772.8], [-444.7, -813.0]], { hw: 4 }],
+    ['Bryggargatan', [[-412.0, -596.8], [-540.0, -870.5]], { hw: 4.5 }],
+    ['Gamla Brogatan', [[-489.1, -577.6], [-621.7, -861.0]], { hw: 4.5 }],
+    ['Barnhusgatan', [[-751.5, -1075.0], [-569.0, -1078.7]], { hw: 4.5 }],
+    ['Kammakargatan', [[-569.0, -1078.7], [-168.3, -1090.6]], { hw: 5 }],
+    ['Malmtorgsgatan', [[-182, -358.3], [-176, -648.3]], { hw: 4.5 }],
+    ['Sergelgatan', [[-316.6, -629.0], [-434.8, -880.5]], { kind: 'ped', hw: 5 }],
+    ['Holländargatan', [[-488.7, -1014.0], [-550.9, -1146.5]], { hw: 4.5 }],
+    ['Luntmakargatan', [[-332.1, -892.4], [-452.3, -1148.3]], { hw: 4.5 }],
+    ['Döbelnsgatan', [[-333.9, -1023.3], [-392.8, -1148.7]], { hw: 5 }],
+    ['Malmskillnadsgatan', [[-192, -766], [-248, -1150]], { hw: 5 }],
+    ['Lästmakargatan', ['VT2', [-44, -722], [-56, -939.4]], { hw: 4.5 }],
+    ['Norrlandsgatan', [[40, -649.1], [56, -956.6]], { hw: 5 }],
+    ['Smålandsgatan', [[-48, -711], [285.5, -715]], { hw: 5 }],
+    ['Mäster Samuelsgatan', ['R3', 'BB1', [229.5, -806]], { hw: 5 }],
+    ['Jakobsbergsgatan', [[-141.8, -858], [183.9, -880]], { hw: 4.5 }],
+    ['Stallgatan', [[259.2, -392], [404.4, -392]], { hw: 4.5 }],
+    ['Upplandsgatan', ['V7', [-800, -1468]], { hw: 6 }],
+    ['Drottninggatan', ['D7', [-685.6, -1328.0]], { kind: 'ped', hw: 5 }],
+    ['Sveavägen', ['S4', [-653.3, -1468]], { hw: 9, trees: 'both' }],
+    ['Holländargatan', [[-550.9, -1146.5], [-701.9, -1468]], { hw: 4.5 }],
+    ['Luntmakargatan', [[-452.3, -1148.3], [-602.5, -1468]], { hw: 4.5 }],
+    ['Döbelnsgatan', [[-392.8, -1148.7], [-542.8, -1468]], { hw: 4.5 }],
+    ['Tulegatan', [[-300, -1149.2], [-338, -1468]], { hw: 4.5 }],
+    ['Regeringsgatan', ['R5', [-196.4, -1342.9]], { hw: 5.5 }],
+    ['Birger Jarlsgatan', ['BJ2', [24, -1468]], { hw: 7.5, walk: 5 }],
+    ['Rådmansgatan', [[-777.1, -1235], [51.4, -1260]], { hw: 5.5 }],
+    ['Kungstensgatan', [[-786.0, -1325], [39.6, -1350]], { hw: 5 }],
+    ['Odengatan', [[-795.3, -1420], [27.0, -1445]], { hw: 7 }],
+    ['Grev Turegatan', [[300, -749.0], [300, -1180.0]], { hw: 5 }],
+    ['Skeppargatan', [[615, -638.5], [615, -1180.0]], { hw: 5 }],
+    ['Jungfrugatan', [[782, -622.6], [782, -1180.0]], { hw: 5 }],
+    ['Artillerigatan', [[848, -616.7], [848, -1180.0]], { hw: 5 }],
+    ['Humlegårdsgatan', [[150.2, -935], [350.0, -937]], { hw: 5.5 }],
+    ['Kommendörsgatan', [[205.2, -1090], [920.6, -1090]], { hw: 5.5 }],
+    ['Bergsgatan', [[-927.4, -560], [-1351.7, -560]], { hw: 5 }],
+    ['Pipersgatan', [[-1280, -504.2], [-1280, -644.5]], { hw: 4.5 }],
+    ['Parmmätargatan', [[-1200, -442.0], [-1200, -643.3]], { hw: 4.5 }],
+    ['Pilgatan', [[-1250, -53.5], [-1250, -480.9]], { hw: 4.5 }],
+    ['Garvargatan', [[-1099.7, -205], [-1380, -205]], { hw: 4.5 }],
+    ['Sankt Eriksgatan', [[-1560, -62.8], [-1560, -1100]], { hw: 7 }],
+    ['Fridhemsgatan', [[-1470, -60.4], [-1470, -900]], { hw: 5 }],
+    ['Hantverkargatan', ['PH1', [-1560, -720]], { hw: 7 }],
+    ['Kungsholmsgatan', ['PH2', [-1560, -652]], { hw: 6 }],
+    ['Fleminggatan', ['PH3', [-1560, -900]], { hw: 7 }],
+    ['Norr Mälarstrand', ['NM1', [-1680, -66]], { hw: 7, walk: 8, trees: 'left' }],
+    ['Brännkyrkagatan', [[-252.1, 780.0], [-943.6, 1172.6]], { hw: 4.5 }],
+    ['Långholmsgatan', ['HG5', [-945, 1640]], { hw: 7 }],
+    ['Krukmakargatan', [[-560.0, 1140.0], [-948.2, 1360.3]], { hw: 4.5 }],
+    ['Timmermansgatan', [[-650, 1078.6], [-650, 1640]], { hw: 4.5 }],
+    ['Ringvägen', [[-945, 1640], [1000, 1630]], { hw: 8, median: true }],
+    ['Götgatan', ['GG5', [112, 1634.6]], { hw: 6.5 }],
+    ['Östgötagatan', ['OG3', [356, 1633.3]], { hw: 6 }],
+    ['Renstiernas gata', ['RG3', [606, 1632.0]], { hw: 6 }],
+    ['Swedenborgsgatan', ['SW3', [-550, 1638.0]], { hw: 5.5 }],
+    ['Wollmar Yxkullsgatan', [[81.1, 1330], [-554.7, 1372]], { hw: 5 }],
+    ['Folkungagatan', ['RG3', [930, 1474]], { hw: 7 }],
+    ['Tjärhovsgatan', ['RG2', [930, 1356]], { hw: 6 }],
+    ['Högbergsgatan', ['RG1', [930, 1162]], { hw: 5.5 }],
+    ['Åsögatan', [[338.4, 1226], [930, 1226]], { hw: 5 }],
+    ['Skånegatan', [[341.9, 1300], [930, 1300]], { hw: 5.5 }],
+    ['Bondegatan', [[347.5, 1428], [930, 1428]], { hw: 5 }],
+    ['Södermannagatan', [[462, 1156.1], [462, 1484.4]], { hw: 5 }],
+    ['Nytorgsgatan', [[762, 1162], [762, 1474]], { hw: 5 }],
+    ['Gotlandsgatan', [[255, 1372.2], [255, 1492.6]], { hw: 4.5 }]
+  ];
+  {
+    const SNAP = 2.5, pt = (x, z, id) => ({ x, z, id: id || null });
+    const named = new Map(), named1 = (id) => named.get(id) || (named.set(id, pt(PTS[id][0], PTS[id][1], id)), named.get(id));
+    const chains = STREETS.map(([name, chain, o]) => ({ name, o, pts: chain.split(' ').map(named1) }))
+      .concat(MORE.map(([name, list, o]) => ({ name, o, pts: list.map((p) => (typeof p === 'string' ? named1(p) : pt(p[0], p[1]))) })));
+    const segs = [];
+    for (const ch of chains) for (let i = 0; i < ch.pts.length - 1; i++) {
+      const a = ch.pts[i], b = ch.pts[i + 1];
+      segs.push({ ch, a, b, ins: [], x0: Math.min(a.x, b.x) - SNAP, x1: Math.max(a.x, b.x) + SNAP, z0: Math.min(a.z, b.z) - SNAP, z1: Math.max(a.z, b.z) + SNAP });
+    }
+    const along = (p, s) => {
+      const dx = s.b.x - s.a.x, dz = s.b.z - s.a.z, t = ((p.x - s.a.x) * dx + (p.z - s.a.z) * dz) / (dx * dx + dz * dz);
+      return { t, d: Math.hypot(s.a.x + dx * t - p.x, s.a.z + dz * t - p.z) };
+    };
+    for (let i = 0; i < segs.length; i++) for (let j = i + 1; j < segs.length; j++) {
+      const s = segs[i], q = segs[j];
+      if (s.x1 < q.x0 || q.x1 < s.x0 || s.z1 < q.z0 || q.z1 < s.z0) continue;
+      if (s.a === q.a || s.a === q.b || s.b === q.a || s.b === q.b) continue;
+      // one street ending on another
+      let tee = false;
+      for (const [u, v] of [[s, q], [q, s]]) for (const p of [u.a, u.b]) {
+        const r = along(p, v);
+        if (r.d < SNAP && r.t > 0 && r.t < 1) { v.ins.push({ t: r.t, p }); tee = true; }
+      }
+      // two streets crossing (never in the middle of a bridge)
+      if (tee || s.ch.o.bridge || q.ch.o.bridge) continue;
+      const dx1 = s.b.x - s.a.x, dz1 = s.b.z - s.a.z, dx2 = q.b.x - q.a.x, dz2 = q.b.z - q.a.z, den = dx1 * dz2 - dz1 * dx2;
+      if (Math.abs(den) < 1e-9) continue;
+      const t = ((q.a.x - s.a.x) * dz2 - (q.a.z - s.a.z) * dx2) / den, u = ((q.a.x - s.a.x) * dz1 - (q.a.z - s.a.z) * dx1) / den;
+      if (t <= 0 || t >= 1 || u <= 0 || u >= 1) continue;
+      const p = pt(s.a.x + dx1 * t, s.a.z + dz1 * t);
+      s.ins.push({ t, p }); q.ins.push({ t: u, p });
+    }
+    // points a few metres apart are one junction (a named one wins, two named ones never merge)
+    const all = new Set();
+    for (const ch of chains) for (const p of ch.pts) all.add(p);
+    for (const s of segs) for (const r of s.ins) all.add(r.p);
+    const list = [...all], root = new Map(list.map((p) => [p, p]));
+    const find = (p) => { let r = p; while (root.get(r) !== r) r = root.get(r); root.set(p, r); return r; };
+    const cell = new Map(), key = (x, z) => Math.floor(x / SNAP) + ',' + Math.floor(z / SNAP);
+    for (const p of list) {
+      const cx = Math.floor(p.x / SNAP), cz = Math.floor(p.z / SNAP);
+      for (let ix = cx - 1; ix <= cx + 1; ix++) for (let iz = cz - 1; iz <= cz + 1; iz++) for (const q of cell.get(ix + ',' + iz) || []) {
+        const a = find(p), b = find(q);
+        if (a === b || Math.hypot(p.x - q.x, p.z - q.z) >= SNAP || (a.id && b.id)) continue;
+        if (b.id) root.set(a, b); else root.set(b, a);
+      }
+      const k = key(p.x, p.z);
+      if (!cell.has(k)) cell.set(k, []);
+      cell.get(k).push(p);
+    }
+    let made = 0;
+    const idOf = (p) => { const r = find(p); if (!r.id) { r.id = 'w' + made++; PTS[r.id] = [Math.round(r.x * 10) / 10, Math.round(r.z * 10) / 10]; } return r.id; };
+    const segsOf = new Map();
+    for (const s of segs) { if (!segsOf.has(s.ch)) segsOf.set(s.ch, []); segsOf.get(s.ch).push(s); }
+    STREETS.length = 0;
+    for (const ch of chains) {
+      const ids = [];
+      for (const s of segsOf.get(ch) || []) {
+        for (const p of [s.a, ...s.ins.sort((m, n) => m.t - n.t).map((r) => r.p), s.b]) { const id = idOf(p); if (ids[ids.length - 1] !== id) ids.push(id); }
+      }
+      if (ids.length > 1) STREETS.push([ch.name, ids.join(' '), ch.o]);
+    }
+  }
+
   const nodes = [], edges = [], nodeIndex = new Map();
   function nodeOf(id) {
     if (nodeIndex.has(id)) return nodeIndex.get(id);
@@ -1318,8 +1458,17 @@ body.touch .tk-sign .key { display: none; }
     }
     return out;
   }
+  // the first stretch from a towards b along the same street, if a junction was put between them
+  function edgeToward(a, b) {
+    const A = nodes[a], B = nodes[b], len = Math.hypot(B.x - A.x, B.z - A.z);
+    for (const i of A.all) {
+      const e = edges[i], o = nodes[e.a === a ? e.b : e.a];
+      if (segDist(o.x, o.z, A.x, A.z, B.x, B.z) < 1 && (o.x - A.x) * (B.x - A.x) + (o.z - A.z) * (B.z - A.z) > 0 && Math.hypot(o.x - A.x, o.z - A.z) < len + 1) return e;
+    }
+    return undefined;
+  }
   function edgeFrame(a, b) {
-    const A = nodes[a], B = nodes[b], e = edgeBetween(a, b);
+    const A = nodes[a], B = nodes[b], e = edgeBetween(a, b) || edgeToward(a, b);
     const dx = B.x - A.x, dz = B.z - A.z, len = Math.hypot(dx, dz), ux = dx / len, uz = dz / len;
     // (rx, rz) is the right-hand side when driving from A to B
     return { A, B, ux, uz, rx: -uz, rz: ux, len, e, lane: e ? e.lane : LANE, pass: e ? e.pass : -LANE, park: e ? e.park : null };
@@ -1573,7 +1722,12 @@ body.touch .tk-sign .key { display: none; }
     { name: 'Berzelii park', poly: [[130, -640], [262, -640], [275, -565], [130, -565]], trees: 10 },
     { name: 'Humlegården', poly: [[140, -1012], [168, -1035], [220, -1160], [82, -1162]], trees: 26 },
     { name: 'Mariatorget', poly: [[-548, 1052], [-492, 1030], [-420, 1068], [-548, 1120]], trees: 12, fountain: true },
-    { name: 'Katarina kyrkogård', poly: [[160, 1190], [320, 1190], [320, 1335], [160, 1335]], trees: 20 }
+    { name: 'Katarina kyrkogård', poly: [[160, 1190], [320, 1190], [320, 1335], [160, 1335]], trees: 20 },
+    { name: 'Observatorielunden', poly: [[-779, -1408], [-688, -1408], [-688, -1340], [-779, -1340]], trees: 14 },
+    { name: 'Tegnérlunden', poly: [[-845, -1222], [-788, -1222], [-788, -1162], [-845, -1162]], trees: 10 },
+    { name: 'Johannes kyrkogård', poly: [[-294, -1238], [-198, -1238], [-198, -1164], [-294, -1164]], trees: 10 },
+    { name: 'Klara kyrkogård', poly: [[-466, -574], [-437, -574], [-412, -482], [-466, -482]], trees: 6 },
+    { name: 'Nytorget', poly: [[640, 1238], [720, 1238], [720, 1288], [640, 1288]], trees: 10 }
   ];
   const SQUARES = [
     { name: 'Karl XII:s torg', poly: [[-5, -352], [97, -352], [97, -280], [-5, -280]], statue: [45, -305] },
@@ -1585,10 +1739,13 @@ body.touch .tk-sign .key { display: none; }
     { name: 'Yttre borggården', poly: [[-95, -39], [-63, -39], [-63, 39], [-95, 39]], cobble: true },
     { name: 'Järntorget', poly: [[-36, 432], [4, 436], [10, 452], [-34, 452]], cobble: true },
     { name: 'Köpmantorget', poly: [[100, 224], [118, 224], [118, 240], [100, 240]], cobble: true, statue: [109, 232] },
-    { name: 'Brända tomten', poly: [[78, 270], [92, 270], [92, 282], [78, 282]], cobble: true, tree: [85, 276] },
-    { name: 'Riddarhustorget', poly: [[-213, -10], [-201, -10], [-201, 26], [-213, 26]], statue: [-207, 8] },
+    { name: 'Brända tomten', poly: [[70, 268], [84, 268], [84, 282], [70, 282]], cobble: true, tree: [76, 275] },
+    { name: 'Riddarhustorget', poly: [[-213, -10], [-201, -10], [-201, 20], [-213, 20]], statue: [-207, 6] },
     { name: 'Medborgarplatsen', poly: [[100, 1385], [205, 1385], [205, 1460], [100, 1460]] },
-    { name: 'Norrmalmstorg', poly: [[150, -700], [200, -700], [200, -668], [150, -668]] }
+    { name: 'Norrmalmstorg', poly: [[150, -700], [200, -700], [200, -668], [150, -668]] },
+    { name: 'Brunkebergstorg', poly: [[-168, -632], [-132, -632], [-132, -594], [-168, -594]] },
+    { name: 'Östermalmstorg', poly: [[362, -925], [412, -925], [412, -881], [362, -881]] },
+    { name: 'Mosebacke torg', poly: [[185, 800], [235, 800], [235, 845], [185, 845]], cobble: true }
   ];
   const RAIL_YARD = [[-845, -310], [-618, -310], [-660, -430], [-695, -545], [-730, -684], [-768, -835], [-845, -835]];
   // islands that are mostly lawn and trees
@@ -2206,8 +2363,9 @@ body.touch .tk-sign .key { display: none; }
       addBox(cx0, CZ - 0.06, dx0, CZ + 0.06, 2.4); addBox(dx1, CZ - 0.06, cx1, CZ + 0.06, 2.4);
       const dB = new Builder();
       bars(dB, 0, 1.2);
-      dB.box(1.08, 1.0, -0.09, 1.16, 1.3, 0.09, 0x1d2126);
-      const obst = { t: 0, x0: dx0, z0: CZ - 0.07, x1: dx1, z1: CZ + 0.07, h: 2.4 };
+      dB.box(1.08, 1.0, CZ - 0.09, 1.16, 1.3, CZ + 0.09, 0x1d2126);
+      // (the door runs on its own track a hand's width out in the corridor, so it slides past the fixed bars)
+      const obst = { t: 0, x0: dx0, z0: CZ - 0.04, x1: dx1, z1: CZ + 0.17, h: 2.4 };
       addObstacle(obst, obst.x0, obst.z0, obst.x1, obst.z1);
       // a bunk along the side wall and a steel toilet in the corner
       low.box(cx0 + 0.15 + (i ? IT / 2 : 0), 0, BACK + 0.4, cx0 + 1.0 + (i ? IT / 2 : 0), 0.45, BACK + 4.6, 0x5c6168);
@@ -2269,7 +2427,7 @@ body.touch .tk-sign .key { display: none; }
         add(lampB, std({ map: lampTex, roughness: 0.3, emissive: 0xffffff, emissiveMap: lampTex, emissiveIntensity: 0.9 }));
         add(barsB, std({ color: 0xffffff, vertexColors: true, roughness: 0.4, metalness: 0.6 }));
         const dmat = std({ vertexColors: true, roughness: 0.4, metalness: 0.6 });
-        for (const d of doors) { const m = new THREE.Mesh(d.geo.build(), dmat); m.position.set(d.x0, 0, 0); m.castShadow = true; scene.add(m); d.mesh = m; }
+        for (const d of doors) { const m = new THREE.Mesh(d.geo.build(), dmat); m.position.set(d.x0, 0, 0.1); m.castShadow = true; scene.add(m); d.mesh = m; }
       },
       // the floors above come off while you are inside; cell doors slide towards where they are told to be
       update(dt, px, pz) {
@@ -2328,6 +2486,26 @@ body.touch .tk-sign .key { display: none; }
   landmark([1008, -300, 1, 0], 42, 70, 0x5b4636, 20, { rh: 8, ri: 8, roofCol: 0x3f3229, name: 'Vasamuseet' })
     .box(1027.8, 28, -262, 1028.6, 58, -261.2, 0x3a2c22);
   landmark([125, -1125, 1, 0], 60, 22, 0xe2d6bd, 14, { rh: 3, roofCol: 0x5f9c86, name: 'Kungliga biblioteket' });
+  // more of the city: Klara kyrka's tall spire, Rosenbad by the water, Johannes kyrka in Vasastan, Östermalms saluhall,
+  // and on Kungsholmen the Rådhuset court house and Polishuset, the police headquarters
+  {
+    const B = landmark([-458, -548, 1, 0], 26, 46, 0xa3503a, 15, { rh: 9, ri: 12, roofCol: 0x3a3e42, name: 'Klara kyrka' });
+    steeple(B, -452, -562, -438, -548, 42, 62, 0xa3503a, 0x5f9c86, false);
+  }
+  landmark([-300, -345, 1, 0], 60, 38, 0xd9b8a0, 22, { rh: 4, ri: 4, roofCol: 0x5f9c86, name: 'Rosenbad' });
+  {
+    const B = landmark([-266, -1218, 1, 0], 22, 40, 0xa3503a, 14, { rh: 8, ri: 10, roofCol: 0x3a3e42, name: 'Johannes kyrka' });
+    steeple(B, -262, -1232, -248, -1218, 32, 46, 0xa3503a, 0x3a3e42, false);
+  }
+  {
+    const B = landmark([364, -990, 1, 0], 48, 52, 0x9a4a32, 11, { rh: 5, ri: 10, roofCol: 0x4a4f52, name: 'Östermalms saluhall' });
+    for (const x of [364, 404]) { B.box(x, 0, -990, x + 8, 17, -982, 0x9a4a32, true, false); B.hip(x - 0.3, -990.3, x + 8.3, -981.7, 17, 4, 4, 4, 0x4a4f52); }
+  }
+  {
+    const B = landmark([-1100, -626, 1, 0], 65, 52, 0xa45a3d, 18, { rh: 4, ri: 4, roofCol: 0x5f9c86, name: 'Rådhuset' });
+    B.box(-1072, 18, -626, -1062, 30, -616, 0xa45a3d, true, false); B.hip(-1072.3, -626.3, -1061.7, -615.7, 30, 6, 5, 5, 0x5f9c86);
+  }
+  landmark([-1340, -634, 1, 0], 50, 59, 0xd6c49c, 21, { roof: 'flat', name: 'Polishuset' });
   {
     const B = cityAt(650, 40);
     B.prism(650, 40, 13, 0, 14, 20, 0xe6d8b0);
@@ -4144,7 +4322,7 @@ body.touch .tk-sign .key { display: none; }
         if (g < gap) { gap = g; blocker = p; }
       }
       if (blocker) vT = Math.min(vT, Math.max(0, (gap - 2.2) * 0.9));
-      b.blocker = blocker;
+      b.blocker = blocker; // what it is waiting for (the tests read it)
     }
     // with blue lights on the police go round whatever is in the way at once, oncoming traffic pulls over for them
     const urgent = c.police && c.police.state !== 'patrol' && c.siren;
@@ -4279,11 +4457,21 @@ body.touch .tk-sign .key { display: none; }
   const POLICE_TARGET = 4, CHASE_SPEED = 33, PATROL_SPEED = 14, TOLERANCE = 8;
   const OFFICER = { shirt: 0x1f3a6e, pants: 0x1c2333, hat: 'cap', hatColor: 0x1b2b4f };
   let sirenCars = [], wanted = null, fines = 0, policeCool = 0, policeSpawnT = 0;
-  // the limit of the street you are on; off the streets (squares, quays, parks) 40 in Gamla stan and 50 elsewhere
-  function limitAt(x, z) {
-    const ne = nearestEdge(x, z);
-    if (ne.e && ne.d < ne.e.hw + ne.e.walk + 2) return ne.e.limit;
-    return districtAt(x, z) === 'Gamla stan' ? 40 : 50;
+  // The limit where you are. With a heading (the sign by the speedometer) it is the street you are driving along. Without
+  // one (what the police go by) it is the fastest street there, so crossing a slower street at a junction is never
+  // speeding. Off the streets (squares, quays, parks) 40 in Gamla stan and 50 elsewhere
+  function limitAt(x, z, h) {
+    let top = 0, along = 0, bs = -Infinity;
+    // every street within 30 m of a point is listed in that point's cell
+    for (const e of egCells.get(egKey(Math.floor(x / EG), Math.floor(z / EG))) || []) {
+      const d = edgeDist(e, x, z);
+      if (d >= e.hw + e.walk + 2) continue;
+      top = Math.max(top, e.limit);
+      if (h === undefined) continue;
+      const A = nodes[e.a], B = nodes[e.b], s = Math.abs(((B.x - A.x) * Math.sin(h) + (B.z - A.z) * Math.cos(h)) / e.len) - d / 40;
+      if (s > bs) { bs = s; along = e.limit; }
+    }
+    return (h === undefined ? top : along) || (districtAt(x, z) === 'Gamla stan' ? 40 : 50);
   }
   const fmtKr = (n) => n.toLocaleString('sv-SE') + ' kr';
   // a Swedish registration number, made up the first time anyone asks for it (ABC 12D)
@@ -4457,7 +4645,7 @@ body.touch .tk-sign .key { display: none; }
     // speeding where a patrol can see it
     if (driving && !wanted && policeCool <= 0 && !driving.siren) {
       const kmh = Math.hypot(driving.vx, driving.vz) * 3.6, over = kmh - limitAt(driving.x, driving.z);
-      if (over > TOLERANCE) for (const c of cars) if (c.police && !c.dead && sees(c, T.x, T.z, 75)) { startChase('fart', over); break; }
+      if (over > TOLERANCE) for (const c of cars) if (c.police && !c.dead && sees(c, T.x, T.z, 75)) { startChase('fart', over); wanted.limit = limitAt(driving.x, driving.z); break; }
     }
     if (!wanted) return;
     wanted.t += dt;
@@ -4662,7 +4850,8 @@ body.touch .tk-sign .key { display: none; }
       ticket: null, nav: {}, pnav: {}, locked: false, spot: phase === 'approach' && driving ? stopSpot(c, T) : null, door: null,
       vehicle: driving ? driving.M.name + ', ' + plateOf(driving) : 'Gående'
     };
-    c.police.state = 'stop'; c.siren = false; c.yelp = false; c.beacon = true; c.police.direct = false;
+    // (a constable of this car who was out on foot is the one dealing with you now)
+    c.police.state = 'stop'; c.police.out = null; c.siren = false; c.yelp = false; c.beacon = true; c.police.direct = false;
     for (const o of cars) if (o !== c && o.police && o.police.state === 'chase') setChase(o, false);
     for (const fc of footCops) fc.mode = 'return';
     return stop;
@@ -4674,7 +4863,25 @@ body.touch .tk-sign .key { display: none; }
   // a constable on foot has reached you
   function caughtOnFoot(fc) {
     footCops.splice(footCops.indexOf(fc), 1);
-    const S = newStop(fc.car, arrestable(wanted) ? 'arrest' : 'ticket', 'talk', fc.p);
+    // their own car, or (if it was taken from them) the nearest other patrol
+    let car = fc.car && fc.car.police && cars.indexOf(fc.car) >= 0 && !fc.car.dead ? fc.car : null;
+    if (!car) {
+      let bd = Infinity;
+      for (const c of cars) if (c.police && c.bot && !c.dead && (c.police.state === 'patrol' || c.police.state === 'chase' || c.police.state === 'call')) { const d = Math.hypot(c.x - fc.p.x, c.z - fc.p.z); if (d < bd) { bd = d; car = c; } }
+      if (car) fc.door = doorNear(car, fc.p.x, fc.p.z, false);
+    }
+    if (!car) {
+      // no patrol anywhere: the fine there and then, and the constable goes on their way
+      const { f } = fineFor(wanted);
+      fines += f;
+      toast('Konstapeln skriver ut böter på plats: ' + fmtKr(f) + '.');
+      removePerson(fc.p);
+      for (const o of footCops) o.mode = 'return';
+      wanted = null; policeCool = 30;
+      return;
+    }
+    if (car !== fc.car) { car.vx = car.vz = 0; fc.crew = fc.crew || car.occupant; setOccupant(car, null); }
+    const S = newStop(car, arrestable(wanted) ? 'arrest' : 'ticket', 'talk', fc.p);
     S.crew = fc.crew; S.door = fc.door;
     fc.p.ai.role = 'stop';
     if (S.mode === 'arrest') { S.phase = 'cuff'; S.locked = true; toast('Konstapel ' + S.name + ': Stå still! Du är gripen.'); }
@@ -4756,7 +4963,10 @@ body.touch .tk-sign .key { display: none; }
     const S = stop;
     if (S.officer) { removePerson(S.officer); S.officer = null; }
     const c = S.car;
-    if (c && cars.indexOf(c) >= 0) { if (c.rearSeat) c.rearSeat.visible = false; setOccupant(c, S.crew); c.beacon = false; c.police.state = 'patrol'; resyncBot(c); setChase(c, false); }
+    if (driving) exitCar();
+    S.riding = false;
+    if (c && c.rearSeat) c.rearSeat.visible = false;
+    if (c && c.police && cars.indexOf(c) >= 0) { setOccupant(c, S.crew); c.beacon = false; c.police.state = 'patrol'; resyncBot(c); setChase(c, false); }
     const cell = STATION.doors[1], [x0, z0, x1, z1] = cell.inside;
     player.x = (x0 + x1) / 2; player.z = (z0 + z1) / 2; player.y = 0; player.vx = player.vz = 0;
     player.model.group.visible = true; player.cuffed = false;
@@ -4781,15 +4991,15 @@ body.touch .tk-sign .key { display: none; }
       if (S.fade.t > 0.6) { $('fade').classList.remove('on'); S.fade = null; }
       if (stop !== S) return;
     }
-    const carOk = c && cars.indexOf(c) >= 0 && !c.dead;
+    const carOk = c && c.police && cars.indexOf(c) >= 0 && !c.dead;
     if (!carOk && ['approach', 'parked', 'walk', 'talk', 'back', 'flee'].includes(S.phase)) { endStop(false); return; }
-    if (!carOk && ['escort', 'board', 'transport', 'park'].includes(S.phase)) { if (!S.fade) fadeThen(jailDirect); return; }
+    if (!carOk && ['order', 'cuff', 'escort', 'board', 'transport', 'park'].includes(S.phase)) { if (!S.fade) fadeThen(jailDirect); return; }
     // driving off (or running off) before the paperwork is done turns it back into a chase
     if (!S.locked && ['approach', 'parked', 'walk', 'talk'].includes(S.phase)) {
       const away = Math.hypot(T.x - S.at.x, T.z - S.at.z);
       if (driving ? away > 8 && Math.hypot(driving.vx, driving.vz) > 3 : away > 6) {
         $('ticket').hidden = true;
-        wanted.kinds.add('smitning');
+        if (wanted) wanted.kinds.add('smitning');
         toast('Du smet från poliskontrollen! Nu blir du gripen om de får tag i dig.');
         if (!S.officer) { endStop(true); return; }
         if (driving) { S.phase = 'flee'; S.t = 0; }
@@ -4929,14 +5139,14 @@ body.touch .tk-sign .key { display: none; }
         S.jailT -= dt * (S.wait ? 8 : 1);
         if (S.copLeaving && S.officer && (S.officer.arrived || S.t > 40)) {
           removePerson(S.officer); S.officer = null; S.copLeaving = false;
-          if (cars.indexOf(c) >= 0) { setOccupant(c, S.crew); c.beacon = false; c.police.state = 'patrol'; resyncBot(c); setChase(c, false); }
+          if (c && c.police && cars.indexOf(c) >= 0) { setOccupant(c, S.crew); c.beacon = false; c.police.state = 'patrol'; resyncBot(c); setChase(c, false); }
         }
         if (S.jailT <= 0) {
           STATION.doors[1].want = 1;
           const f = S.ticket ? S.ticket.f : 0;
           fines += f;
           toast('Du är fri att gå. Böter ' + fmtKr(f) + ' har lagts till. Gå ut genom receptionen.');
-          if (S.officer) { removePerson(S.officer); if (cars.indexOf(c) >= 0) { setOccupant(c, S.crew); c.police.state = 'patrol'; resyncBot(c); setChase(c, false); } }
+          if (S.officer) { removePerson(S.officer); if (c && c.police && cars.indexOf(c) >= 0) { setOccupant(c, S.crew); c.police.state = 'patrol'; resyncBot(c); setChase(c, false); } }
           stop = null; wanted = null; policeCool = 60;
         }
         break;
@@ -4992,7 +5202,7 @@ body.touch .tk-sign .key { display: none; }
     stop = null;
     $('ticket').hidden = true;
     if (S.officer) removePerson(S.officer);
-    if (c && cars.indexOf(c) >= 0) {
+    if (c && c.police && cars.indexOf(c) >= 0) {
       setOccupant(c, S.crew);
       c.beacon = false;
       c.police.state = 'patrol';
@@ -5004,6 +5214,32 @@ body.touch .tk-sign .key { display: none; }
   }
 
   /* constables on foot */
+  // a constable already out of the car becomes one running after you
+  function footCop(p, car, crew, door) {
+    const fc = { p, car, crew, door: door || { x: p.x, z: p.z }, mode: 'chase', retT: 0 };
+    p.ai = { state: 'cop', role: 'foot', fc, nav: {}, dodgeT: 0 };
+    p.keep = true;
+    footCops.push(fc);
+    return fc;
+  }
+  // you take a police car: that is theft, and its crew, whether in the car or out on foot, come after you on foot
+  function policeCarTaken(c) {
+    if (stop && stop.car === c && !stop.locked) {
+      const S = stop;
+      stop = null;
+      $('ticket').hidden = true;
+      if (S.officer) footCop(S.officer, null, S.crew);
+    }
+    for (const fc of footCops) if (fc.car === c) fc.car = null;
+    if (c.occupant && c.bot) {
+      const spot = exitSpot(c) || doorSpot(c, -1, false), p = makePerson(c.occupant, spot.x, spot.z, { state: 'cop' });
+      p.rot = c.h;
+      footCop(p, null, c.occupant);
+    }
+    c.police = null; c.siren = false; c.beacon = false; c.yelp = false;
+    offense('stöld', 0, c.x, c.z, c);
+    toast('Du tog polisbilen! Det räknas som stöld.');
+  }
   function deployCop(c) {
     const ex = exitSpot(c) || doorSpot(c, 1, false);
     const crew = c.occupant || makeIdentity(OFFICER), fc = { p: null, car: c, crew, door: ex, mode: 'chase', retT: 0 };
@@ -5017,7 +5253,7 @@ body.touch .tk-sign .key { display: none; }
     removePerson(fc.p);
     footCops.splice(footCops.indexOf(fc), 1);
     const c = fc.car;
-    if (cars.indexOf(c) < 0 || c.dead) return;
+    if (!c || !c.police || cars.indexOf(c) < 0 || c.dead) return;
     setOccupant(c, fc.crew);
     c.police.out = null; c.beacon = false; c.police.state = 'patrol';
     resyncBot(c);
@@ -5025,16 +5261,19 @@ body.touch .tk-sign .key { display: none; }
   }
   function updateFootCops(dt) {
     for (const c of cars) {
-      if (!c.police || c.police.state !== 'wait' || c.police.out) continue;
-      if (c.dead || driving || !wanted || stop) { c.police.state = 'patrol'; c.beacon = false; setChase(c, !!wanted && !stop); continue; }
+      if (!c.police || c.police.state !== 'wait') continue;
+      // a constable no longer out on foot (they caught you, or were taken off) leaves the car free to drive again
+      if (c.police.out && footCops.indexOf(c.police.out) < 0) c.police.out = null;
+      if (c.police.out) continue;
+      if (c.dead || driving || !wanted || stop) { c.police.state = 'patrol'; c.beacon = false; if (!c.occupant) setOccupant(c, makeIdentity(OFFICER)); setChase(c, !!wanted && !stop); continue; }
       if (Math.hypot(c.vx, c.vz) < 1.5) deployCop(c);
     }
     for (const fc of footCops.slice()) {
       if (fc.mode === 'chase' && (driving || !wanted || stop)) fc.mode = 'return';
       if (fc.mode === 'return') {
         fc.retT += dt;
-        const gone = cars.indexOf(fc.car) < 0 || fc.car.dead;
-        if (gone && Math.hypot(fc.p.x - camTarget.x, fc.p.z - camTarget.z) > 90) { removePerson(fc.p); footCops.splice(footCops.indexOf(fc), 1); continue; }
+        const gone = !fc.car || cars.indexOf(fc.car) < 0 || fc.car.dead || !fc.car.police;
+        if (gone && (Math.hypot(fc.p.x - camTarget.x, fc.p.z - camTarget.z) > 70 || fc.retT > 30)) { removePerson(fc.p); footCops.splice(footCops.indexOf(fc), 1); continue; }
         if (!gone && (Math.hypot(fc.door.x - fc.p.x, fc.door.z - fc.p.z) < 1.4 || fc.retT > 45)) copBoard(fc);
       }
     }
@@ -5044,7 +5283,8 @@ body.touch .tk-sign .key { display: none; }
       const seen = wanted && !wanted.inSight ? wanted.seen : player, d = Math.hypot(seen.x - p.x, seen.z - p.z);
       return seek(p, walkWaypoint(p.ai.nav, p.x, p.z, seen.x, seen.z, dt), d > 3 ? COP_RUN : 5, 0.05);
     }
-    if (cars.indexOf(fc.car) >= 0 && !fc.car.dead) fc.door = doorNear(fc.car, p.x, p.z, false);
+    if (!fc.car || !fc.car.police || cars.indexOf(fc.car) < 0 || fc.car.dead) return IDLE();
+    fc.door = doorNear(fc.car, p.x, p.z, false);
     return seek(p, walkWaypoint(p.ai.nav, p.x, p.z, fc.door.x, fc.door.z, dt), 6, 0.1);
   }
   // everyone in uniform on foot: the constable of a stop, constables running, the desk officer, the guards' cousin
@@ -5205,7 +5445,7 @@ body.touch .tk-sign .key { display: none; }
       if (d > 220) continue;
       h.mesh.rotation.y = clock * 1.1 + h.ph;
       h.mesh.position.y = 0.25 + Math.sin(clock * 2.2 + h.ph) * 0.18;
-      if (d < reach && (driving || player.y < 2.5)) collectHorse(h);
+      if (d < reach && (driving || player.y < 2.5) && !(stop && stop.riding)) collectHorse(h);
     }
     if (fireworksT > 0) {
       fireworksT = Math.max(0, fireworksT - dt);
@@ -5267,9 +5507,9 @@ body.touch .tk-sign .key { display: none; }
     return null;
   }
   function enterCar(c) {
-    if (c.bot && c.occupant) {
-      if (c.police) { c.police = null; c.siren = false; offense('stöld', 0, c.x, c.z, c); }
-      else offense('stöld', 0, c.x, c.z);
+    if (c.police) policeCarTaken(c);
+    else if (c.bot && c.occupant) {
+      offense('stöld', 0, c.x, c.z);
       const spot = exitSpot(c);
       const npc = makePerson(c.occupant, spot ? spot.x : c.x, spot ? spot.z : c.z, { state: 'flee', t: 4.5, dodgeT: 0 });
       npc.rot = c.h + Math.PI / 2; npc.vy = 4; npc.grounded = false;
@@ -5324,17 +5564,24 @@ body.touch .tk-sign .key { display: none; }
     if (driving) exitCar();
     else if (nearCar) enterCar(nearCar);
   }
+  // a position partway along a stretch of street, kept clear of the junctions at its ends (the middle if it is short)
+  const alongEdge = (f, s, margin) => (f.len > margin * 2 ? clamp(s, margin, f.len - margin) : f.len / 2);
   function resetToRoad() {
     if (!driving) return;
-    const c = driving, ne = nearestEdge(c.x, c.z);
+    // back onto the nearest street a car can use: a proper street if there is one nearby, otherwise a wide lane
+    const c = driving, ne0 = nearestEdge(c.x, c.z, (e) => e.drive), ne = ne0.e && ne0.d < 60 ? ne0 : nearestEdge(c.x, c.z, (e) => e.emerg && e.hw >= 2.4);
     if (!ne.e) return;
-    const f = edgeFrame(ne.e.a, ne.e.b);
-    const s = clamp((c.x - f.A.x) * f.ux + (c.z - f.A.z) * f.uz, 12, f.len - 12);
-    const hf = Math.atan2(f.ux, f.uz), same = Math.abs(wrapAngle(hf - c.h)) < Math.PI / 2, lat = same ? f.lane : -f.lane;
-    const x = f.A.x + f.ux * s + f.rx * lat, z = f.A.z + f.uz * s + f.rz * lat, h = same ? hf : hf + Math.PI;
-    if (!fitsM(c.M, x, z, h)) return;
-    c.x = x; c.z = z; c.h = h; c.vx = c.vz = 0; c.steer = 0;
-    camYaw = h;
+    const f = edgeFrame(ne.e.a, ne.e.b), s0 = alongEdge(f, (c.x - f.A.x) * f.ux + (c.z - f.A.z) * f.uz, 12);
+    const hf = Math.atan2(f.ux, f.uz), same = Math.abs(wrapAngle(hf - c.h)) < Math.PI / 2;
+    for (const ds of [0, 6, -6, 12, -12]) for (const side of [1, -1, 0]) {
+      const lat = (same ? 1 : -1) * side * f.lane, s = alongEdge(f, s0 + ds, 3);
+      const x = f.A.x + f.ux * s + f.rx * lat, z = f.A.z + f.uz * s + f.rz * lat, h = (same ? hf : hf + Math.PI) + (side < 0 ? Math.PI : 0);
+      if (!spotFree(c.M, x, z, h, c)) continue;
+      c.x = x; c.z = z; c.h = h; c.vx = c.vz = 0; c.steer = 0;
+      camYaw = h;
+      return;
+    }
+    toast('Det finns ingen ledig plats på gatan här.');
   }
 
   /* ---------- car picker ---------- */
@@ -5382,6 +5629,8 @@ body.touch .tk-sign .key { display: none; }
   }
   function openPicker() {
     if (!started) return;
+    // no new car while you are under arrest or in the cell
+    if (stop && stop.locked) { toast('Det går inte nu, du är gripen.'); return; }
     pickerOpen = true;
     $('picker').hidden = false;
     if (document.pointerLockElement && document.exitPointerLock) document.exitPointerLock();
@@ -5395,22 +5644,24 @@ body.touch .tk-sign .key { display: none; }
     const tries = [];
     const ne = nearestEdge(player.x, player.z);
     if (ne.e && ne.d < 25) {
-      const f = edgeFrame(ne.e.a, ne.e.b), s0 = clamp((player.x - f.A.x) * f.ux + (player.z - f.A.z) * f.uz, 14, f.len - 14);
+      const f = edgeFrame(ne.e.a, ne.e.b), s0 = alongEdge(f, (player.x - f.A.x) * f.ux + (player.z - f.A.z) * f.uz, 14);
       const near = (player.x - f.A.x) * f.rx + (player.z - f.A.z) * f.rz >= 0 ? 1 : -1;
       const park = f.park || f.e.hw - 1.1;
       for (const ds of [0, 7, -7, 14, -14, 21, -21]) for (const lat of [park * near, f.lane * near, -f.lane * near, -park * near]) {
-        const s = clamp(s0 + ds, 14, f.len - 14);
+        const s = alongEdge(f, s0 + ds, 6);
         tries.push([f.A.x + f.ux * s + f.rx * lat, f.A.z + f.uz * s + f.rz * lat, Math.atan2(f.ux, f.uz) + (lat < 0 ? Math.PI : 0)]);
       }
     }
     for (const dist of [M.L / 2 + 2, M.L / 2 + 5]) for (const a of [0, Math.PI / 2, -Math.PI / 2, Math.PI]) {
       tries.push([player.x + Math.sin(player.rot + a) * dist, player.z + Math.cos(player.rot + a) * dist, player.rot]);
     }
-    for (const [x, z, h] of tries) if (spotFree(M, x, z, h)) return { x, z, h };
+    // (never inside the police station, where the lobby is just big enough for a car)
+    for (const [x, z, h] of tries) if (spotFree(M, x, z, h) && !STATION.inside(x, z)) return { x, z, h };
     return null;
   }
   function chooseModel(M) {
     closePicker();
+    if (stop && stop.locked) return;
     if (driving) exitCar();
     if (spawnedCar) removeCar(spawnedCar);
     const spot = findSpawnSpot(M);
@@ -5637,7 +5888,7 @@ body.touch .tk-sign .key { display: none; }
         el.hpbar.style.background = c.health > 55 ? '#4cc26a' : c.health > 25 ? '#f7c600' : '#c8102e';
         el.hpText.textContent = c.dead ? 'Död' : Math.round(c.health) + ' %';
       }
-      const lim = limitAt(c.x, c.z);
+      const lim = limitAt(c.x, c.z, c.h);
       el.limitNum.textContent = lim;
       el.limit.classList.toggle('over', kmh > lim + 3 && !c.siren);
     }
@@ -5740,16 +5991,37 @@ body.touch .tk-sign .key { display: none; }
   const DISTRICT_LABELS = [['NORRMALM', -330, -800], ['ÖSTERMALM', 620, -900], ['VASASTAN', -380, -1320], ['KUNGSHOLMEN', -1150, -480], ['GAMLA STAN', -40, 300],
     ['RIDDARHOLMEN', -470, 150], ['BLASIEHOLMEN', 330, -430], ['SKEPPSHOLMEN', 690, 130], ['DJURGÅRDEN', 1350, 60], ['SÖDERMALM', -150, 1300], ['HELGEANDSHOLMEN', -170, -175]];
   const WATER_LABELS = [['Riddarfjärden', -700, 330], ['Strömmen', 170, -175], ['Saltsjön', 900, 520], ['Nybroviken', 700, -470], ['Klara sjö', -878, -620, -Math.PI / 2], ['Söderström', -120, 590]];
-  // one label per street, on its longest stretch
+  // one label per street, on its longest straight run (the junctions along it don't break a run)
   const STREET_LABELS = [];
   {
-    const best = new Map();
-    for (const e of edges) { const b = best.get(e.name); if (!b || e.len > b.len) best.set(e.name, e); }
-    for (const e of best.values()) {
-      const A = nodes[e.a], B = nodes[e.b];
-      let ang = Math.atan2(B.z - A.z, B.x - A.x);
+    const byName = new Map(), dir = (e) => [(nodes[e.b].x - nodes[e.a].x) / e.len, (nodes[e.b].z - nodes[e.a].z) / e.len];
+    for (const e of edges) { if (!byName.has(e.name)) byName.set(e.name, []); byName.get(e.name).push(e); }
+    for (const [name, list] of byName) {
+      const used = new Set();
+      let best = null;
+      for (const e0 of list) {
+        if (used.has(e0)) continue;
+        const d0 = dir(e0), run = [e0];
+        used.add(e0);
+        for (const start of [e0.a, e0.b]) {
+          let n = start;
+          for (;;) {
+            const next = list.find((f) => !used.has(f) && (f.a === n || f.b === n) && Math.abs(dir(f)[0] * d0[0] + dir(f)[1] * d0[1]) > 0.97);
+            if (!next) break;
+            used.add(next); run.push(next); n = next.a === n ? next.b : next.a;
+          }
+        }
+        let lo = Infinity, hi = -Infinity, P = null, Q = null;
+        for (const e of run) for (const i of [e.a, e.b]) {
+          const s = nodes[i].x * d0[0] + nodes[i].z * d0[1];
+          if (s < lo) { lo = s; P = nodes[i]; }
+          if (s > hi) { hi = s; Q = nodes[i]; }
+        }
+        if (!best || hi - lo > best.len) best = { P, Q, len: hi - lo, major: run.some((e) => e.hw >= 7) };
+      }
+      let ang = Math.atan2(best.Q.z - best.P.z, best.Q.x - best.P.x);
       if (ang > Math.PI / 2) ang -= Math.PI; else if (ang < -Math.PI / 2) ang += Math.PI;
-      STREET_LABELS.push({ name: e.name, x: (A.x + B.x) / 2, z: (A.z + B.z) / 2, ang, len: e.len, major: e.hw >= 7 });
+      STREET_LABELS.push({ name, x: (best.P.x + best.Q.x) / 2, z: (best.P.z + best.Q.z) / 2, ang, len: best.len, major: best.major });
     }
   }
   const bigmap = { open: false, cx: 0, cz: 150, zoom: 0, drag: null, drawn: 0 };
@@ -5792,16 +6064,27 @@ body.touch .tk-sign .key { display: none; }
       g.restore();
       if (fits) text(L.name, toX(L.x), toY(L.z), '700 ' + clamp(9 * k / 0.45, 9, 14) + 'px Overpass, sans-serif', '#4a4640', L.ang);
     }
-    for (const [t, x, z, kind] of mapLabels) {
+    // names that would cover one already written are left out (zoom in to see them): the big landmarks first, then the
+    // other buildings, the stations, and the parks and squares
+    const placed = [], room = (t, X, Y, font) => {
+      g.font = font;
+      const w = g.measureText(t).width + 4, h = parseFloat(/(\d+(\.\d+)?)px/.exec(font)[1]) + 2, x0 = X - w / 2, y0 = Y - h / 2;
+      for (const [bx, by, bw, bh] of placed) if (x0 < bx + bw && bx < x0 + w && y0 < by + bh && by < y0 + h) return false;
+      placed.push([x0, y0, w, h]);
+      return true;
+    };
+    const rank = ([t, , , kind]) => (kind === 'landmark' ? (MAJOR_LANDMARKS.includes(t) ? 0 : 1) : kind === 'tbana' ? 2 : 3);
+    for (const [t, x, z, kind] of mapLabels.slice().sort((a, b) => rank(a) - rank(b))) {
       if (kind === 'landmark' && (k > 0.42 || MAJOR_LANDMARKS.includes(t))) {
         g.fillStyle = '#7a2a1a'; g.beginPath(); g.arc(toX(x), toY(z), 3, 0, TAU); g.fill();
-        text(t, toX(x), toY(z) - 11, '700 ' + clamp(10 * Math.sqrt(k / 0.3), 10, 15) + 'px Overpass, sans-serif', '#5a2414');
+        const font = '700 ' + clamp(10 * Math.sqrt(k / 0.3), 10, 15) + 'px Overpass, sans-serif';
+        if (room(t, toX(x), toY(z) - 11, font)) text(t, toX(x), toY(z) - 11, font, '#5a2414');
       } else if (kind === 'tbana' && k > 0.18) {
         const X = toX(x), Y = toY(z);
         g.fillStyle = '#1062b4'; g.beginPath(); g.arc(X, Y, 7, 0, TAU); g.fill();
         g.fillStyle = '#fff'; g.font = '900 10px Overpass, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('T', X, Y + 0.5);
-        if (k > 0.4) text(t, X, Y + 14, '700 11px Overpass, sans-serif', '#1062b4');
-      } else if ((kind === 'park' || kind === 'square') && k > 0.45) text(t, toX(x), toY(z), 'italic 600 11px Overpass, sans-serif', kind === 'park' ? '#3b6e2a' : '#6b6255');
+        if (k > 0.4 && room(t, X, Y + 14, '700 11px Overpass, sans-serif')) text(t, X, Y + 14, '700 11px Overpass, sans-serif', '#1062b4');
+      } else if ((kind === 'park' || kind === 'square') && k > 0.45 && room(t, toX(x), toY(z), 'italic 600 11px Overpass, sans-serif')) text(t, toX(x), toY(z), 'italic 600 11px Overpass, sans-serif', kind === 'park' ? '#3b6e2a' : '#6b6255');
     }
     for (const [t, x, z] of DISTRICT_LABELS) text(t, toX(x), toY(z), '900 ' + clamp(14 * Math.sqrt(k / 0.25), 12, 26) + 'px Overpass, sans-serif', 'rgba(40,36,30,.62)', 0, 'rgba(255,255,255,.6)');
     // the Dalahästar you have found
@@ -6361,8 +6644,8 @@ body.touch .tk-sign .key { display: none; }
       });
     },
     get cars() { return cars; }, blockedAt: (x, z, r) => blockedAt(x, z, r), obstaclesNear(x, z, r) { const out = []; forNear(x - r, z - r, x + r, z + r, (o) => out.push({ ...o })); return out; }, distTo, get persons() { return persons; }, get player() { return player; }, get driving() { return driving; },
-    get wanted() { return wanted; }, get fines() { return fines; }, get audio() { return audio; }, get stop() { return stop; }, footCops, STATION, useKey, walkWaypoint, walkLine, signTicket, beginStop, setCall, resyncBot, get horses() { return horses; }, fireworks(s) { fireworksT = s; },
-    nodes, edges, walkable, fitsM, MODEL, driveAccel,
+    get wanted() { return wanted; }, get fines() { return fines; }, get audio() { return audio; }, get stop() { return stop; }, footCops, STATION, useKey, walkWaypoint, walkLine, landmarkList, mapSquares, mapGreens, signTicket, beginStop, setCall, resyncBot, get horses() { return horses; }, fireworks(s) { fireworksT = s; },
+    nodes, edges, walkable, fitsM, MODEL, driveAccel, limitAt, nearestEdgeAt(x, z) { const ne = nearestEdge(x, z); return ne.e && ne.d < ne.e.hw + ne.e.walk + 2 ? ne.e : null; },
     state() {
       const bad = [];
       for (const c of cars) { if (!isFinite(c.x + c.z + c.h + c.vx + c.vz)) bad.push('nan-car'); else if (!fitsM(c.M, c.x, c.z, c.h)) bad.push('car-off ' + c.M.id + ' ' + c.x.toFixed(1) + ',' + c.z.toFixed(1)); }
