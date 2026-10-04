@@ -2798,12 +2798,21 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
       if (M.bus) {
         for (let z = hl - 3.2; z > -hl + 1.2; z -= 0.85) for (const sx of [1, -1]) if (!S.busDoors.some(([a, b]) => z > a - 0.3 && z < b + 0.3)) mg.box(0.9, 0.5, 0.1, 0x2f4f7a, sx * (hw - 0.6), y1 + 0.25, z);
       } else {
-        const sx = Math.min(driver.x, xi - 0.28);
+        // the seats follow the roof: a low or sloping roof gets a shorter backrest, and the headrest goes if there's no room
+        const ceil = (z) => Math.min(sh.topAt(z - 0.08), sh.topAt(z), sh.topAt(z + 0.08)) - 0.08;
+        const inner = (z, y) => { const r = sh.ring(z); return lerp(r.gB, r.gT, clamp((y - r.yt) / Math.max(1e-3, r.top - r.yt), 0, 1)) - 0.06; };
+        const bz = seatZ - 0.32, bot = sy - 0.275, top = Math.min(sy + 0.275, ceil(bz)), roomTop = ceil(bz - 0.02);
+        const sx = Math.min(driver.x, xi - 0.28, inner(bz, top) - 0.25);
         for (const s of [1, -1]) {
-          mg.box(0.5, 0.55, 0.12, seat, s * sx, sy, seatZ - 0.32);
-          mg.box(0.26, 0.17, 0.1, seat, s * sx, sy + 0.38, seatZ - 0.34);
+          mg.box(0.5, top - bot, 0.12, seat, s * sx, (top + bot) / 2, bz);
+          const hTop = Math.min(sy + 0.465, roomTop), hBot = top + 0.02;
+          if (hTop - hBot > 0.08) mg.box(0.26, hTop - hBot, 0.1, seat, s * sx, (hTop + hBot) / 2, seatZ - 0.34);
         }
-        if (!M.sport && seatZ - 1.2 > z0) mg.box(2 * xi - 0.1, 0.5, 0.12, seat, 0, sy - 0.03, seatZ - 1.2);
+        const rz = seatZ - 1.2;
+        if (!M.sport && rz > z0) {
+          const rBot = sy - 0.28, rTop = Math.min(sy + 0.22, ceil(rz));
+          if (rTop - rBot > 0.25) mg.box(2 * Math.min(xi, inner(rz, rTop)) - 0.1, rTop - rBot, 0.12, seat, 0, (rTop + rBot) / 2, rz);
+        }
         mg.add(new THREE.TorusGeometry(0.17, 0.025, 6, 18), 0x15171a, driver.x, y1 + 0.16, seatZ + 0.42, -0.45, 0, 0);
       }
     }
@@ -3060,10 +3069,33 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
     let vf = c.vx * fx + c.vz * fz, vl = c.vx * rx + c.vz * rz;
     const throttle = inp ? inp.fwd : 0, steerIn = inp ? -inp.right : 0, hand = inp ? inp.brake : false;
     c.throttle = Math.abs(throttle); c.thr = throttle;
-    c.reversing = vf < -0.3 || (throttle < -0.05 && vf < 0.5);
-    if (c.auto) autoShift(c, vf, throttle);
+    const you = c === driving;
+    if (you && (c.auto || M.ev)) {
+      // automatic: S only brakes. Once the car stands still, let go and hold S again to put it in R (W back to drive)
+      const want = throttle > 0.05 ? 1 : throttle < -0.05 ? -1 : 0, still = Math.abs(vf) < 0.6;
+      if (!want || !still) { c.shiftOk = !want && still; c.rT = 0; }
+      else if ((want < 0) !== c.inR && c.shiftOk && (c.rT += dt) > 0.3) { c.inR = want < 0; c.rT = 0; onShift(c, c.inR ? -1 : 1); }
+    }
+    c.reversing = you ? c.inR || vf < -0.3 : vf < -0.3 || (throttle < -0.05 && vf < 0.5);
+    if (c.auto && !c.inR) autoShift(c, vf, throttle);
     const power = c.dead ? 0 : c.power;
-    if (throttle > 0.05) {
+    if (you) {
+      // your car goes where the gear says: forwards in 1 and up, backwards only in R; the other pedal brakes to a stop
+      const go = c.inR ? -throttle : throttle, back = c.inR ? -1 : 1;
+      if (go > 0.05) {
+        if (vf * back < -0.5) vf += M.brake * go * back * dt;
+        else if (c.inR) { if (vf > -M.rev) vf -= M.accel * 0.7 * go * power * dt; }
+        else if (c.shiftT <= 0) vf += driveAccel(M, Math.max(0, vf), c.gear, power) * go * dt;
+      } else if (go < -0.05) {
+        const dv = M.brake * -go * dt;
+        vf = Math.abs(vf) <= dv ? 0 : vf - Math.sign(vf) * dv;
+      } else {
+        const r = Math.max(0, vf) / M.gearTop[c.gear];
+        const engine = c.shiftT > 0 || Math.abs(vf) < 1 || c.dead || c.inR ? 0 : 0.9 * Math.pow(M.max / M.gearTop[c.gear], 0.5) * Math.min(r, 1.2);
+        const roll = (2.2 + engine) * dt;
+        vf = Math.abs(vf) <= roll ? 0 : vf - Math.sign(vf) * roll;
+      }
+    } else if (throttle > 0.05) {
       if (vf < -0.5) vf += M.brake * throttle * dt;
       else if (c.shiftT <= 0) vf += driveAccel(M, Math.max(0, vf), c.gear, power) * throttle * dt;
     } else if (throttle < -0.05) {
@@ -3568,12 +3600,12 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
     const vf = c.vx * fx + c.vz * fz, look = 5 + Math.abs(vf) * 0.55;
     let vT = b.cruise, tx = c.x + fx * look, tz = c.z + fz * look;
     b.passT -= dt; b.ignoreT -= dt; b.honkT -= dt;
-    // make way for blue lights coming up behind: pull in to the kerb and slow right down
+    // make way for blue lights coming up behind or towards you: pull in to the kerb and slow right down
     let yieldTo = false;
     if (!c.police) for (const o of sirenCars) {
       if (o === c) continue;
       const dx = o.x - c.x, dz = o.z - c.z, ah = dx * fx + dz * fz, lat = dx * lxv + dz * lzv;
-      if (ah > -45 && ah < 10 && Math.abs(lat) < 7) { yieldTo = true; break; }
+      if ((ah > -45 && ah < 10 && Math.abs(lat) < 7) || (ah >= 10 && ah < 55 && Math.abs(lat) < 9 && Math.cos(o.h - c.h) < -0.5)) { yieldTo = true; break; }
     }
     b.yielding = yieldTo;
     if (yieldTo) { vT = 3; b.passT = 0; }
@@ -3596,7 +3628,7 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
       const e = edgeFrame(b.from, b.to);
       const s = (c.x - e.A.x) * e.ux + (c.z - e.A.z) * e.uz, remain = e.len - (e.B.r + 4) - s;
       if (remain < 20) b.passT = Math.min(b.passT, 0);
-      const chasing = c.police && c.police.state === 'chase';
+      const chasing = c.police && c.police.state !== 'patrol';
       // traffic keeps to the speed limit; police on a call don't
       if (!chasing) vT = Math.min(vT, (e.e.limit / 3.6) * 1.08);
       const lane = yieldTo ? e.e.hw - 0.8 : b.passT > 0 ? e.pass : chasing ? (e.e.hw >= 8 ? e.pass : 1.0) : e.lane, st = s + look;
@@ -3637,19 +3669,23 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
       }
       if (blocker) vT = Math.min(vT, Math.max(0, (gap - 2.2) * 0.9));
     }
-    if (b.passT > 0 && blocker && blocker.M && Math.cos(blocker.h - c.h) < -0.3) b.passT = 0;
+    // with blue lights on the police go round whatever is in the way at once, oncoming traffic pulls over for them
+    const urgent = c.police && c.police.state !== 'patrol' && c.siren;
+    if (b.passT > 0 && !urgent && blocker && blocker.M && Math.cos(blocker.h - c.h) < -0.3) b.passT = 0;
     const slow = Math.abs(vf) < 0.7;
     if (blocker && slow) b.waitT += dt; else b.waitT = Math.max(0, b.waitT - dt * 2);
     if (blocker === player && slow && b.waitT > 1.2 && b.honkT <= 0) { honkAt(c.x, c.z); b.honkT = 3.5; }
     // police closing in on you stay behind you instead of overtaking or pushing through
     const holdBehind = c.police && c.police.state === 'chase' && (blocker === driving || blocker === player);
-    if (blocker && slow && b.waitT > 2.5 && b.passT <= 0 && b.phase === 'edge' && !holdBehind) {
+    const urgentPass = urgent && !holdBehind && blocker && b.phase === 'edge' && gap < 26 && b.passT <= 0 && (!blocker.M || Math.hypot(blocker.vx, blocker.vz) < vf - 2 || slow);
+    if (urgentPass) { b.passT = 5; if (gap < 4.5 && slow) b.revT = 0.8; }
+    else if (blocker && slow && b.waitT > 2.5 && b.passT <= 0 && b.phase === 'edge' && !holdBehind) {
       if (!blocker.M || Math.hypot(blocker.vx, blocker.vz) < 0.5) {
         b.passT = 7;
         if (gap < 4.5) b.revT = 1.1; // back up a little first so there is room to swing out
       }
     }
-    if (b.passT > 0) vT = Math.min(vT, 6);
+    if (b.passT > 0) vT = Math.min(vT, urgent ? 16 : 6);
     if (b.waitT > 9 && !holdBehind) { b.ignoreT = 2.5; b.waitT = 0; }
 
     const dx = tx - c.x, dz = tz - c.z, lz = dx * fx + dz * fz, lx = dx * lxv + dz * lzv;
@@ -3767,7 +3803,7 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
   }
   const fmtKr = (n) => n.toLocaleString('sv-SE') + ' kr';
   function makePolice(c) {
-    c.police = { state: 'patrol', direct: false, goalNode: -1 };
+    c.police = { state: 'patrol', direct: false, goalNode: -1, callIn: 15 + Math.random() * 40 };
     c.siren = false; c.yelp = false;
     c.bot.cruise = 12;
     setOccupant(c, makeIdentity(OFFICER));
@@ -3861,8 +3897,27 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
     b.from = fwd ? ne.e.a : ne.e.b; b.to = fwd ? ne.e.b : ne.e.a;
     b.next = chooseNext(b.from, b.to, b.goal); b.phase = 'edge'; b.t = 0;
   }
+  // now and then a patrol gets a call somewhere in town and goes there on blue lights (utryckning), then back to patrol
+  function setCall(c, on) {
+    const P = c.police, b = c.bot;
+    P.state = on ? 'call' : 'patrol';
+    c.siren = on; c.yelp = false;
+    b.cruise = on ? CHASE_SPEED * 0.85 : 12; b.turnV = on ? 8.5 : 5.5; b.passT = 0;
+    if (on) {
+      const far = nodes.map((n, i) => i).filter((i) => { const d = Math.hypot(nodes[i].x - c.x, nodes[i].z - c.z); return d > 250 && d < 700 && nodes[i].nb.length; });
+      const n = far.length ? rpick(far) : nearestNode(c.x, c.z);
+      b.goal = { node: n, x: nodes[n].x, z: nodes[n].z };
+      P.callT = 45; P.goalNode = -1;
+    } else { b.goal = null; P.callIn = 40 + Math.random() * 60; }
+    if (b.phase === 'edge') b.next = chooseNext(b.from, b.to, b.goal);
+  }
   function policeThink(c, dt) {
     const P = c.police;
+    if (P.state === 'patrol' && !wanted && (P.callIn -= dt) <= 0) setCall(c, true);
+    if (P.state === 'call') {
+      const g = c.bot.goal;
+      if ((P.callT -= dt) <= 0 || !g || Math.hypot(g.x - c.x, g.z - c.z) < 30) setCall(c, false);
+    }
     if (P.state !== 'chase') return botThink(c, dt);
     const T = playerTarget(), d = Math.hypot(T.x - c.x, T.z - c.z);
     c.yelp = d < 70;
@@ -4055,7 +4110,7 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
     // keep whichever gearbox you used last; a car taken on the move starts in a gear that suits its speed
     c.auto = gearAuto;
     const vf = Math.max(0, c.vx * Math.sin(c.h) + c.vz * Math.cos(c.h));
-    c.gear = 0;
+    c.gear = 0; c.inR = false; c.shiftOk = vf < 0.6; c.rT = 0;
     while (c.gear < c.M.gears - 1 && vf > c.M.gearTop[c.gear] * 0.85) c.gear++;
     player.model.group.visible = false;
     player.vx = player.vz = player.vy = 0;
@@ -4066,14 +4121,21 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
   function playerShift(dir) {
     if (!driving || paused()) return;
     if (driving.M.ev) { evNote(); return; }
-    if (driving.auto) { driving.auto = false; gearAuto = false; toast('Manuell växellåda: M växlar upp, N ner. G byter tillbaka till automat.'); }
-    shiftTo(driving, driving.gear + dir);
+    if (driving.auto) { driving.auto = false; gearAuto = false; toast('Manuell växellåda: M växlar upp, N ner, och under ettan ligger R. G byter tillbaka till automat.'); }
+    const c = driving, vf = c.vx * Math.sin(c.h) + c.vz * Math.cos(c.h);
+    // below first gear is R, but only with the car (almost) standing still, like a real gearbox
+    if (c.inR) { if (dir > 0) { c.inR = false; c.gear = 0; onShift(c, 1); } return; }
+    if (dir < 0 && c.gear === 0) {
+      if (Math.abs(vf) > 1.5) { toast('Stanna bilen först, sedan kan du lägga i R.'); return; }
+      c.inR = true; onShift(c, -1); return;
+    }
+    shiftTo(c, c.gear + dir);
   }
   function toggleGearbox() {
     if (!driving || paused()) return;
     if (driving.M.ev) { evNote(); return; }
     gearAuto = driving.auto = !driving.auto;
-    toast(gearAuto ? 'Automatlåda.' : 'Manuell växellåda: M växlar upp, N ner.');
+    toast(gearAuto ? 'Automatlåda. S bromsar, stå still och håll in S igen för R.' : 'Manuell växellåda: M växlar upp, N ner. Under ettan ligger R.');
   }
   function exitCar() {
     const c = driving, out = exitSpot(c);
@@ -4203,7 +4265,7 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
       const c = cars[i];
       if (c === driving || c.keep || c === spawnedCar) continue;
       const d = Math.hypot(c.x - player.x, c.z - player.z);
-      if (c.police && c.police.state === 'chase') continue;
+      if (c.police && c.police.state !== 'patrol') continue;
       if (c.bot) {
         if ((c.bot.stuckTotal > 12 && d > 70) || d > (c.police ? 800 : TRAFFIC_RANGE + 120)) removeCar(c);
         continue;
@@ -4356,7 +4418,7 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
   let lastPrompt = null, lastDriving, locT = 0, toastT = 0, lastUse = '', lastFines = -1, lastHint = '';
   function toast(msg) { el.toast.textContent = msg; el.toast.hidden = false; toastT = Math.min(6.5, 2.2 + msg.length * 0.035); }
   function gearOf(c, vf) {
-    if (c.reversing) return 'R';
+    if (c.reversing || c.inR) return 'R';
     if (c.M.ev) return Math.abs(vf) < 0.3 && c.throttle < 0.05 ? 'P' : 'D';
     if (c.auto && Math.abs(vf) < 0.3 && c.throttle < 0.05) return 'N';
     return String(c.gear + 1);
@@ -5055,7 +5117,7 @@ body.touch #toast { bottom: calc(240px + env(safe-area-inset-bottom, 0px)); }
     shot(cx, cy, cz, tx, ty, tz) { testHold = true; camera.position.set(cx, cy, cz); camera.lookAt(tx, ty, tz); camera.updateMatrixWorld(); renderer.render(scene, camera); },
     look(yaw, pitch) { camYaw = yaw; if (pitch !== undefined) camPitch = pitch; lastLook = performance.now(); },
     choose(id) { chooseModel(MODEL[id]); },
-    openPicker, closePicker, crash, limitAt, startChase, endChase, openBigmap, closeBigmap, drawBigmap, bigmap,
+    openPicker, closePicker, crash, limitAt, startChase, endChase, openBigmap, closeBigmap, drawBigmap, bigmap, carShape, MODELS,
     info() {
       const r = renderer.info;
       return { calls: r.render.calls, triangles: r.render.triangles, geometries: r.memory.geometries, chunks: chunks.size, buildings: mapPolys.length, lamps: lamps.length, trees: lindens.length + cherries.length, loadMs: Math.round(loadMs) };
