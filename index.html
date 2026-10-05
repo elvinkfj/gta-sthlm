@@ -119,6 +119,27 @@ body.playing #hud { opacity: 1; }
 @keyframes beacon { 50% { background: var(--sign-red); box-shadow: 0 0 12px 4px rgba(200, 16, 46, 0.8); } }
 .tag.fine { padding: 5px 11px; }
 #wanted.calm { animation: none; box-shadow: 0 0 0 2px #2f6bff; }
+body.job #wanted { top: calc(112px + env(safe-area-inset-top, 0px)); }
+/* the job you are on: what to do, how far, the clock */
+#job {
+  position: absolute; left: 50%; top: calc(58px + env(safe-area-inset-top, 0px)); transform: translateX(-50%);
+  display: flex; align-items: center; gap: 11px; padding: 7px 15px 7px 9px; border-radius: 9px; background: var(--glass);
+  box-shadow: 0 0 0 2px var(--sign-yellow); white-space: nowrap;
+}
+#job b { display: block; font-weight: 900; font-size: 0.95rem; }
+#job small { display: block; font-size: 0.76rem; opacity: 0.9; font-variant-numeric: tabular-nums; }
+.job-icon { width: 30px; height: 30px; border-radius: 7px; display: grid; place-items: center; background: var(--sign-yellow); color: var(--asphalt); font: 900 0.95rem/1 var(--font-sign); }
+#jobClock { font: 700 1.25rem/1 var(--font-gauge); font-variant-numeric: tabular-nums; margin-left: 4px; }
+#jobClock:empty { display: none; }
+#bigText {
+  position: fixed; left: 50%; top: 34%; transform: translate(-50%, -50%); pointer-events: none; text-align: center;
+  font: 900 clamp(2.4rem, 9vw, 5.4rem)/1 var(--font-sign); color: var(--sign-yellow); letter-spacing: 0.02em;
+  text-shadow: 0 4px 0 rgba(0, 0, 0, 0.35), 0 0 24px rgba(0, 0, 0, 0.45); white-space: pre-line;
+}
+#bigText small { display: block; font-size: 0.32em; color: var(--snow); margin-top: 0.5em; letter-spacing: 0.04em; }
+.tag.cash b { color: #7be08f; margin-left: 2px; font-variant-numeric: tabular-nums; }
+#btnJob { right: calc(30px + env(safe-area-inset-right, 0px)); bottom: calc(196px + env(safe-area-inset-bottom, 0px)); width: 62px; height: 62px; background: var(--sign-yellow); font-size: 0.8rem; }
+
 #fade { position: fixed; inset: 0; background: #05080b; opacity: 0; pointer-events: none; transition: opacity 0.4s ease; }
 #fade.on { opacity: 1; }
 
@@ -211,6 +232,8 @@ h1 { margin: 0; font: 900 clamp(2.2rem, 9vw, 3.1rem)/0.95 var(--font-sign); lett
 .lg-t { background: #1062b4; color: #fff; box-shadow: 0 0 0 2px var(--snow); }
 .lg-park { border-radius: 3px !important; background: #a9cf8c; }
 .lg-main { border-radius: 3px !important; background: #fbe7a6; }
+.lg-race { border-radius: 2px !important; background: #ffe14a; box-shadow: 0 0 0 2px #1b1c1e; }
+.lg-goal { background: #ffc21a; box-shadow: 0 0 0 2px var(--snow); }
 
 /* ---------- car picker ---------- */
 #picker { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; box-sizing: border-box; overflow-y: auto; background: rgba(6, 16, 26, 0.55); }
@@ -265,6 +288,12 @@ body.touch .tk-sign .key { display: none; }
   #wanted { top: calc(210px + env(safe-area-inset-top, 0px)); }
   body.touch #wanted { top: calc(198px + env(safe-area-inset-top, 0px)); }
 }
+/* on a narrow screen the job panel goes under the street sign on the right, and the police panel under that */
+@media (max-width: 760px) {
+  #job { top: calc(210px + env(safe-area-inset-top, 0px)); left: auto; right: calc(16px + env(safe-area-inset-right, 0px)); transform: none; max-width: calc(100vw - 32px); }
+  #job small { white-space: normal; }
+  body.job #wanted, body.job.touch #wanted { top: calc(276px + env(safe-area-inset-top, 0px)); }
+}
 @media (prefers-reduced-motion: reduce) { .sign { animation: none; } #hud { transition: none; } #limit.over, #wanted, .beacon, #ticket { animation: none; } #limit.over { box-shadow: inset 0 0 0 7px var(--sign-red), 0 0 0 4px var(--sign-red); } }
 </style>
 </head>
@@ -279,9 +308,12 @@ body.touch .tk-sign .key { display: none; }
     <div class="tag"><span class="key">K</span>Karta</div>
     <div class="tag"><span class="key">T</span><span id="soundLabel">Ljud på</span></div>
     <div class="tag fine" id="fineTag" hidden>Böter <b id="fines">0 kr</b></div>
+    <div class="tag cash" id="cashTag" hidden title="Det du tjänat på uppdrag">Kassa <b id="cash">0 kr</b></div>
     <div class="tag dala-tag" title="Dalahästar du hittat"><svg class="dala" viewBox="0 0 20 20" aria-hidden="true"><path d="M4 18V11L3 10V8l2-1 1-4h3l1 2-2 1v1h7l1 1v8h-3v-4H8v4z" fill="#c8102e" stroke="#fff" stroke-width="1"/></svg><b id="horses">0/20</b></div>
   </div>
   <div id="loc"><span id="locStreet"></span><span id="locDistrict">Norrmalm</span></div>
+  <div id="job" hidden><span class="job-icon" id="jobIcon">T</span><span><b id="jobTitle"></b><small id="jobHint"></small></span><span id="jobClock"></span></div>
+  <div id="bigText" hidden></div>
   <div id="wanted" hidden><span class="beacon" aria-hidden="true"></span><span><b id="wantedTitle">Polisen jagar dig</b><small id="wantedHint">Kör in till kanten och stanna</small></span></div>
   <div id="ticket" hidden role="dialog" aria-labelledby="tkTitle">
     <div class="tk-head"><span class="tk-badge">POLISEN</span><span id="tkTitle">Föreläggande av ordningsbot</span></div>
@@ -313,10 +345,12 @@ body.touch .tk-sign .key { display: none; }
     <span class="key">K</span><span>Stor karta (eller klicka på kartan)</span>
     <span class="key">F</span><span>Tuta</span>
     <span class="key">L</span><span>Blåljus, när du kör en polisbil</span>
-    <span class="key">Polis</span><span>Kör in till kanten och stanna, så kommer en konstapel fram. E skriver under boten. 30 km/h för fort eller flykt: du blir gripen och hamnar i cellen på polisstationen i Gamla stan</span>
+    <span class="key">Polis</span><span>Kör in till kanten och stanna, så kommer en konstapel fram. E skriver under boten. 50 km/h för fort eller flykt: du blir gripen och hamnar i cellen på polisstationen i Gamla stan</span>
     <span class="key">Dalahäst</span><span>20 st gömda i stan, 9 i Gamla stan. Gå eller kör in i dem</span>
+    <span class="key">J</span><span>Jobb: taxi i taxin, paket i Sprintern, busslinje i bussen. Vid en gul ljuspelare: starta gatlopp</span>
     <span class="key">R</span><span>Ställ bilen på gatan igen</span>
     <span class="key">T</span><span>Ljud av och på</span>
+    <span class="key">Q</span><span>Grafikkvalitet: hög, mellan eller enkel</span>
     <span class="key">Esc</span><span>Släpp musen</span>
   </div>
 </div>
@@ -326,6 +360,7 @@ body.touch .tk-sign .key { display: none; }
 <div id="touch" hidden>
   <div id="stick"><div id="knob"></div></div>
   <button id="btnCars" class="tbtn" type="button">Bilar</button>
+  <button id="btnJob" class="tbtn" type="button">Jobb</button>
   <button id="btnUse" class="tbtn off" type="button">Kliv in</button>
   <button id="btnJump" class="tbtn" type="button">Hoppa</button>
   <button id="btnUp" class="tbtn gearbtn" type="button" hidden aria-label="Växla upp">▲</button>
@@ -351,6 +386,7 @@ body.touch .tk-sign .key { display: none; }
         <li><span class="k"><span class="key">M</span><span class="key">N</span></span><span>Växla upp och ner</span></li>
         <li><span class="k"><span class="key">E</span></span><span>Kliv in, eller ta en bil som kör förbi</span></li>
         <li><span class="k"><span class="key">B</span></span><span>Välj bilmodell</span></li>
+        <li><span class="k"><span class="key">J</span></span><span>Jobb (taxi, paket, buss) och gatlopp</span></li>
       </ul>
       <ul class="keys only-touch">
         <li><span class="k"><span class="key">Spak</span></span><span>Gå, eller kör</span></li>
@@ -379,7 +415,7 @@ body.touch .tk-sign .key { display: none; }
     <canvas id="bigmapCanvas"></canvas>
     <div class="legend">
       <span><i class="lg-you"></i>Du</span><span><i class="lg-police"></i>Polis</span><span><i class="lg-car"></i>Din bil</span>
-      <span><i class="lg-t">T</i>Tunnelbana</span><span><i class="lg-dala"></i>Hittad dalahäst</span><span><i class="lg-park"></i>Park</span><span><i class="lg-main"></i>Huvudgata</span>
+      <span><i class="lg-t">T</i>Tunnelbana</span><span><i class="lg-dala"></i>Hittad dalahäst</span><span><i class="lg-park"></i>Park</span><span><i class="lg-main"></i>Huvudgata</span><span><i class="lg-race"></i>Gatlopp</span><span><i class="lg-goal"></i>Mål och GPS</span>
     </div>
   </div>
 </div>
@@ -457,7 +493,7 @@ body.touch .tk-sign .key { display: none; }
   scene.background = new THREE.Color().setRGB(HAZE[0], HAZE[1], HAZE[2]);
   scene.fog = new THREE.Fog(0xffffff, 180, 1350);
   scene.fog.color.setRGB(HAZE[0], HAZE[1], HAZE[2]);
-  const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 2400);
+  const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.2, 2400);
 
   const hemi = new THREE.HemisphereLight(0xdcecff, 0x8a8172, 0.3);
   scene.add(hemi);
@@ -710,10 +746,11 @@ body.touch .tk-sign .key { display: none; }
   }
 
   const maxAniso = renderer.capabilities.getMaxAnisotropy();
-  function canvasTex(w, h, draw, repeat, linear) {
+  // readback: the pixels will be read back (grain, normal maps), so keep the canvas in main memory
+  function canvasTex(w, h, draw, repeat, linear, readback) {
     const c = document.createElement('canvas');
     c.width = w; c.height = h;
-    draw(c.getContext('2d'), w, h);
+    draw(c.getContext('2d', { willReadFrequently: !!readback }), w, h);
     const t = new THREE.CanvasTexture(c);
     t.anisotropy = maxAniso;
     if (!linear) t.encoding = THREE.sRGBEncoding;
@@ -808,7 +845,7 @@ body.touch .tk-sign .key { display: none; }
     g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(fx - 7, fy + fh + 8, fw + 14, 3);
   }
   const facadeAtlas = (rough) => (g, w) => { const s = w / 4; FACADE_CELLS.forEach((cell, i) => facadeCell(g, (i % 4) * s, Math.floor(i / 4) * s, s, cell, rough)); };
-  const facadeTex = canvasTex(512, 512, facadeAtlas(false), true);
+  const facadeTex = canvasTex(512, 512, facadeAtlas(false), true, false, true);
   const facadeRough = canvasTex(512, 512, facadeAtlas(true), true, true);
   facadeTex.repeat.set(0.25, 0.25);
   facadeRough.repeat.set(0.25, 0.25);
@@ -918,7 +955,7 @@ body.touch .tk-sign .key { display: none; }
     g.fillStyle = 'rgba(255,255,255,.10)'; g.beginPath(); g.moveTo(x0, y0 + s * 0.5); g.lineTo(x0 + s * 0.5, y0); g.lineTo(x0 + s * 0.7, y0); g.lineTo(x0, y0 + s * 0.7); g.fill();
   }
   const modernAtlas = (rough) => (g, w) => { const s = w / 4; MODERN_CELLS.forEach((cell, i) => modernCell(g, (i % 4) * s, Math.floor(i / 4) * s, s, cell, rough)); };
-  const modernTex = canvasTex(512, 512, modernAtlas(false), true);
+  const modernTex = canvasTex(512, 512, modernAtlas(false), true, false, true);
   const modernRough = canvasTex(512, 512, modernAtlas(true), true, true);
   modernTex.repeat.set(0.25, 0.25);
   modernRough.repeat.set(0.25, 0.25);
@@ -1079,11 +1116,13 @@ body.touch .tk-sign .key { display: none; }
     gTNW: [-92, 190], gTNE: [-36, 190], gTE: [-36, 212], gTSE: [-52, 240], gTSW: [-98, 236], gKG0: [14, 84], gKG1: [12, 150], gBH0: [48, 82], gBH1: [52, 213],
     gSM0: [30, 213], gSM1: [32, 262], gSM1b: [33, 280], gSKo1: [-47, 280], gTB3: [-46, 350], gTB5: [38, 352], gTB6: [64, 352], gTB7: [100, 350],
     gBG0: [60, 264], gBT: [85, 265], gSJ1: [93, 300],
-    // Österlånggatan (O), and where each gränd meets Skeppsbron (Sz, z the distance south of the palace)
-    gOa: [112, 100], gO1: [118, 128], gO1b: [122, 156], gO2: [125, 184], gKT: [128, 220], gO2b: [131, 245], gO3: [134, 268], gO3b: [134, 294],
+    // Österlånggatan (O), and where each gränd meets Skeppsbron (Sz, z the distance south of the palace). The gränder
+    // between them are placed from their real coordinates (hitta.se and Wikidata), scaled to the game's Gamla stan:
+    // z = 232 + (59.325111 − latitude) × 118 700, Köpmantorget being at z = 232
+    gO1: [118, 136], gO1b: [122, 156], gO2: [125, 184], gO2k: [126.8, 206], gKT: [128, 220], gO2b: [131, 245], gO3: [134, 268], gO3b: [134, 294],
     gO3c: [133, 312], gO5: [130, 345], gO6: [122, 370], gO6b: [110, 392], gO7: [88, 415], gO8: [50, 436],
-    gS100: [214.8, 100], gS128: [217.0, 128], gS156: [219.3, 156], gS220: [219.9, 220], gS245: [218.1, 245], gS268: [216.4, 268], gS294: [214.6, 294],
-    gS312: [213.3, 312], gS370: [197.2, 370], gS392: [189.1, 392], gS415: [180.6, 415], gS454: [135, 454], gS475: [100.3, 475.5],
+    gS136: [217.7, 136], gS156: [219.3, 156], gS206: [220.9, 206], gS245: [218.1, 245], gS268: [216.4, 268], gS294: [214.6, 294],
+    gS312: [213.3, 312], gS370: [197.2, 370], gS392: [189.1, 392], gS415: [180.6, 415], gS475: [100.3, 475.5],
     RH1: [-385, -15], RH2: [-470, 50], RH3: [-480, 240], RH4: [-400, 200],
     // Södermalm
     SL1: [50, 665], SMT: [30, 725], CB1: [-260, 705], SMS2: [-550, 745], SMS3: [-850, 768], KV1: [260, 695], KV2: [520, 735],
@@ -1151,7 +1190,7 @@ body.touch .tk-sign .key { display: none; }
     ['Strömbron', 'KT0 SBs', { hw: 6.5, bridge: true }],
     ['Mynttorget', 'MT gMT2 LB', { hw: 5 }],
     ['Slottskajen', 'LB SBs', { hw: 6, walk: 5 }],
-    ['Skeppsbron', 'SBs SK1 gS100 gS128 gS156 SK2 gS220 gS245 gS268 gS294 gS312 SK3 gS370 gS392 gS415 SK4 gS454 gS475 SL0', { hw: 8, walk: 7 }],
+    ['Skeppsbron', 'SBs SK1 gS136 gS156 SK2 gS206 gS245 gS268 gS294 gS312 SK3 gS370 gS392 gS415 SK4 gS475 SL0', { hw: 8, walk: 7 }],
     ['Slottsbacken', 'SK1 gSB1 SBk', { hw: 6 }],
     ['Storkyrkobrinken', 'SBk gBH0 gKG0 STK gP0 gV2 gN0 gRHT', { hw: 4, walk: 1.5 }],
     ['Myntgatan', 'MT gRHN', { hw: 4.5, walk: 2 }],
@@ -1170,17 +1209,18 @@ body.touch .tk-sign .key { display: none; }
     ['Källargränd', 'gKG0 gKG1 gTNE', { kind: 'lane', hw: 1.9, walk: 0.3 }],
     ['Bollhusgränd', 'gBH0 gBH1', { kind: 'lane', hw: 1.8, walk: 0.3 }],
     ['Stortorget', 'gTNW gTNE gTE gTSE gTSW gTNW', { kind: 'lane', hw: 2.6, walk: 0.4 }],
-    ['Köpmangatan', 'gTE gSM0 gBH1 gKT', { kind: 'lane', hw: 2.5, walk: 0.4 }],
+    ['Köpmangatan', 'gTE gSM0 gBH1', { kind: 'lane', hw: 2.5, walk: 0.4 }],
+    ['Köpmanbrinken', 'gBH1 gKT', { kind: 'lane', hw: 2.5, walk: 0.4 }],
     ['Skomakargatan', 'gTSE gSKo1 gTB3', { kind: 'lane', hw: 2.4, walk: 0.4 }],
     ['Svartmangatan', 'gSM0 gSM1 gSM1b gTB5', { kind: 'lane', hw: 2.6, walk: 0.4 }],
     ['Kåkbrinken', 'gV4b gP2b gTSW', { kind: 'lane', hw: 2, walk: 0.3 }],
-    ['Tyska brinken', 'gV6 gP4 gTB3 gTB5 gTB6 gTB7 gO5 SK3', { kind: 'lane', hw: 2.8, walk: 0.5 }],
+    ['Tyska brinken', 'gV6 gP4 gTB3 gTB5 gTB6 gTB7 gO5', { kind: 'lane', hw: 2.8, walk: 0.5 }],
     ['Tyska skolgränd', 'gSKo1 gSM1b', { kind: 'lane', hw: 1.5, walk: 0.3 }],
     ['Kindstugatan', 'gSM1 gBG0 gBT gO3', { kind: 'lane', hw: 2.2, walk: 0.3 }],
     ['Baggensgatan', 'gBG0 gTB6', { kind: 'lane', hw: 2, walk: 0.3 }],
     ['Själagårdsgatan', 'gBT gSJ1 gTB7', { kind: 'lane', hw: 2.2, walk: 0.3 }],
     ['Brunnsgränd', 'gSJ1 gO3b', { kind: 'lane', hw: 1.6, walk: 0.3 }],
-    ['Österlånggatan', 'gSB1 gOa gO1 gO1b gO2 gKT gO2b gO3 gO3b gO3c gO5 gO6 gO6b gO7 gO8 gJT2', { kind: 'lane', hw: 3 }],
+    ['Österlånggatan', 'gSB1 gO1 gO1b gO2 gO2k gKT gO2b gO3 gO3b gO3c gO5 gO6 gO6b gO7 gO8 gJT2', { kind: 'lane', hw: 3 }],
     ['Järntorget', 'gJT gJT2', { kind: 'lane', hw: 5, walk: 0.5 }],
     ['Järntorget', 'gKHT gJT', { kind: 'lane', hw: 3.5 }],
     ['Järntorgsgatan', 'gJT2 gJG SL0', { kind: 'lane', hw: 3 }],
@@ -1198,20 +1238,22 @@ body.touch .tk-sign .key { display: none; }
     ['Funckens gränd', 'gN2b gL2a', { kind: 'lane', hw: 1.5, walk: 0.2 }],
     ['Yxsmedsgränd', 'gV7 gN5', { kind: 'lane', hw: 1.5, walk: 0.2 }],
     ['Munkbrogatan', 'gL3 gMBg', { kind: 'lane', hw: 2.6, walk: 0.4 }],
-    // from Österlånggatan down to Skeppsbron, north to south
-    ['Packhusgränd', 'gOa gS100', { kind: 'lane', hw: 1.6, walk: 0.2 }],
-    ['Ferkens gränd', 'gO1 gS128', { kind: 'lane', hw: 1.4, walk: 0.2 }],
+    // from Österlånggatan down to Skeppsbron, north to south, in the real order: Telegrafgränd by Slottsbacken, then
+    // Skeppar Karls gränd, Bredgränd, Kråkgränd, Nygränd (across from Köpmanbrinken), Skottgränd, Stora Hoparegränd,
+    // Drakens gränd, Ferkens gränd, Gaffelgränd, Johannesgränd, Packhusgränd and Tullgränd down by Slussen
+    ['Telegrafgränd', 'gO1 gS136', { kind: 'lane', hw: 1.5, walk: 0.2 }],
     ['Skeppar Karls gränd', 'gO1b gS156', { kind: 'lane', hw: 1.4, walk: 0.2 }],
-    ['Kråkgränd', 'gO2 SK2', { kind: 'lane', hw: 1.4, walk: 0.2 }],
-    ['Köpmanbrinken', 'gKT gS220', { kind: 'lane', hw: 2.4, walk: 0.3 }],
-    ['Gaffelgränd', 'gO2b gS245', { kind: 'lane', hw: 1.4, walk: 0.2 }],
+    ['Bredgränd', 'gO2 SK2', { kind: 'lane', hw: 2.1, walk: 0.2 }],
+    ['Kråkgränd', 'gO2k gS206', { kind: 'lane', hw: 1.4, walk: 0.2 }],
+    ['Nygränd', 'gO2b gS245', { kind: 'lane', hw: 1.6, walk: 0.2 }],
     ['Skottgränd', 'gO3 gS268', { kind: 'lane', hw: 1.4, walk: 0.2 }],
-    ['Bredgränd', 'gO3b gS294', { kind: 'lane', hw: 2.1, walk: 0.2 }],
-    ['Ankargränd', 'gO3c gS312', { kind: 'lane', hw: 1.4, walk: 0.2 }],
-    ['Kolmätargränd', 'gO6 gS370', { kind: 'lane', hw: 1.4, walk: 0.2 }],
-    ['Stora Hoparegränd', 'gO6b gS392', { kind: 'lane', hw: 1.5, walk: 0.2 }],
-    ['Telegrafgränd', 'gO7 gS415', { kind: 'lane', hw: 1.5, walk: 0.2 }],
-    ['Triewaldsgränd', 'gO8 gS454', { kind: 'lane', hw: 1.6, walk: 0.2 }],
+    ['Stora Hoparegränd', 'gO3b gS294', { kind: 'lane', hw: 1.5, walk: 0.2 }],
+    // named after the tavern Draken that stood at its western end (75 m, 59.32444 N 18.07475 E)
+    ['Drakens gränd', 'gO3c gS312', { kind: 'lane', hw: 1.5, walk: 0.2 }],
+    ['Ferkens gränd', 'gO5 SK3', { kind: 'lane', hw: 1.4, walk: 0.2 }],
+    ['Gaffelgränd', 'gO6 gS370', { kind: 'lane', hw: 1.4, walk: 0.2 }],
+    ['Johannesgränd', 'gO6b gS392', { kind: 'lane', hw: 1.5, walk: 0.2 }],
+    ['Packhusgränd', 'gO7 gS415', { kind: 'lane', hw: 1.6, walk: 0.2 }],
     ['Tullgränd', 'gJG gS475', { kind: 'lane', hw: 1.8, walk: 0.2 }],
     ['Vasabron', 'VB RT', { hw: 6.5, bridge: true }],
     ['Riddarholmsbron', 'RT RH1', { hw: 5, bridge: true }],
@@ -1219,7 +1261,7 @@ body.touch .tk-sign .key { display: none; }
     ['Evert Taubes terrass', 'RH2 RH3', { hw: 5 }],
     ['Riddarholmen', 'RH3 RH4 RH1', { hw: 5 }],
     ['Slussen', 'SL0 SL1', { hw: 9, bridge: true }],
-    ['Centralbron', 'MB3 CB1', { hw: 8, bridge: true, limit: 70 }],
+    ['Centralbron', 'MB3 CB1', { hw: 8, bridge: true, limit: 90 }],
     // Södermalm
     ['Slussen', 'SL1 SMT', { hw: 8 }],
     ['Söder Mälarstrand', 'SL1 CB1 SMS2 SMS3', { hw: 7.5, walk: 8, trees: 'right' }],
@@ -1319,7 +1361,11 @@ body.touch .tk-sign .key { display: none; }
     ['Bondegatan', [[347.5, 1428], [930, 1428]], { hw: 5 }],
     ['Södermannagatan', [[462, 1156.1], [462, 1484.4]], { hw: 5 }],
     ['Nytorgsgatan', [[762, 1162], [762, 1474]], { hw: 5 }],
-    ['Gotlandsgatan', [[255, 1372.2], [255, 1492.6]], { hw: 4.5 }]
+    ['Gotlandsgatan', [[255, 1372.2], [255, 1492.6]], { hw: 4.5 }],
+    // two gränder that really are on the other side of Gamla stan: Ankargränd between Trångsund and Prästgatan just
+    // west of Storkyrkan, and Triewaldsgränd from Järntorget down to Kornhamnstorg
+    ['Ankargränd', [[-90.4, 176], [-116, 176]], { kind: 'lane', hw: 1.3, walk: 0.2 }],
+    ['Triewaldsgränd', ['gJT', [-24, 496.4]], { kind: 'lane', hw: 1.6, walk: 0.2 }]
   ];
   {
     const SNAP = 2.5, pt = (x, z, id) => ({ x, z, id: id || null });
@@ -1405,8 +1451,9 @@ body.touch .tk-sign .key { display: none; }
         a, b, name, kind, hw, len: Math.hypot(B.x - A.x, B.z - A.z),
         walk: o.walk !== undefined ? o.walk : kind === 'lane' ? 0.8 : kind === 'ped' ? 0.6 : hw >= 8 ? 6 : 4,
         bridge: !!o.bridge, stairs: !!o.stairs, drive: kind === 'street', trees: o.trees || null, median: !!o.median,
-        // speed limits: 40 in the lanes, 50 on ordinary streets, 60 on the big streets and the bridges, 20 where people walk
-        limit: o.limit || (o.bridge ? 60 : kind === 'lane' ? 40 : kind === 'ped' ? 20 : hw >= 7 ? 60 : 50)
+        // speed limits, raised for the game: 50 in the lanes, 70 on ordinary streets, 80 on the big streets and the
+        // bridges, 30 where people walk
+        limit: o.limit || (o.bridge ? 80 : kind === 'lane' ? 50 : kind === 'ped' ? 30 : hw >= 7 ? 80 : 70)
       };
       // where cars drive: the right-hand lane, the inner lane for overtaking, and the kerb lane for parking
       e.lane = e.median ? hw * 0.62 : hw >= 8 ? hw * 0.6 : Math.min(LANE, hw * 0.5);
@@ -1485,7 +1532,7 @@ body.touch .tk-sign .key { display: none; }
   {
     const T = 1024, cv = document.createElement('canvas');
     cv.width = cv.height = T;
-    const g = cv.getContext('2d');
+    const g = cv.getContext('2d', { willReadFrequently: true });
     for (let ty = 0; ty < RH; ty += T) for (let tx = 0; tx < RW; tx += T) {
       g.setTransform(1, 0, 0, 1, 0, 0);
       g.clearRect(0, 0, T, T);
@@ -1901,6 +1948,7 @@ body.touch .tk-sign .key { display: none; }
   });
 
   /* ---------- bridges ---------- */
+  const bridgeTrims = [];
   for (const br of bridgeRects) {
     const e = br.e, A = br.A, len = e.len, ux = br.ux, uz = br.uz, rx = -uz, rz = ux;
     // the stretch actually over water
@@ -1908,7 +1956,20 @@ body.touch .tk-sign .key { display: none; }
     for (let s = 0; s <= len; s += 1) if (!(groundAt(A.x + ux * s, A.z + uz * s) & 1)) { if (w0 < 0) w0 = s; w1 = s; }
     if (w0 < 0) continue;
     // the deck stops where the junctions at its ends begin, so its railings never cross the street at the end
-    const s0 = Math.max(br.A.r + 0.5, w0 - 3), s1 = Math.min(len - br.B.r - 0.5, w1 + 3), half = e.hw + e.walk;
+    let s0 = Math.max(br.A.r + 0.5, w0 - 3), s1 = Math.min(len - br.B.r - 0.5, w1 + 3);
+    const half = e.hw + e.walk, s00 = s0, s10 = s1;
+    // ... nor run out over another street that passes close to the bridgehead: walk each railing and pull the end of
+    // the deck back to where it is clear of every other carriageway (cars would otherwise be caught on the railing)
+    const near = [...edgesNear(Math.min(A.x, br.B.x) - 40, Math.min(A.z, br.B.z) - 40, Math.max(A.x, br.B.x) + 40, Math.max(A.z, br.B.z) + 40)].filter((o) => o !== e);
+    const hits = (s) => {
+      for (const side of [1, -1]) {
+        const px = A.x + ux * s + rx * side * (half - 0.21), pz = A.z + uz * s + rz * side * (half - 0.21);
+        for (const o of near) if (edgeDist(o, px, pz) < o.hw + (o.drive ? 0.9 : 0.4)) return true;
+      }
+      return false;
+    };
+    for (let s = s0; s <= s1; s += 0.5) if (hits(s)) { if (s < (s00 + s10) / 2) s0 = s + 0.75; else { s1 = s - 0.75; break; } }
+    if (s0 !== s00 || s1 !== s10) bridgeTrims.push({ name: e.name, cut0: +(s0 - s00).toFixed(1), cut1: +(s10 - s1).toFixed(1) });
     if (s1 - s0 < 4) continue;
     const B = cityAt(A.x + ux * (s0 + s1) / 2, A.z + uz * (s0 + s1) / 2);
     B.setFrame(A.x + ux * s0 - rx * half, A.z + uz * s0 - rz * half, ux, uz);
@@ -2333,8 +2394,9 @@ body.touch .tk-sign .key { display: none; }
     sq(signB2, X1 + 0.06, DZ1 + 1.4, X1 + 0.06, DZ0 - 1.4, 3.3, 4.05, 1, 0);
     const lampB = new Builder(), lx = X1 + 0.75, lz = DZ0 - 2.3, ly = 3.2, ls = 0.32;
     low.box(X1, ly + ls - 0.06, lz - 0.04, lx, ly + ls - 0.02, lz + 0.04, STEEL);
-    sq(lampB, lx - ls, lz - ls, lx + ls, lz - ls, ly - ls, ly + ls, 0, -1); sq(lampB, lx + ls, lz + ls, lx - ls, lz + ls, ly - ls, ly + ls, 0, 1);
-    sq(lampB, lx + ls, lz - ls, lx + ls, lz + ls, ly - ls, ly + ls, 1, 0); sq(lampB, lx - ls, lz + ls, lx - ls, lz - ls, ly - ls, ly + ls, -1, 0);
+    // (each face's texture runs left to right as seen from outside it, so the word reads the right way round on all four)
+    sq(lampB, lx + ls, lz - ls, lx - ls, lz - ls, ly - ls, ly + ls, 0, -1); sq(lampB, lx - ls, lz + ls, lx + ls, lz + ls, ly - ls, ly + ls, 0, 1);
+    sq(lampB, lx + ls, lz + ls, lx + ls, lz - ls, ly - ls, ly + ls, 1, 0); sq(lampB, lx - ls, lz - ls, lx - ls, lz + ls, ly - ls, ly + ls, -1, 0);
     low.box(lx - ls - 0.03, ly + ls, lz - ls - 0.03, lx + ls + 0.03, ly + ls + 0.07, lz + ls + 0.03, STEEL);
     low.box(lx - ls - 0.03, ly - ls - 0.07, lz - ls - 0.03, lx + ls + 0.03, ly - ls, lz + ls + 0.03, STEEL);
     // inside: the floor, the walls between the rooms
@@ -2395,6 +2457,17 @@ body.touch .tk-sign .key { display: none; }
     // offices behind the walls (only seen from above while you are inside): desks and lockers
     for (let x = X0 + 2; x < X1 - 4; x += 5) { low.box(x, 0, Z0 + 2.5, x + 2.4, 0.75, Z0 + 3.7, 0xcfc9bd); low.box(x + 0.6, 0.75, Z0 + 2.6, x + 1.8, 1.2, Z0 + 2.7, 0x222428); }
     for (let x = -215.5; x < -212.6; x += 0.7) low.box(x, 0, SOUTH - 0.75, x + 0.6, 1.9, SOUTH - 0.2, 0x8a939b);
+    // the ceiling of the ground floor: white acoustic tiles with light panels in every room. It faces down only, so
+    // from above (while the floors over it are lifted off) you still look straight in
+    const ceilB = new Builder(), panelB = new Builder(), CY = GH - 0.02;
+    ceilB.quad([X0 + T, CY, Z0 + T], [X1 - T, CY, Z0 + T], [X1 - T, CY, Z1 - T], [X0 + T, CY, Z1 - T], 0xffffff,
+      [[0, 0], [(X1 - X0) / 0.6, 0], [(X1 - X0) / 0.6, (Z1 - Z0) / 0.6], [0, (Z1 - Z0) / 0.6]], [0, -1, 0]);
+    const panel = (cx, cz, w, d) => panelB.quad([cx - w / 2, CY - 0.015, cz - d / 2], [cx + w / 2, CY - 0.015, cz - d / 2], [cx + w / 2, CY - 0.015, cz + d / 2], [cx - w / 2, CY - 0.015, cz + d / 2], 0xffffff, null, [0, -1, 0]);
+    for (const z of [216.5, 222, 228]) for (const x of [-208.5, -203]) panel(x, z, 1.2, 0.6);   // lobby
+    for (const x of [-225, -219.5, -214.5]) panel(x, 222, 1.2, 0.3);                          // corridor
+    CELLS.forEach(([cx0, cx1]) => panel((cx0 + cx1) / 2, (BACK + CZ) / 2, 0.6, 0.6));            // cells
+    panel(-222, 228.5, 1.2, 0.6); panel(-214, 228.5, 0.6, 0.6);                                // interview room, store
+    for (let x = X0 + 4; x < X1 - 3; x += 7) panel(x, (Z0 + BACK) / 2, 1.2, 0.6);               // offices behind
     take(foot);
     mapPolys.push([foot, 0x6f86a8]);
     mapLabels.push(['Polisstationen', (X0 + X1) / 2, (Z0 + Z1) / 2, 'landmark']);
@@ -2428,6 +2501,15 @@ body.touch .tk-sign .key { display: none; }
         add(barsB, std({ color: 0xffffff, vertexColors: true, roughness: 0.4, metalness: 0.6 }));
         const dmat = std({ vertexColors: true, roughness: 0.4, metalness: 0.6 });
         for (const d of doors) { const m = new THREE.Mesh(d.geo.build(), dmat); m.position.set(d.x0, 0, 0.1); m.castShadow = true; scene.add(m); d.mesh = m; }
+        const tiles = canvasTex(128, 128, (g, w, h) => {
+          g.fillStyle = '#eceae4'; g.fillRect(0, 0, w, h);
+          grain(g, 0, 0, w, h, 1800, 'rgba(120,118,110,.18)', 'rgba(255,255,255,.4)', 1.1);
+          g.fillStyle = 'rgba(150,148,140,.8)'; g.fillRect(0, 0, w, 3); g.fillRect(0, 0, 3, h);
+        }, true);
+        // lit by the panels rather than the sun: a little light of its own so it never reads as a hole
+        const ceil = new THREE.Mesh(ceilB.build(), std({ map: tiles, roughness: 0.9, emissive: 0x6a6964, emissiveMap: tiles }));
+        const panels = new THREE.Mesh(panelB.build(), new THREE.MeshBasicMaterial({ color: 0xfff6e2 }));
+        scene.add(ceil, panels);
       },
       // the floors above come off while you are inside; cell doors slide towards where they are told to be
       update(dt, px, pz) {
@@ -2453,6 +2535,34 @@ body.touch .tk-sign .key { display: none; }
     addCircle(66, 122, 0.45, 0.7);
     take(axisPoly(53, 116, 72, 130));
     mapLabels.push(['Järnpojken', 66, 122, 'landmark']);
+  }
+  // Drakens gränd got its name from the tavern Draken at its western end: its sign, a gilded dragon on a green board,
+  // hangs from a wrought-iron arm over the corner of Österlånggatan
+  {
+    const dragonTex = canvasTex(256, 192, (g, w, h) => {
+      g.fillStyle = '#1d3b2c'; roundRect(g, 4, 4, w - 8, h - 8, 14); g.fill();
+      g.strokeStyle = '#d4a53a'; g.lineWidth = 6; roundRect(g, 12, 12, w - 24, h - 24, 10); g.stroke();
+      g.fillStyle = '#e2b240'; g.strokeStyle = '#8a6418'; g.lineWidth = 2;
+      g.beginPath(); // body, neck and head
+      g.moveTo(70, 112); g.bezierCurveTo(90, 86, 140, 84, 160, 100); g.bezierCurveTo(176, 84, 178, 60, 196, 52);
+      g.lineTo(214, 58); g.lineTo(200, 64); g.lineTo(212, 72); g.lineTo(194, 72); g.bezierCurveTo(186, 92, 180, 112, 160, 122);
+      g.bezierCurveTo(140, 132, 96, 132, 80, 122); g.closePath(); g.fill(); g.stroke();
+      g.beginPath(); // wing
+      g.moveTo(108, 96); g.lineTo(96, 40); g.lineTo(118, 62); g.lineTo(130, 34); g.lineTo(140, 64); g.lineTo(160, 46); g.lineTo(146, 96); g.closePath(); g.fill(); g.stroke();
+      g.beginPath(); // tail, curling round to an arrow point
+      g.moveTo(80, 118); g.bezierCurveTo(52, 128, 38, 104, 52, 92); g.lineTo(42, 84); g.lineTo(60, 86); g.lineTo(58, 98); g.bezierCurveTo(52, 106, 62, 114, 78, 108); g.closePath(); g.fill(); g.stroke();
+      for (const lx of [96, 140]) { g.beginPath(); g.moveTo(lx, 124); g.lineTo(lx - 4, 142); g.lineTo(lx + 8, 142); g.lineTo(lx + 8, 124); g.fill(); }
+      g.fillStyle = '#7a1414'; g.beginPath(); g.moveTo(212, 66); g.lineTo(228, 60); g.lineTo(222, 70); g.closePath(); g.fill();
+      g.fillStyle = '#e9cf8a'; g.font = '900 30px Georgia, "Times New Roman", serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText('DRAKEN', w / 2, h - 34);
+    });
+    const x0 = 135.5, x1 = 136.7, z = 308.4, y0 = 2.55, y1 = 3.45, B = cityAt(136, z), sB = new Builder();
+    B.box(x0 - 0.15, y1 + 0.08, z - 0.03, 137.2, y1 + 0.14, z + 0.03, 0x1c1d1f);
+    B.box(x0 + 0.05, y1, z - 0.015, x0 + 0.08, y1 + 0.1, z + 0.015, 0x1c1d1f);
+    B.box(x1 - 0.08, y1, z - 0.015, x1 - 0.05, y1 + 0.1, z + 0.015, 0x1c1d1f);
+    B.box(x0, y0, z - 0.03, x1, y1, z + 0.03, 0x3a2a1a);
+    for (const s of [1, -1]) sB.quad([s > 0 ? x0 : x1, y0, z + s * 0.035], [s > 0 ? x1 : x0, y0, z + s * 0.035], [s > 0 ? x1 : x0, y1, z + s * 0.035], [s > 0 ? x0 : x1, y1, z + s * 0.035], 0xffffff, [[0, 0], [1, 0], [1, 1], [0, 1]], [0, 0, s]);
+    scene.add(new THREE.Mesh(sB.build(), std({ map: dragonTex, roughness: 0.45, metalness: 0.1 })));
   }
   {
     const B = landmark([-455, 80, 1, 0], 40, 90, 0x9a4a32, 18, { rh: 10, ri: 20, roofCol: 0x3a3e42, name: 'Riddarholmskyrkan' });
@@ -2716,10 +2826,172 @@ body.touch .tk-sign .key { display: none; }
     scene.add(globe, tower);
   }
 
+  /* ---------- finer materials ---------- */
+  // The ground gets sharper textures with relief: a normal map worked out from each texture's brightness, so stones
+  // stand up out of their joints and the asphalt is rough. Drawn with a random sequence of their own, so the city
+  // itself stays exactly as it was laid out above.
+  let tseed = 77;
+  const trand = () => { tseed = (tseed * 16807) % 2147483647; return (tseed - 1) / 2147483646; };
+  const trr = (a, b) => a + trand() * (b - a);
+  function tgrain(g, x, y, w, h, n, dark, light, size) {
+    for (let i = 0; i < n; i++) { g.fillStyle = trand() < 0.5 ? dark : light; const s = size * (0.6 + trand()); g.fillRect(x + trand() * w, y + trand() * h, s, s); }
+  }
+  function tblotches(g, w, h, n, rgb, alpha, rmin, rmax) {
+    for (let i = 0; i < n; i++) {
+      const x = trand() * w, y = trand() * h, r = trr(rmin, rmax), gr = g.createRadialGradient(x, y, 0, x, y, r);
+      gr.addColorStop(0, `rgba(${rgb},${alpha * (0.4 + trand() * 0.6)})`); gr.addColorStop(1, `rgba(${rgb},0)`);
+      g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2);
+      // wrapped round the edges, so the texture tiles without a seam
+      for (const [ox, oy] of [[w, 0], [-w, 0], [0, h], [0, -h]]) if (x + ox - r < w && x + ox + r > 0 && y + oy - r < h && y + oy + r > 0) { g.save(); g.translate(ox, oy); g.fillRect(x - r, y - r, r * 2, r * 2); g.restore(); }
+    }
+  }
+  // fine grain, pixel by pixel (much faster than drawing it speck by speck): a share p of the pixels darkened by up to
+  // dark, as many lightened by up to light
+  function pixelNoise(g, x0, y0, w, h, p, dark, light) {
+    const img = g.getImageData(x0, y0, w, h), d = img.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const r = trand();
+      if (r < p) { const k = 1 - dark * trand(); d[i] *= k; d[i + 1] *= k; d[i + 2] *= k; }
+      else if (r > 1 - p) { const k = light * trand(); d[i] += (255 - d[i]) * k; d[i + 1] += (255 - d[i + 1]) * k; d[i + 2] += (255 - d[i + 2]) * k; }
+    }
+    g.putImageData(img, x0, y0);
+  }
+  // tangent-space normals from brightness (bright stands up), wrapping at the edges
+  function normalFrom(tex, strength, invert) {
+    const src = tex.image, w = src.width, h = src.height, d = src.getContext('2d').getImageData(0, 0, w, h).data, H = new Float32Array(w * h);
+    for (let i = 0; i < w * h; i++) H[i] = (d[i * 4] * 0.299 + d[i * 4 + 1] * 0.587 + d[i * 4 + 2] * 0.114) / 255 * (invert ? -1 : 1);
+    const out = document.createElement('canvas');
+    out.width = w; out.height = h;
+    const og = out.getContext('2d'), img = og.createImageData(w, h), o = img.data;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const xl = (x + w - 1) % w, xr = (x + 1) % w, yu = (y + h - 1) % h, yd = (y + 1) % h;
+      const gu = (H[y * w + xr] - H[y * w + xl]) * strength, gv = (H[yu * w + x] - H[yd * w + x]) * strength, l = Math.hypot(gu, gv, 1), i = (y * w + x) * 4;
+      o[i] = (-gu / l * 0.5 + 0.5) * 255; o[i + 1] = (-gv / l * 0.5 + 0.5) * 255; o[i + 2] = (1 / l * 0.5 + 0.5) * 255; o[i + 3] = 255;
+    }
+    og.putImageData(img, 0, 0);
+    const t = new THREE.CanvasTexture(out);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = maxAniso; t.repeat.copy(tex.repeat);
+    return t;
+  }
+  // asphalt: fine aggregate, patches of repair and wear, oil
+  function asphalt2(g, w, h) {
+    g.fillStyle = '#43464a'; g.fillRect(0, 0, w, h);
+    tblotches(g, w, h, 70, '24,26,29', 0.14, w * 0.03, w * 0.14);
+    tblotches(g, w, h, 45, '118,120,124', 0.06, w * 0.03, w * 0.1);
+    pixelNoise(g, 0, 0, w, h, 0.14, 0.42, 0.16);
+    tgrain(g, 0, 0, w, h, w * h * 0.004, 'rgba(12,13,15,.4)', 'rgba(175,176,180,.22)', 1.8);
+  }
+  const crack = (g, x, y, n, step, w) => {
+    g.strokeStyle = 'rgba(16,17,19,.32)'; g.lineWidth = w * 0.6; g.beginPath(); g.moveTo(x, y);
+    for (let k = 0; k < n; k++) { x += trr(-step, step); y += trr(step * 0.4, step * 1.6); g.lineTo(x, y); }
+    g.stroke();
+  };
+  const paint = (g, x, y, w, h) => { g.fillStyle = '#e7e8e3'; g.fillRect(x, y, w, h); tgrain(g, x, y, w, h, w * h * 0.08, 'rgba(70,70,70,.4)', 'rgba(255,255,255,.25)', 1.3); };
+  const road2 = canvasTex(512, 1024, (g, w, h) => {
+    asphalt2(g, w, h);
+    // polished, darker wheel tracks in both lanes
+    for (const u of [0.225, 0.358, 0.642, 0.775]) {
+      const gr = g.createLinearGradient(u * w - 26, 0, u * w + 26, 0);
+      gr.addColorStop(0, 'rgba(14,15,17,0)'); gr.addColorStop(0.5, 'rgba(14,15,17,.2)'); gr.addColorStop(1, 'rgba(14,15,17,0)');
+      g.fillStyle = gr; g.fillRect(u * w - 26, 0, 52, h);
+    }
+    for (let i = 0; i < 7; i++) crack(g, trand() * w, trand() * h, 10, 18, 2.2);
+    paint(g, w / 2 - 9, h * 0.05, 18, h * 0.25);
+  }, true, false, true);
+  const avenue2 = canvasTex(512, 1024, (g, w, h) => {
+    asphalt2(g, w, h);
+    for (let i = 0; i < 6; i++) crack(g, trand() * w, trand() * h, 10, 18, 2.2);
+    paint(g, w / 2 - 13, 0, 7, h); paint(g, w / 2 + 6, 0, 7, h);
+    for (const u of [0.25, 0.75]) paint(g, u * w - 5, h * 0.05, 10, h * 0.25);
+  }, true, false, true);
+  const median2 = canvasTex(512, 1024, (g, w, h) => {
+    asphalt2(g, w, h);
+    g.fillStyle = '#a7a39b'; g.fillRect(w * 0.41, 0, w * 0.18, h);
+    g.fillStyle = '#4c7535'; g.fillRect(w * 0.425, 0, w * 0.15, h);
+    tgrain(g, w * 0.425, 0, w * 0.15, h, 16000, 'rgba(28,48,18,.5)', 'rgba(140,180,90,.4)', 2.4);
+    for (const u of [0.2, 0.8]) paint(g, u * w - 5, h * 0.05, 10, h * 0.25);
+  }, true, false, true);
+  const junction2 = canvasTex(512, 512, (g, w, h) => { asphalt2(g, w, h); for (let i = 0; i < 4; i++) crack(g, trand() * w, trand() * h, 9, 20, 2.2); }, true, false, true);
+  // gatsten: rows of rounded granite setts, each shaded like a little dome, in sand-filled joints
+  const cobble2 = canvasTex(512, 512, (g, w, h) => {
+    g.fillStyle = '#4a4640'; g.fillRect(0, 0, w, h);
+    pixelNoise(g, 0, 0, w, h, 0.2, 0.5, 0.25);
+    const s = 16;
+    for (let y = 0; y < h; y += s) {
+      const off = (y / s) % 2 ? s / 2 : 0;
+      for (let x = -s; x < w + s; x += s) {
+        const v = Math.round(trr(105, 165)), t = trr(-10, 10), sx = x + off + 1.2 + trr(-0.8, 0.8), sw = s - 2.4 + trr(-1, 1), sh = s - 2.6;
+        const gr = g.createRadialGradient(sx + sw * 0.35, y + sh * 0.3, 1, sx + sw / 2, y + sh / 2, sw * 0.75);
+        gr.addColorStop(0, `rgb(${v + 38 + t},${v + 34},${v + 28 - t})`); gr.addColorStop(0.6, `rgb(${v + t},${v - 3},${v - 9 - t})`); gr.addColorStop(1, `rgb(${v - 45},${v - 47},${v - 50})`);
+        g.fillStyle = gr; roundRect(g, sx, y + 1.3, sw, sh, 4.5); g.fill();
+      }
+    }
+    tblotches(g, w, h, 26, '35,32,28', 0.2, 14, 50);
+    pixelNoise(g, 0, 0, w, h, 0.05, 0.25, 0.15);
+  }, true, false, true);
+  // granite slabs (gågator, torg, the bridges' pavements) and the 50 cm concrete pavement slabs
+  const slab2 = canvasTex(512, 512, (g, w, h) => {
+    const rows = 5, rh = h / rows;
+    for (let r = 0; r < rows; r++) {
+      let x = -trr(0, 80);
+      while (x < w) {
+        const sw = trr(68, 128), v = Math.round(trr(166, 196));
+        g.fillStyle = `rgb(${v},${v - 2},${v - 6})`; g.fillRect(x, r * rh, sw, rh);
+        g.fillStyle = 'rgba(60,56,50,.7)'; g.fillRect(x, r * rh, 2.5, rh);
+        x += sw;
+      }
+      g.fillStyle = 'rgba(60,56,50,.7)'; g.fillRect(0, r * rh, w, 2.5);
+    }
+    tblotches(g, w, h, 22, '80,76,70', 0.12, 12, 48);
+    pixelNoise(g, 0, 0, w, h, 0.1, 0.3, 0.3);
+  }, true, false, true);
+  const pave2 = canvasTex(512, 512, (g, w, h) => {
+    const n = 8, s = w / n;
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+      const v = Math.round(176 + trr(-12, 12));
+      g.fillStyle = `rgb(${v},${v - 4},${v - 10})`; g.fillRect(c * s, r * s, s, s);
+      // the edges of each slab worn a little lighter, the joints dark
+      g.fillStyle = 'rgba(255,255,255,.08)'; g.fillRect(c * s + 3, r * s + 3, s - 6, 3); g.fillRect(c * s + 3, r * s + 3, 3, s - 6);
+    }
+    tblotches(g, w, h, 40, '90,85,78', 0.12, 10, 46);
+    pixelNoise(g, 0, 0, w, h, 0.12, 0.25, 0.22);
+    g.fillStyle = 'rgba(62,58,52,.75)';
+    for (let i = 0; i <= n; i++) { g.fillRect(i * s - 1.5, 0, 3, h); g.fillRect(0, i * s - 1.5, w, 3); }
+  }, true, false, true);
+  const NRM = {
+    road: normalFrom(road2, 2.2), avenue: normalFrom(avenue2, 2.2), median: normalFrom(median2, 2.2), junction: normalFrom(junction2, 2.2),
+    cobble: normalFrom(cobble2, 5), slab: normalFrom(slab2, 2.5), pave: normalFrom(pave2, 2.5),
+    // windows sit in from the plaster, the frames and sills stand out
+    facade: normalFrom(facadeTex, 2.4), modern: normalFrom(modernTex, 1.6)
+  };
+  // roofs and plain walls have no texture of their own: the shader draws standing-seam sheet metal on the grey and
+  // copper roofs, rows of tiles on the red ones, and a little weathering on everything, from the world position
+  function roofDetail(sh) {
+    sh.vertexShader = 'varying vec3 vWPos;\nvarying vec3 vWNrm;\n' + sh.vertexShader.replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\n\tvWPos = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;\n\tvWNrm = normalize( mat3( modelMatrix ) * objectNormal );');
+    sh.fragmentShader = 'varying vec3 vWPos;\nvarying vec3 vWNrm;\nfloat rhash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }\nfloat rnoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(rhash(i), rhash(i + vec2(1.0, 0.0)), f.x), mix(rhash(i + vec2(0.0, 1.0)), rhash(i + vec2(1.0, 1.0)), f.x), f.y); }\n' +
+      sh.fragmentShader.replace('#include <color_fragment>', [
+        '#include <color_fragment>',
+        '\t{',
+        '\t\tvec3 wn = normalize( vWNrm ); float slope = wn.y;',
+        '\t\tfloat grime = rnoise( vWPos.xz * 0.35 + vWPos.y * 0.2 ) * 0.5 + rnoise( vWPos.xz * 2.3 + vWPos.yy ) * 0.25;',
+        '\t\tif ( slope > 0.25 && slope < 0.97 ) {',
+        '\t\t\tvec2 fall = normalize( wn.xz ); float across = dot( vWPos.xz, vec2( -fall.y, fall.x ) ), down = dot( vWPos.xz, fall );',
+        '\t\t\tbool tiles = vColor.r > vColor.g * 1.5 && vColor.r > 0.12;',
+        '\t\t\tfloat k;',
+        '\t\t\tif ( tiles ) { float row = floor( down / 0.32 ); float u = fract( ( across + row * 0.15 ) / 0.3 ); float v = fract( down / 0.32 ); k = 0.82 + 0.18 * smoothstep( 0.0, 0.25, v ) * ( 1.0 - smoothstep( 0.88, 1.0, u ) ) + 0.06 * ( rhash( vec2( floor( ( across + row * 0.15 ) / 0.3 ), row ) ) - 0.5 ); }',
+        '\t\t\telse { float u = fract( across / 0.55 ); k = 1.0 - 0.28 * ( 1.0 - smoothstep( 0.0, 0.05, u ) ) + 0.12 * smoothstep( 0.05, 0.15, u ) * ( 1.0 - smoothstep( 0.15, 0.3, u ) ); }',
+        '\t\t\tdiffuseColor.rgb *= k * ( 0.92 + grime * 0.16 );',
+        '\t\t} else if ( slope >= 0.97 ) diffuseColor.rgb *= 0.85 + grime * 0.25;',
+        '\t\telse diffuseColor.rgb *= 0.93 + grime * 0.12 - 0.1 * ( 1.0 - smoothstep( 0.0, 1.5, vWPos.y ) );',
+        '\t}'
+      ].join('\n'));
+  }
+
   /* ---------- assemble the meshes ---------- */
-  const facadeMat = std({ map: facadeTex, roughnessMap: facadeRough, roughness: 1, vertexColors: true });
-  const modernMat = std({ map: modernTex, roughnessMap: modernRough, roughness: 1, metalness: 0.2, vertexColors: true });
+  const facadeMat = std({ map: facadeTex, roughnessMap: facadeRough, roughness: 1, vertexColors: true, normalMap: NRM.facade, normalScale: new THREE.Vector2(0.9, 0.9) });
+  const modernMat = std({ map: modernTex, roughnessMap: modernRough, roughness: 1, metalness: 0.2, vertexColors: true, normalMap: NRM.modern, normalScale: new THREE.Vector2(0.6, 0.6) });
   const solidMat = std({ vertexColors: true, roughness: 0.82 });
+  solidMat.onBeforeCompile = roofDetail;
   STATION.finish(facadeMat, solidMat, modernMat);
   for (const B of chunks.values()) {
     for (const [b, mat] of [[B, facadeMat], [B.altB, modernMat], [B.solidB, solidMat]]) {
@@ -2731,28 +3003,31 @@ body.touch .tk-sign .key { display: none; }
   }
   function groundMesh(B, mat, offset) {
     if (B.empty) return null;
-    if (offset) Object.assign(mat, { polygonOffset: true, polygonOffsetFactor: offset, polygonOffsetUnits: offset });
+    // a constant depth nudge (no slope term), so the ground layers never fight and the depth stays true enough for the
+    // ambient occlusion, which a slope-scaled offset would bend at a distance
+    if (offset) Object.assign(mat, { polygonOffset: true, polygonOffsetFactor: 0, polygonOffsetUnits: offset * 6 });
     const m = new THREE.Mesh(B.build(), mat);
     m.receiveShadow = true;
     scene.add(m);
     return m;
   }
-  groundMesh(paveB, std({ map: paveTex, color: 0xe6e2da, roughness: 0.95 }));
+  const nscale = (k) => new THREE.Vector2(k, k);
+  groundMesh(paveB, std({ map: pave2, normalMap: NRM.pave, normalScale: nscale(0.8), color: 0xe6e2da, roughness: 0.92 }));
   groundMesh(grassB, std({ map: grassTex, roughness: 0.95 }), -1);
   groundMesh(railB, std({ map: railTex, roughness: 0.95 }), -1);
-  groundMesh(roadB, std({ map: roadTex, roughness: 0.88 }), -2);
-  groundMesh(avenueB, std({ map: avenueTex, roughness: 0.88 }), -2);
-  groundMesh(medianB, std({ map: medianTex, roughness: 0.9 }), -2);
-  groundMesh(junctionB, std({ map: junctionTex, roughness: 0.88 }), -2);
-  groundMesh(cobbleB, std({ map: cobbleTex, roughness: 0.8 }), -2);
-  groundMesh(slabB, std({ map: slabTex, roughness: 0.85 }), -2);
+  groundMesh(roadB, std({ map: road2, normalMap: NRM.road, normalScale: nscale(0.4), roughness: 0.86 }), -2);
+  groundMesh(avenueB, std({ map: avenue2, normalMap: NRM.avenue, normalScale: nscale(0.4), roughness: 0.86 }), -2);
+  groundMesh(medianB, std({ map: median2, normalMap: NRM.median, normalScale: nscale(0.4), roughness: 0.88 }), -2);
+  groundMesh(junctionB, std({ map: junction2, normalMap: NRM.junction, normalScale: nscale(0.4), roughness: 0.86 }), -2);
+  groundMesh(cobbleB, std({ map: cobble2, normalMap: NRM.cobble, normalScale: nscale(1.1), roughness: 0.72 }), -2);
+  groundMesh(slabB, std({ map: slab2, normalMap: NRM.slab, normalScale: nscale(0.8), roughness: 0.8 }), -2);
   groundMesh(plazaB, std({ map: plazaTex, roughness: 0.5 }), -3);
   groundMesh(zebraB, std({ color: 0xe8e8e4, roughness: 0.7 }), -4);
   scene.add(new THREE.Mesh(signB.build(), std({ map: signTex, roughness: 0.45, emissive: 0x2a2a2a, emissiveMap: signTex })));
   scene.add(new THREE.Mesh(tB.build(), std({ map: tTex, roughness: 0.45, transparent: true, alphaTest: 0.5, emissive: 0x2a2a2a, emissiveMap: tTex })));
-  const water = new THREE.Mesh(new THREE.PlaneGeometry(9000, 9000), std({ color: 0x173f52, roughness: 0.07, normalMap: waterNormal, normalScale: new THREE.Vector2(0.45, 0.45) }));
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(9000, 9000), std({ color: 0x143644, roughness: 0.07, normalMap: waterNormal, normalScale: new THREE.Vector2(0.32, 0.32) }));
   water.rotation.x = -Math.PI / 2; water.position.y = -1.6; water.receiveShadow = true;
-  waterNormal.repeat.set(300, 300);
+  waterNormal.repeat.set(700, 700);
   scene.add(water);
   if (obeliskPos) {
     const ob = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 2.1, 37, 8), new THREE.MeshStandardMaterial({ color: 0xc4e6f2, metalness: 0.3, roughness: 0.1, transparent: true, opacity: 0.6, emissive: 0x3d7c96, emissiveIntensity: 0.35 }));
@@ -2764,8 +3039,7 @@ body.touch .tk-sign .key { display: none; }
   }
 
   /* ---------- trees and street lamps, instanced per area so groups out of view are skipped ---------- */
-  // trees: a trunk and a crown of lumpy leaf clusters, darker underneath where the sun doesn't reach;
-  // far away a cheaper crown of fewer, coarser clusters
+  // trees far away: a trunk and a crown of lumpy leaf clusters, darker underneath where the sun doesn't reach
   const leafMat = std({ vertexColors: true, flatShading: true, roughness: 0.85 });
   const lumpy = (p) => Math.sin(p.x * 3.1 + p.y * 1.7) * Math.cos(p.z * 2.3 - p.y * 2.9) * 0.5 + Math.sin(p.x * 7.3 - p.z * 5.1) * 0.25;
   function treeGeo(crown, crownR, trunkH, crownY, far) {
@@ -2816,17 +3090,78 @@ body.touch .tk-sign .key { display: none; }
     return out;
   }
   const placeTree = (o, t) => { o.position.set(t.x, 0, t.z); o.rotation.y = t.r; o.scale.setScalar(t.s); return t.v < 0.33 ? 0xffffff : t.v < 0.66 ? 0xd6e3c8 : 0xeef2d0; };
+  // Trees near by: a trunk with branches up into a crown of leaf cards, small squares that each carry a painted cluster
+  // of leaves with gaps you see through, scattered through the crown at every angle. Their normals point out from the
+  // middle of the crown so it is lit as one soft mass, and they are darker underneath and inside, where light is scarce.
+  const mulberry = (a) => () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const leafTex = (pink) => canvasTex(256, 256, (g, w) => {
+    const r = mulberry(pink ? 7 : 3);
+    for (let i = 0; i < (pink ? 620 : 520); i++) {
+      const a = r() * TAU, d = Math.sqrt(r()) * w * 0.47, x = w / 2 + Math.cos(a) * d, y = w / 2 + Math.sin(a) * d, k = 0.62 + r() * 0.55;
+      const leaf = !pink || r() < 0.18, L = leaf ? 7 + r() * 7 : 4 + r() * 3.5;
+      g.fillStyle = leaf ? `rgb(${Math.round((48 + r() * 50) * k)},${Math.round((92 + r() * 58) * k)},${Math.round((28 + r() * 30) * k)})`
+        : `rgb(${Math.round(240 * k + 15)},${Math.round((176 + r() * 40) * k + 10)},${Math.round((190 + r() * 40) * k + 10)})`;
+      g.save(); g.translate(x, y); g.rotate(r() * TAU);
+      g.beginPath(); g.ellipse(0, 0, L, L * (leaf ? 0.46 : 0.9), 0, 0, TAU); g.fill();
+      if (leaf) { g.fillStyle = 'rgba(20,40,10,.35)'; g.fillRect(-L, -0.5, L * 2, 1); }
+      g.restore();
+    }
+  });
+  function crownCards(R, cy, n, size, seed) {
+    const r = mulberry(seed), P = [], N = [], U = [], C = [], I = [], ax = new THREE.Vector3(), ay = new THREE.Vector3(), nr = new THREE.Vector3();
+    for (let i = 0; i < n; i++) {
+      let x, y, z;
+      do { x = r() * 2 - 1; y = r() * 2 - 1; z = r() * 2 - 1; } while (x * x + y * y + z * z > 1);
+      const out = 0.45 + 0.55 * Math.cbrt(x * x + y * y + z * z) / Math.max(1e-3, Math.hypot(x, y, z));
+      const cx = x * R * out, cyy = cy + y * R * 1.1 * out, cz = z * R * out;
+      ax.set(r() - 0.5, r() - 0.5, r() - 0.5).normalize();
+      ay.set(r() - 0.5, r() - 0.5, r() - 0.5); ay.addScaledVector(ax, -ay.dot(ax)).normalize();
+      const s = size * (0.75 + r() * 0.5) / 2, base = P.length / 3;
+      for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+        const px = cx + (ax.x * a + ay.x * b) * s, py = cyy + (ax.y * a + ay.y * b) * s, pz = cz + (ax.z * a + ay.z * b) * s;
+        P.push(px, py, pz); U.push((a + 1) / 2, (b + 1) / 2);
+        nr.set(px, (py - cy) * 0.8 + R * 0.25, pz).normalize(); N.push(nr.x, nr.y, nr.z);
+        const k = (0.5 + 0.5 * clamp((py - (cy - R)) / (2 * R), 0, 1)) * (0.72 + 0.28 * Math.min(1, Math.hypot(px, py - cy, pz) / R));
+        C.push(k, k, k);
+      }
+      I.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
+    g.setIndex(I); g.computeBoundingSphere();
+    return g;
+  }
+  function trunkGeo(trunkH, cy, R) {
+    const m = new Merger();
+    m.add(new THREE.CylinderGeometry(0.11, 0.25, trunkH + 0.9, 8), 0x4a3a2d, 0, (trunkH + 0.9) / 2, 0);
+    for (const [a, tilt, len] of [[0, 0.75, 1.9], [2.2, 0.65, 1.8], [4.1, 0.8, 1.7], [1.1, 0.35, 1.6]]) {
+      const ox = Math.cos(a) * Math.sin(tilt) * len / 2, oz = Math.sin(a) * Math.sin(tilt) * len / 2, oy = trunkH + 0.4 + Math.cos(tilt) * len / 2;
+      m.add(new THREE.CylinderGeometry(0.035, 0.09, len, 5), 0x4a3a2d, ox, oy, oz, Math.sin(a) * tilt, 0, -Math.cos(a) * tilt);
+    }
+    return m.build();
+  }
+  // leaves are cut out of the cards, double-sided, and keep the crown's normals on both sides of a card
+  function cardMaterial(tex) {
+    const m = std({ map: tex, alphaTest: 0.42, side: THREE.DoubleSide, vertexColors: true, roughness: 0.78 });
+    m.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', THREE.ShaderChunk.normal_fragment_begin.replace('normal = normal * faceDirection;', '')); };
+    return m;
+  }
   // swapped for the cheap version beyond TREE_NEAR metres
-  const TREE_NEAR = 230, treeLods = [];
-  for (const [list, crown, R, trunk, cy] of [[lindens, 0x4a7d33, 2.3, 3.0, 4.6], [cherries, 0xf3b9c8, 2.0, 2.4, 3.8]]) {
-    const near = instancedByArea(treeGeo(crown, R, trunk, cy, false), leafMat, list, placeTree);
+  const TREE_NEAR = 230, treeLods = [], barkMat = std({ vertexColors: true, roughness: 0.95 });
+  for (const [list, crown, R, trunk, cy, pink] of [[lindens, 0x4a7d33, 2.3, 3.0, 4.6, false], [cherries, 0xf3b9c8, 2.0, 2.4, 3.8, true]]) {
+    const tex = leafTex(pink), mat = cardMaterial(tex);
+    const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: tex, alphaTest: 0.42, side: THREE.DoubleSide });
+    const trunks = instancedByArea(trunkGeo(trunk, cy, R), barkMat, list, placeTree);
+    const crowns = instancedByArea(crownCards(R, cy, pink ? 52 : 58, R * 0.85, pink ? 11 : 5), mat, list, placeTree);
+    for (const m of crowns) m.customDepthMaterial = depth;
     const far = instancedByArea(treeGeo(crown, R, trunk, cy, true), leafMat, list, placeTree, false);
-    near.forEach((m, i) => { far[i].visible = false; treeLods.push({ near: m, far: far[i], c: m.geometry.boundingSphere.center }); });
+    far.forEach((m, i) => { m.visible = false; treeLods.push({ near: [trunks[i], crowns[i]], far: m, c: m.geometry.boundingSphere.center }); });
   }
   function updateTreeLods() {
     for (const t of treeLods) {
       const close = Math.hypot(t.c.x - camera.position.x, t.c.z - camera.position.z) < TREE_NEAR;
-      t.near.visible = close; t.far.visible = !close;
+      t.near[0].visible = t.near[1].visible = close; t.far.visible = !close;
     }
   }
   {
@@ -2847,34 +3182,85 @@ body.touch .tk-sign .key { display: none; }
   const SHIRTS = [0xc8102e, 0x2f6fdb, 0x2e8b57, 0xf2b705, 0x6a3d9a, 0xe8e8e8, 0x222428, 0xe46f2a, 0x1f9aa8, 0xb03a74, 0x7a8b99];
   const PANTS = [0x27324a, 0x1c1d21, 0x5a4a3a, 0x3b5b8c, 0x6b6f75];
   const HAIRS = [0xe8d08a, 0x6b4a2b, 0x2b1d14, 0x9a9a9a, 0xc4733a];
-  function headwear(m, id, top, s) {
-    if (id.hat === 'cap') { m.box(0.48 * s, 0.12 * s, 0.48 * s, id.hatColor, 0, top + 0.04 * s, 0); m.box(0.44 * s, 0.05 * s, 0.22 * s, id.hatColor, 0, top, 0.32 * s); }
-    else if (id.hat === 'beanie') m.box(0.47 * s, 0.2 * s, 0.47 * s, id.hatColor, 0, top + 0.06 * s, 0);
-    // Högvakten's spiked helmet (pickelhuva), black with a brass spike
-    else if (id.hat === 'helmet') { m.box(0.5 * s, 0.22 * s, 0.5 * s, 0x15171a, 0, top + 0.06 * s, 0); m.box(0.44 * s, 0.04 * s, 0.2 * s, 0x15171a, 0, top - 0.04 * s, 0.32 * s); m.box(0.07 * s, 0.22 * s, 0.07 * s, 0xd4a53a, 0, top + 0.28 * s, 0); m.box(0.16 * s, 0.14 * s, 0.03 * s, 0xd4a53a, 0, top + 0.08 * s, 0.26 * s); }
-    else { m.box(0.47 * s, 0.1 * s, 0.47 * s, id.hair, 0, top + 0.03 * s, 0); m.box(0.47 * s, 0.3 * s, 0.1 * s, id.hair, 0, top - 0.12 * s, -0.2 * s); }
+  // People are about 1.8 m tall, with rounded heads (a face, ears and hair or a hat), a neck and shoulders, arms with
+  // hands and legs with knees and shoes. A person is a body and four limbs that swing from the hips and shoulders.
+  const cyl = (rt, rb, h, n = 10) => new THREE.CylinderGeometry(rt, rb, h, n);
+  const ball = (r, w = 12, hs = 8, tl = Math.PI) => new THREE.SphereGeometry(r, w, hs, 0, TAU, 0, tl);
+  const squash = (g, x, y, z) => { g.scale(x, y, z); return g; };
+  // a head centred at (0, cy, 0), s times the usual size
+  function head(m, id, cy, s) {
+    const r = 0.115 * s;
+    m.add(squash(ball(r, 14, 10), 0.92, 1.08, 1), id.skin, 0, cy, 0);
+    for (const sx of [1, -1]) {
+      m.add(squash(ball(r * 0.22, 6, 5), 0.5, 1, 0.8), id.skin, sx * r * 0.9, cy, -r * 0.05);
+      m.add(ball(r * 0.1, 6, 5), 0x15181c, sx * r * 0.36, cy + r * 0.16, r * 0.88);
+      m.box(r * 0.3, r * 0.06, r * 0.05, shade(id.hair, 0.8), sx * r * 0.36, cy + r * 0.38, r * 0.86);
+    }
+    m.add(squash(cyl(r * 0.05, r * 0.15, r * 0.34, 6), 1, 1, 0.9), id.skin, 0, cy - r * 0.04, r * 0.98, -0.3, 0, 0);
+    m.box(r * 0.36, r * 0.05, r * 0.05, shade(id.skin, 0.7), 0, cy - r * 0.44, r * 0.86);
+    const cap = (rr, tl, col, tilt = 0) => m.add(ball(rr, 14, 6, tl), col, 0, cy + r * 0.04, -r * 0.04, tilt, 0, 0);
+    if (id.hat === 'cap') {
+      cap(r * 1.08, Math.PI * 0.5, id.hatColor);
+      m.add(squash(cyl(r * 0.9, r * 0.9, r * 0.08, 14), 1, 1, 0.75), id.hatColor, 0, cy + r * 0.12, r * 0.85, 0.12, 0, 0);
+    } else if (id.hat === 'beanie') {
+      cap(r * 1.1, Math.PI * 0.58, id.hatColor);
+      m.add(ball(r * 0.22, 6, 5), id.hatColor, 0, cy + r * 1.12, 0);
+    } else if (id.hat === 'helmet') {
+      // Högvakten's spiked helmet (pickelhuva): black leather with a brass spike and plate
+      cap(r * 1.14, Math.PI * 0.55, 0x15171a);
+      m.add(squash(cyl(r * 1.05, r * 1.1, r * 0.08, 14), 1, 1, 1.1), 0x15171a, 0, cy - r * 0.02, r * 0.1);
+      m.add(new THREE.ConeGeometry(r * 0.16, r * 0.8, 8), 0xd4a53a, 0, cy + r * 1.45, 0);
+      m.box(r * 0.7, r * 0.6, r * 0.05, 0xd4a53a, 0, cy + r * 0.55, r * 1.04);
+    } else cap(r * 1.05, Math.PI * 0.56, id.hair, -0.35); // hair, over the top and down the back
   }
   function makeIdentity(o = {}) {
     const id = {
       skin: o.skin ?? rpick(SKINS), shirt: o.shirt ?? rpick(SHIRTS), pants: o.pants ?? rpick(PANTS), hair: o.hair ?? rpick(HAIRS),
       hat: o.hat !== undefined ? o.hat : Math.random() < 0.25 ? 'cap' : Math.random() < 0.35 ? 'beanie' : null,
-      hatColor: o.hatColor ?? rpick(SHIRTS)
+      hatColor: o.hatColor ?? rpick(SHIRTS), sleeves: o.sleeves ?? Math.random() < 0.7
     };
     const b = new Merger();
-    b.box(0.62, 0.72, 0.36, id.shirt, 0, 1.33, 0);
-    b.box(0.44, 0.44, 0.44, id.skin, 0, 1.94, 0);
-    b.box(0.08, 0.1, 0.08, id.skin, 0, 1.9, 0.25);
-    b.box(0.07, 0.09, 0.02, 0x15181c, 0.1, 1.99, 0.225);
-    b.box(0.07, 0.09, 0.02, 0x15181c, -0.1, 1.99, 0.225);
-    headwear(b, id, 2.16, 1);
-    if (o.belts) { b.box(0.08, 0.76, 0.03, 0xf2f2ee, 0.12, 1.33, 0.19); b.box(0.08, 0.76, 0.03, 0xf2f2ee, -0.12, 1.33, 0.19); b.box(0.64, 0.08, 0.38, 0xf2f2ee, 0, 1.02, 0); b.box(0.1, 0.1, 0.03, 0xd4a53a, 0, 1.02, 0.2); }
+    b.add(squash(cyl(0.15, 0.155, 0.18, 12), 1.15, 1, 0.78), id.pants, 0, 0.99, 0);
+    b.add(squash(cyl(0.175, 0.15, 0.4, 12), 1.2, 1, 0.75), id.shirt, 0, 1.27, 0);
+    b.add(squash(ball(0.175, 12, 8), 1.22, 0.42, 0.76), id.shirt, 0, 1.46, 0);
+    b.add(cyl(0.048, 0.055, 0.12, 8), id.skin, 0, 1.55, 0.005);
+    head(b, id, 1.67, 1);
+    if (o.belts) {
+      // Högvakten: white belt with a brass buckle and white bandoliers crossed over the chest
+      b.add(squash(cyl(0.157, 0.157, 0.05, 12), 1.17, 1, 0.8), 0xf2f2ee, 0, 1.08, 0);
+      b.box(0.05, 0.05, 0.02, 0xd4a53a, 0, 1.08, 0.128);
+      for (const s of [1, -1]) b.add(new THREE.BoxGeometry(0.045, 0.48, 0.02), 0xf2f2ee, s * 0.05, 1.29, 0.122, 0, 0, s * 0.45);
+    }
+    if (o.police) {
+      // the police: reflective yellow-green band round the chest and a POLIS-blue collar
+      b.add(squash(cyl(0.172, 0.168, 0.06, 12), 1.21, 1, 0.76), 0xc9d82a, 0, 1.33, 0);
+      b.add(squash(cyl(0.07, 0.075, 0.05, 10), 1.3, 1, 1.1), 0x0f2350, 0, 1.51, 0);
+    }
     id.bodyGeo = b.build();
-    const l = new Merger(); l.box(0.26, 0.9, 0.3, id.pants, 0, -0.45, 0); l.box(0.28, 0.14, 0.38, 0x1c1c1c, 0, -0.9, 0.05); id.legGeo = l.build();
-    const a = new Merger(); a.box(0.2, 0.62, 0.22, id.shirt, 0, -0.3, 0); a.box(0.18, 0.16, 0.2, id.skin, 0, -0.68, 0); id.armGeo = a.build();
+    const l = new Merger();
+    l.add(cyl(0.082, 0.066, 0.47, 10), id.pants, 0, -0.235, 0);
+    l.add(ball(0.066, 8, 6), id.pants, 0, -0.47, 0.005);
+    l.add(cyl(0.064, 0.05, 0.41, 10), id.pants, 0, -0.68, 0);
+    l.add(squash(ball(0.062, 10, 6), 0.95, 0.62, 1.95), 0x1c1c1c, 0, -0.9, 0.055);
+    l.box(0.11, 0.025, 0.24, 0x2c2c2c, 0, -0.925, 0.05);
+    id.legGeo = l.build();
+    const a = new Merger(), sl = id.sleeves ? id.shirt : id.skin;
+    a.add(ball(0.06, 8, 6), id.shirt, 0, -0.01, 0);
+    a.add(cyl(0.055, 0.047, 0.29, 8), id.shirt, 0, -0.15, 0);
+    a.add(cyl(0.046, 0.038, 0.26, 8), sl, 0, -0.42, 0);
+    a.add(squash(ball(0.045, 8, 6), 0.75, 1.25, 0.55), id.skin, 0, -0.6, 0);
+    id.armGeo = a.build();
+    // sitting at the wheel: upper body, head and arms out to the wheel, inside the room the seats were fitted for
     const d = new Merger();
-    d.box(0.46, 0.5, 0.3, id.shirt, 0, 0.25, 0); d.box(0.3, 0.3, 0.3, id.skin, 0, 0.65, 0);
-    d.box(0.05, 0.06, 0.02, 0x15181c, 0.07, 0.68, 0.155); d.box(0.05, 0.06, 0.02, 0x15181c, -0.07, 0.68, 0.155);
-    headwear(d, id, 0.8, 0.7);
+    d.add(squash(cyl(0.18, 0.16, 0.42, 12), 1.15, 1, 0.75), id.shirt, 0, 0.23, 0);
+    d.add(squash(ball(0.18, 12, 8), 1.17, 0.42, 0.76), id.shirt, 0, 0.44, 0);
+    d.add(cyl(0.048, 0.055, 0.1, 8), id.skin, 0, 0.51, 0.005);
+    head(d, id, 0.64, 1.05);
+    for (const s of [1, -1]) {
+      d.add(cyl(0.05, 0.045, 0.28, 8), id.shirt, s * 0.21, 0.32, 0.08, 0.55, 0, 0);
+      d.add(cyl(0.043, 0.038, 0.27, 8), sl, s * 0.17, 0.24, 0.3, 1.35, 0, -s * 0.2);
+      d.add(ball(0.045, 8, 6), id.skin, s * 0.15, 0.27, 0.43);
+    }
     id.driverGeo = d.build();
     return id;
   }
@@ -2883,8 +3269,8 @@ body.touch .tk-sign .key { display: none; }
     group.add(inner);
     const body = new THREE.Mesh(id.bodyGeo, personMat); body.castShadow = true; inner.add(body);
     const limb = (geo, x, y) => { const p = new THREE.Group(); p.position.set(x, y, 0); const m = new THREE.Mesh(geo, personMat); m.castShadow = true; p.add(m); inner.add(p); return p; };
-    const legL = limb(id.legGeo, 0.16, 0.97), legR = limb(id.legGeo, -0.16, 0.97);
-    const armL = limb(id.armGeo, 0.42, 1.64), armR = limb(id.armGeo, -0.42, 1.64);
+    const legL = limb(id.legGeo, 0.09, 0.93), legR = limb(id.legGeo, -0.09, 0.93);
+    const armL = limb(id.armGeo, 0.24, 1.43), armR = limb(id.armGeo, -0.24, 1.43);
     scene.add(group);
     return { group, inner, legL, legR, armL, armR };
   }
@@ -3026,6 +3412,52 @@ body.touch .tk-sign .key { display: none; }
         intake: { y: [0.33, 0.43], x: 0.62, d: 0.15 }, tail: { y: [-0.17, -0.02], x: 0.36, d: 0.12, col: 'gloss' },
         lamps: [{ type: 'bars', xs: [0.48, 0.6, 0.72], w: 0.075, y: [-0.15, -0.04] }], stripes: [0.1, 0.25], plate: [0.42, 0.6]
       } },
+    // the Swedish classics: the boxy Volvo 240 estate (1974–93) and the Saab 900 Turbo with its wrap-round windscreen
+    { id: 'v240', name: 'Volvo 240', kind: 'Klassisk kombi', def: 'Volvo 240:n', W: 1.71, L: 4.79, R: 0.31, wb: 2.64, max: 47, accel: 7.5, brake: 21, rev: 8, mass: 1.35, grip: 0.92,
+      colors: [0x7a1f22, 0x2f4a6b, 0xd9d4c6, 0x1d1f22, 0x5f6a4e], gears: 4, idle: 800, red: 5800, eng: 'i4', rim: 'alloy', classic: true,
+      shape: {
+        sill: [[-2.395, 0.48], [-2.25, 0.34], [-1.95, 0.31], [1.95, 0.31], [2.25, 0.33], [2.395, 0.44]],
+        belt: [[-2.395, 0.95], [-2.33, 1.0], [-2.0, 1.01], [0.0, 1.0], [0.95, 0.97], [1.6, 0.93], [2.2, 0.9], [2.395, 0.84]],
+        roof: [[-2.3, 1.44], [-1.0, 1.46], [0.3, 1.46]], cab: [-2.36, -2.3, 0.3, 0.95], rc: [0.12, 0.16], p: [6, 6], bulge: 0.03,
+        shoulder: 0.07, tumble: 0.1, crown: [0.015, 0.02, 0.02], glass: [-2.26, 0.9], pillars: [[-0.28, 0.1], [-1.4, 0.13]], trim: 'chrome',
+        doors: [0.9, -0.3, -1.42], head: { y: [-0.17, -0.05], x: 0.42, d: 0.2 }, grille: { y: [0.6, -0.05], x: 0.4, d: 0.12 },
+        intake: { y: [0.33, 0.45], x: 0.8, d: 0.1 }, tail: { y: [-0.42, -0.03], x: 0.6, d: 0.12, up: 0.4, rev: [0.6, 0.625] },
+        cladding: 0.44, rails: true, iron: true, plate: [0.45, 0.62]
+      } },
+    { id: 'saab', name: 'Saab 900 Turbo', kind: 'Klassisk halvkombi', def: 'Saaben', W: 1.69, L: 4.74, R: 0.31, wb: 2.52, max: 55, accel: 11, brake: 23, rev: 9, mass: 1.25, grip: 1.0,
+      colors: [0x9b1b1b, 0x141517, 0xa8adb2, 0xe9e6dc, 0x274a3a], gears: 5, idle: 850, red: 6000, eng: 'i4t', rim: 'aero', classic: true,
+      shape: {
+        sill: [[-2.37, 0.45], [-2.15, 0.33], [-1.85, 0.29], [1.8, 0.29], [2.1, 0.31], [2.37, 0.38]],
+        belt: [[-2.37, 0.86], [-2.25, 0.95], [-1.9, 0.98], [-0.5, 0.95], [0.6, 0.9], [1.4, 0.82], [2.0, 0.72], [2.37, 0.58]],
+        roof: [[-1.25, 1.33], [-0.6, 1.4], [0.2, 1.4]], cab: [-2.2, -1.25, 0.2, 1.05], rc: [0.3, 0.4], p: [2.8, 2.4],
+        shoulder: 0.1, tumble: 0.2, crown: [0.03, 0.04, 0.035], glass: [-1.75, 0.98], pillars: [[-0.32, 0.1], [-1.3, 0.12]], trim: 'gloss',
+        doors: [1.0, -0.35, -1.45], head: { y: [-0.13, -0.05], x: 0.36, d: 0.3 }, grille: { y: [-0.13, -0.06], x: 0.3, d: 0.2 },
+        intake: { y: [0.33, 0.45], x: 0.6, d: 0.15 }, tail: { y: [-0.16, -0.03], x: 0.4, d: 0.25, rev: [0.4, 0.48] }, plate: [0.42, 0.6]
+      } },
+    // Polestar 2, the electric fastback from Göteborg, with its light bar across the tail
+    { id: 'polestar', name: 'Polestar 2', kind: 'Elbil', def: 'Polestaren', ev: true, W: 1.86, L: 4.61, R: 0.35, wb: 2.735, max: 57, accel: 13.5, brake: 28, rev: 9, mass: 1.6, grip: 1.05,
+      colors: [0xe9ecec, 0x5a5f63, 0x101113, 0x1c2a44, 0xb4b6b3], gears: 1, idle: 0, red: 16000, eng: 'ev', rim: 'aero',
+      shape: {
+        sill: [[-2.305, 0.5], [-2.05, 0.37], [-1.75, 0.33], [1.7, 0.33], [2.0, 0.35], [2.305, 0.44]],
+        belt: [[-2.305, 0.95], [-2.2, 1.04], [-1.9, 1.06], [-0.6, 1.02], [0.8, 0.97], [1.5, 0.9], [2.0, 0.82], [2.305, 0.68]],
+        roof: [[-1.2, 1.42], [-0.5, 1.48], [0.15, 1.48]], cab: [-2.05, -1.2, 0.15, 1.3], rc: [0.25, 0.45], p: [3, 2.6],
+        shoulder: 0.1, tumble: 0.18, crown: [0.03, 0.04, 0.03], glass: [-1.7, 1.24], pillars: [[-0.3, 0.1]], trim: 'gloss',
+        roofGlass: true, roofBars: [[-0.3, 0.08]], doors: [1.22, -0.3, -1.5], handles: 'paint',
+        head: { y: [-0.09, -0.04], x: 0.5, d: 0.3 }, intake: { y: [0.36, 0.48], x: 0.45, d: 0.12 },
+        tail: { y: [-0.1, -0.04], x: 0, d: 0.32, rev: [0.26, 0.33] }, cladding: 0.47, plate: [0.47, 0.68]
+      } },
+    // Koenigsegg Jesko, the hypercar from Ängelholm: the fastest car in town by far
+    { id: 'jesko', name: 'Koenigsegg Jesko', kind: 'Hyperbil', def: 'Koenigseggen', sport: true, rearEngine: true, W: 2.03, L: 4.61, R: 0.36, wb: 2.7, max: 105, accel: 27, brake: 40, rev: 10, mass: 1.4, grip: 1.32,
+      colors: [0xf2f2f0, 0xff6a13, 0x1d4fd8, 0x111316, 0x8a1b1b], gears: 9, idle: 1000, red: 8500, eng: 'v8', rim: 'black',
+      shape: {
+        sill: [[-2.305, 0.38], [-2.1, 0.24], [-1.75, 0.19], [1.75, 0.19], [2.05, 0.2], [2.305, 0.24]],
+        belt: [[-2.305, 0.85], [-2.1, 0.95], [-1.1, 0.96], [-0.3, 0.88], [0.6, 0.76], [1.4, 0.64], [2.0, 0.5], [2.305, 0.34]],
+        roof: [[-0.6, 1.14], [-0.3, 1.21], [-0.05, 1.21]], cab: [-1.65, -0.6, -0.05, 1.05], rc: [0.25, 0.55], p: [3, 2.1],
+        shoulder: 0.14, tumble: 0.28, crown: [0.02, -0.01, 0.02], glass: [-0.55, 1.0], trim: 'gloss', rearCol: 'under',
+        doors: [1.0, -0.5], head: { y: [-0.07, -0.02], x: 0.45, d: 0.4 }, intake: { y: [0.22, 0.4], x: 1.0, d: 0.2 },
+        sideIntake: { z: [-1.2, -0.55], y: [0.42, 0.78] }, tail: { y: [-0.1, -0.04], x: 0.25, d: 0.25, rev: [0.25, 0.32] },
+        diffuser: 0.55, wing: true, plate: [0.32, 0.55]
+      } },
     { id: 'polis', name: 'Polisbil', kind: 'Volvo V90', def: 'polisbilen', police: true, W: 1.88, L: 4.94, R: 0.36, wb: 2.94, max: 64, accel: 14, brake: 30, rev: 9, mass: 1.9, grip: 1.08,
       colors: [0xf4f5f2], gears: 6, idle: 800, red: 6500, eng: 'i4t', rim: 'alloy',
       shape: {
@@ -3086,13 +3518,13 @@ body.touch .tk-sign .key { display: none; }
   const COL = {
     head: 0xfff4d0, tail: 0xb3121b, rev: 0xf6f6f6, blueL: 0x2a5cff, blueR: 0x2a5cfe, plate: 0xf4f4f4, euBlue: 0x1f4fae,
     hub: 0x3a3d41, chrome: 0xc6cbd1, tyre: 0x17191c, busSign: 0xffa21a, doors: 0x2a3540, polBlue: 0x163d8c, polYellow: 0xd4e01c,
-    rim: 0xb9bec4, rimDark: 0x2b2e33, aero: 0x8d9399
+    rim: 0xb9bec4, rimDark: 0x2b2e33, aero: 0x8d9399, disc: 0x8b8f94, caliper: 0xb3131c, caliperGrey: 0x55595e
   };
   const CAR_GLASS = -2, UNDER = 0x0e0f11, CLAD = 0x26282b, GLOSS = 0x111215, CHROME = COL.chrome, STRIPE = 0xf2f2ef;
   const TRIM = { gloss: GLOSS, chrome: CHROME, dark: 0x1f2226, under: UNDER };
   function carSurf(paint) {
     return (col) => (col === paint || col === COL.polBlue || col === COL.polYellow || col === STRIPE ? SURF.paint
-      : col === GLOSS || col === 0xf2c200 ? SURF.gloss : col === COL.rim || col === COL.rimDark || col === COL.aero ? SURF.alloy : col === UNDER || col === CLAD ? SURF.under
+      : col === GLOSS || col === 0xf2c200 || col === COL.caliper ? SURF.gloss : col === COL.rim || col === COL.rimDark || col === COL.aero || col === COL.disc ? SURF.alloy : col === UNDER || col === CLAD ? SURF.under
       : col === COL.head || col === COL.busSign ? SURF.head : col === COL.tail ? SURF.tail : col === COL.rev ? SURF.rev
         : col === COL.blueL ? SURF.blueL : col === COL.blueR ? SURF.blueR : col === COL.chrome ? SURF.chrome
           : col === COL.plate || col === COL.euBlue ? SURF.plate : col === COL.tyre ? SURF.tyre : col === COL.doors ? SURF.gloss : SURF.trim);
@@ -3451,12 +3883,12 @@ body.touch .tk-sign .key { display: none; }
       const z = doors[k] + 0.22, y = sh.belt(z) - 0.1, x = sh.sideX(z, y);
       mg.box(0.03, 0.035, 0.15, S.handles === 'paint' ? shade(paint, 0.9) : S.trim === 'chrome' ? CHROME : GLOSS, s * (x + 0.006), y, z);
     }
-    // number plates
-    const plate = S.taxi ? 0xf2c200 : COL.plate;
+    // number plates: a frame on the body and the plate itself, a quad that shows this car's registration from the atlas
+    const plateB = new Builder();
     for (const [s, y] of [[1, S.plate[0]], [-1, S.plate[1]]]) {
-      const z = sh.endZ(0.26, s) + s * 0.014;
-      mg.box(0.52, 0.11, 0.025, plate, 0, y, z);
-      mg.box(0.065, 0.11, 0.03, COL.euBlue, 0.225 * s, y, z);
+      const z = sh.endZ(0.26, s) + s * 0.014, f = z + s * 0.0135, x0 = 0.25 * s, x1 = -0.25 * s;
+      mg.box(0.53, 0.12, 0.025, GLOSS, 0, y, z);
+      plateB.quad([x1, y - 0.052, f], [x0, y - 0.052, f], [x0, y + 0.052, f], [x1, y + 0.052, f], 0xffffff, [[0, 0], [1, 0], [1, 1], [0, 1]], [0, 0, s]);
     }
     // special lamps
     for (const L of S.lamps || []) {
@@ -3474,6 +3906,35 @@ body.touch .tk-sign .key { display: none; }
       const z = sh.endZ(0.05, 1) + 0.006, yt = sh.belt(hl - 0.05), y = lerp(sh.lv(S.grille.y[0], yt), sh.lv(S.grille.y[1], yt), 0.5);
       mg.add(new THREE.TorusGeometry(0.06, 0.012, 6, 16), CHROME, 0, y, z, 0, 0, 0);
       mg.add(new THREE.BoxGeometry(0.34, 0.022, 0.02), CHROME, 0, y, z + 0.004, 0, 0, 0.62);
+    }
+    // wipers parked at the foot of the windscreen
+    if (!M.bus) {
+      const z = r3 - 0.06, y = sh.belt(r3) + 0.025, x0 = sh.ring(r3).gT * 0.85;
+      for (const sx of [-0.08, -x0 * 0.92]) mg.add(new THREE.BoxGeometry(x0 * 0.9, 0.018, 0.022), GLOSS, sx + x0 * 0.45, y, z, 0, 0.12, 0.03);
+    } else for (const sx of [0.55, -0.55]) mg.add(new THREE.BoxGeometry(0.9, 0.03, 0.03), GLOSS, sx, 1.25, hl + 0.02, 0, 0, 0.5 * Math.sign(sx));
+    // exhausts: twin pipes in the middle on the sports cars, one at the side on the rest, none on the electric ones
+    if (!M.ev) {
+      const zr = -hl + 0.06, yb = sh.sill(-hl + 0.3) + 0.06;
+      const pipes = M.sport ? [-0.2, 0.2] : M.bus ? [-hw + 0.4] : [-hw + 0.45];
+      for (const x of pipes) {
+        mg.add(new THREE.CylinderGeometry(M.sport ? 0.048 : 0.035, M.sport ? 0.048 : 0.035, 0.22, 12), CHROME, x, M.sport ? Math.max(yb, (S.diffuser || 0.3) - 0.1) : yb, zr, Math.PI / 2, 0, 0);
+        mg.add(new THREE.CylinderGeometry(M.sport ? 0.036 : 0.025, M.sport ? 0.036 : 0.025, 0.01, 12), UNDER, x, M.sport ? Math.max(yb, (S.diffuser || 0.3) - 0.1) : yb, zr - 0.112, Math.PI / 2, 0, 0);
+      }
+    }
+    // the aerial fin on the roof of the newer cars
+    if (!M.bus && !M.sport && !M.classic && !S.roofGlass && !S.taxi && !S.police && r2 - r1 > 0.6) {
+      const z = r1 + 0.18, y = sh.surfY(z, 0);
+      mg.add(new THREE.BoxGeometry(0.045, 0.06, 0.16), GLOSS, 0, y + 0.025, z, 0.25, 0, 0);
+    }
+    // the third brake light at the top of the rear window
+    if (!M.bus && !M.sport && r1 > r0 + 0.04) {
+      const z = r1 - 0.03, y = sh.topAt(r1) - 0.035;
+      mg.box(0.32, 0.03, 0.02, COL.tail, 0, y, z);
+    }
+    // fog lamps low in the front
+    if (S.intake && !M.sport && !M.bus) for (const s of [1, -1]) {
+      const x = Math.min(hw - 0.28, S.intake.x + 0.08), y = S.intake.y[0] - 0.01, z = sh.endZ(x, 1) - 0.02;
+      if (y > sh.sill(hl - 0.2) + 0.03) mg.add(new THREE.CylinderGeometry(0.045, 0.045, 0.04, 14), COL.head, s * x, y, z, Math.PI / 2, 0, 0);
     }
     // roof rails, taxi sign, police light bar, rear wing, the bus's roof pack
     const roofY = (z, x = 0) => sh.surfY(z, x);
@@ -3534,7 +3995,7 @@ body.touch .tk-sign .key { display: none; }
     const beltMax = Math.max(...sh.Z.filter((z) => Math.abs(z) < hl * 0.7).map(sh.belt)), roofMax = Math.max(...sh.Z.map(sh.topAt));
     const parts = M.bus ? [{ cz: 0, hw, hl, top: roofMax }]
       : [{ cz: 0, hw, hl, top: beltMax }, { cz: (Math.max(r1, -hl + 0.3) + r2) / 2, hw: hw - 0.12, hl: (r2 - Math.max(r1, -hl + 0.3)) / 2, top: roofMax + 0.03 }];
-    return { body: mg.build(), glass: gl.build(), decal, flashers, driver, rear, parts };
+    return { body: mg.build(), glass: gl.build(), decal, plates: plateB.build(), flashers, driver, rear, parts };
   }
   // one geometry per model and colour, shared by every car like it until a crash dents one (see ownGeometry)
   const carGeoCache = new Map();
@@ -3549,11 +4010,13 @@ body.touch .tk-sign .key { display: none; }
     if (wheelCache.has(key)) return wheelCache.get(key);
     const m = new Merger(carSurf(-1)), big = style === 'sport' || style === 'black', tw = style === 'steel' ? 0.3 : big ? 0.3 : 0.27;
     const rim = R * (big ? 0.74 : style === 'steel' ? 0.6 : 0.68), face = style === 'black' ? COL.rimDark : style === 'aero' ? COL.aero : style === 'steel' ? 0x6a6e73 : COL.rim;
-    m.add(new THREE.CylinderGeometry(R, R, tw * 0.84, 20, 1, true), COL.tyre, 0, 0, 0, 0, 0, Math.PI / 2);
-    m.add(new THREE.CylinderGeometry(R * 0.95, R * 0.95, tw, 20), COL.tyre, 0, 0, 0, 0, 0, Math.PI / 2);
-    m.add(new THREE.CylinderGeometry(rim, rim, tw + 0.004, 18, 1, false), COL.hub, 0, 0, 0, 0, 0, Math.PI / 2);
+    m.add(new THREE.CylinderGeometry(R, R, tw * 0.84, 30, 1, true), COL.tyre, 0, 0, 0, 0, 0, Math.PI / 2);
+    m.add(new THREE.CylinderGeometry(R * 0.95, R * 0.95, tw, 30), COL.tyre, 0, 0, 0, 0, 0, Math.PI / 2);
+    m.add(new THREE.CylinderGeometry(rim, rim, tw + 0.004, 24, 1, false), COL.hub, 0, 0, 0, 0, 0, Math.PI / 2);
     for (const sx of [-1, 1]) {
       const fx = sx * (tw / 2 + 0.004);
+      // the brake disc, seen between the spokes
+      if (style !== 'aero' && style !== 'steel') m.add(new THREE.CylinderGeometry(rim * 0.8, rim * 0.8, 0.003, 26), COL.disc, sx * (tw / 2 + 0.0045), 0, 0, 0, 0, Math.PI / 2);
       m.add(new THREE.TorusGeometry(rim - 0.012, 0.016, 3, 18), face, fx, 0, 0, 0, Math.PI / 2, 0);
       if (style === 'aero') {
         m.add(new THREE.CylinderGeometry(rim - 0.02, rim - 0.02, 0.012, 18), face, fx, 0, 0, 0, 0, Math.PI / 2);
@@ -3576,6 +4039,43 @@ body.touch .tk-sign .key { display: none; }
     return g;
   }
 
+  // brake callipers sit on the hub, so they stay put while the wheel turns: red on the sports cars
+  const caliperCache = new Map();
+  function caliperGeometry(R, style) {
+    const key = R + style;
+    if (caliperCache.has(key)) return caliperCache.get(key);
+    let g = null;
+    if (style !== 'aero' && style !== 'steel') {
+      const m = new Merger(carSurf(-1)), big = style === 'sport' || style === 'black', tw = big ? 0.3 : 0.27, rim = R * (big ? 0.74 : 0.68);
+      for (const sx of [-1, 1]) m.add(new THREE.BoxGeometry(0.014, rim * 0.34, rim * 0.42), big ? COL.caliper : COL.caliperGrey, sx * (tw / 2 + 0.0075), rim * 0.47, -rim * 0.3, 0.55, 0, 0);
+      g = m.build();
+    }
+    caliperCache.set(key, g);
+    return g;
+  }
+  // number plates: one atlas of Swedish registrations (white, and yellow for the taxis), each car showing its own
+  const PLATE_LETTERS = 'ABCDEFGHJKLMNOPRSTUWXYZ', PLATE_N = 32, PLATE_TAXI = 28;
+  const plateLetter = () => PLATE_LETTERS[Math.floor(Math.random() * PLATE_LETTERS.length)];
+  const PLATE_REGS = Array.from({ length: PLATE_N }, () => plateLetter() + plateLetter() + plateLetter() + ' ' + String(Math.floor(Math.random() * 100)).padStart(2, '0') + (Math.random() < 0.5 ? Math.floor(Math.random() * 10) : plateLetter()));
+  const plateTex = canvasTex(1024, 512, (g) => {
+    PLATE_REGS.forEach((reg, i) => {
+      const x = (i % 4) * 256, y = Math.floor(i / 4) * 64, taxi = i >= PLATE_TAXI;
+      g.fillStyle = '#1b1c1e'; g.fillRect(x, y, 256, 64);
+      g.fillStyle = taxi ? '#f2c200' : '#f4f4f1'; roundRect(g, x + 3, y + 3, 250, 58, 6); g.fill();
+      g.fillStyle = '#1f4fae'; roundRect(g, x + 3, y + 3, 30, 58, 6); g.fill(); g.fillRect(x + 20, y + 3, 13, 58);
+      g.fillStyle = '#f2c200';
+      for (let k = 0; k < 12; k++) { const a = (k / 12) * TAU; g.fillRect(x + 18 + Math.cos(a) * 8 - 1, y + 21 + Math.sin(a) * 8 - 1, 2.2, 2.2); }
+      g.fillStyle = '#ffffff'; g.font = '700 17px Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('S', x + 18, y + 47);
+      g.fillStyle = '#121314'; g.font = '700 44px "Arial Narrow", Arial, sans-serif'; g.fillText(reg, x + 144, y + 35, 204);
+    });
+  });
+  function plateMaterial(slot) {
+    const m = std({ map: plateTex, roughness: 0.4, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    const u = { value: new THREE.Vector2((slot % 4) * 0.25, 1 - (Math.floor(slot / 4) + 1) * 0.125) };
+    m.onBeforeCompile = (sh) => { sh.uniforms.uSlot = u; sh.vertexShader = 'uniform vec2 uSlot;\n' + sh.vertexShader.replace('#include <uv_vertex>', '#include <uv_vertex>\n\tvUv = uSlot + uv * vec2( 0.25, 0.125 );'); };
+    return m;
+  }
+
   const cars = [];
   let driving = null, spawnedCar = null;
   function makeCar(M, color) {
@@ -3587,6 +4087,9 @@ body.touch .tk-sign .key { display: none; }
     const glass = new THREE.Mesh(geo.glass, glassMat); body.add(glass);
     const decal = geo.decal ? new THREE.Mesh(geo.decal, decalMat) : null;
     if (decal) body.add(decal);
+    const plateSlot = M.shape.taxi ? PLATE_TAXI + Math.floor(Math.random() * (PLATE_N - PLATE_TAXI)) : Math.floor(Math.random() * PLATE_TAXI);
+    const plateMat = plateMaterial(plateSlot), plates = new THREE.Mesh(geo.plates, plateMat);
+    body.add(plates);
     const blob = new THREE.Mesh(blobGeo, blobMat);
     blob.scale.set(M.W * 1.35, 1, M.L * 1.12); blob.position.y = 0.045; blob.renderOrder = 1;
     group.add(blob);
@@ -3597,12 +4100,14 @@ body.touch .tk-sign .key { display: none; }
     // someone in the back seat (you, after an arrest)
     let rearSeat = null;
     if (geo.rear) { rearSeat = new THREE.Mesh(playerId.driverGeo, personMat); rearSeat.position.set(geo.rear.x, geo.rear.y, geo.rear.z); rearSeat.visible = false; body.add(rearSeat); }
-    const spins = [], pivots = [], wheels = [], wg = wheelGeometry(M.R, M.rim);
+    const spins = [], pivots = [], wheels = [], calipers = [], wg = wheelGeometry(M.R, M.rim), cg = caliperGeometry(M.R, M.rim);
     const wx = wheelX(M), wz = M.wb / 2;
     for (const sz of [1, -1]) for (const sx of [1, -1]) {
       const pivot = new THREE.Group(); pivot.position.set(sx * wx, M.R, sz * wz);
       const spin = new THREE.Group(); pivot.add(spin);
       const w = new THREE.Mesh(wg, wheelMat); w.castShadow = true; spin.add(w);
+      // (the callipers are only shown on your own car, to keep the number of things drawn down)
+      if (cg) { const cm = new THREE.Mesh(cg, wheelMat); cm.visible = false; pivot.add(cm); calipers.push(cm); }
       group.add(pivot); spins.push(spin);
       wheels.push({ pivot, sx, sz, toe: 0, camber: 0 });
       if (sz === 1) pivots.push(pivot);
@@ -3617,7 +4122,7 @@ body.touch .tk-sign .key { display: none; }
     const offs = [];
     for (let i = 0; i < n; i++) offs.push(-span + (2 * span * i) / (n - 1));
     const c = {
-      M, color, group, body, driver, rearSeat, spins, pivots, wheels, geo, mat, bodyMesh, glass, decal, flashers,
+      M, color, group, body, driver, rearSeat, spins, pivots, wheels, calipers, geo, mat, bodyMesh, glass, decal, flashers, plateSlot, plateMat, plates,
       geoShared: true, x: 0, z: 0, h: 0, vx: 0, vz: 0, steer: 0, wheelRot: 0, roll: 0, pitch: 0,
       prevVf: 0, throttle: 0, r, offs, parts: geo.parts, bot: null, occupant: null, keep: false, input: null, px: 0, pz: 0,
       // gearbox
@@ -3637,7 +4142,7 @@ body.touch .tk-sign .key { display: none; }
   function removeCar(c) {
     scene.remove(c.group);
     if (!c.geoShared) { c.geo.body.dispose(); c.geo.glass.dispose(); if (c.geo.decal) c.geo.decal.dispose(); }
-    c.mat.dispose();
+    c.mat.dispose(); c.plateMat.dispose();
     if (c.flashers) for (const s of c.flashers) s.material.dispose();
     const i = cars.indexOf(c);
     if (i >= 0) cars.splice(i, 1);
@@ -4371,7 +4876,7 @@ body.touch .tk-sign .key { display: none; }
       if (!spotFree(M, x, z, h)) continue;
       const c = makeCar(M, rpick(M.colors));
       c.x = x; c.z = z; c.h = h; c.vx = f.ux * 6; c.vz = f.uz * 6;
-      c.bot = { from, to, next: chooseNext(from, to), phase: 'edge', t: 0, passT: 0, waitT: 0, ignoreT: 0, revT: 0, stuckT: 0, stuckTotal: 0, honkT: 0, turnAge: 0, cruise: M.bus ? 10.5 : M.sport ? 16.5 : 12.5 + Math.random() * 2.5 };
+      c.bot = { from, to, next: chooseNext(from, to), phase: 'edge', t: 0, passT: 0, waitT: 0, ignoreT: 0, revT: 0, stuckT: 0, stuckTotal: 0, honkT: 0, turnAge: 0, cruise: M.bus ? 11.5 : M.sport ? 18.5 : 14 + Math.random() * 3 };
       setOccupant(c, makeIdentity());
       return c;
     }
@@ -4386,6 +4891,8 @@ body.touch .tk-sign .key { display: none; }
   /* ---------- pedestrians ---------- */
   function npcThink(p, dt) {
     if (p.ai.state === 'cop') return copThink(p, dt);
+    // a fare or a bus passenger walking up to the car to get in
+    if (p.ai.state === 'board') { const c = p.ai.car, d = c.M.bus ? doorSpot(c, -1, false) : doorNear(c, p.x, p.z, true); return seek(p, walkWaypoint(p.ai.nav || (p.ai.nav = {}), p.x, p.z, d.x, d.z, dt), 2.6, 0.2); }
     if (p.ai.state === 'idle') { if (p.ai.face !== undefined) p.rot = lerpAngle(p.rot, p.ai.face, 0.1); return { mx: 0, mz: 0, speed: 0, jump: false }; }
     const ai = p.ai, out = { mx: 0, mz: 0, speed: 0, jump: false };
     if (ai.dodgeT > 0) { ai.dodgeT -= dt; out.mx = ai.dx; out.mz = ai.dz; out.speed = 6.5; return out; }
@@ -4454,12 +4961,13 @@ body.touch .tk-sign .key { display: none; }
   // front of them or running someone over starts a chase: blue lights and siren, other cars pull over, and the police
   // follow the streets towards you, then drive straight at you once they have you in sight. Stop the car next to
   // them and you get a fine. Get out of sight for long enough and they give up.
-  const POLICE_TARGET = 4, CHASE_SPEED = 33, PATROL_SPEED = 14, TOLERANCE = 8;
-  const OFFICER = { shirt: 0x1f3a6e, pants: 0x1c2333, hat: 'cap', hatColor: 0x1b2b4f };
+  // TOLERANCE: how far over the limit you can go before a patrol bothers; SPEED_EYE: how far a patrol notices it
+  const POLICE_TARGET = 4, CHASE_SPEED = 33, PATROL_SPEED = 14, TOLERANCE = 15, SPEED_EYE = 55;
+  const OFFICER = { shirt: 0x1f3a6e, pants: 0x1c2333, hat: 'cap', hatColor: 0x1b2b4f, police: true, sleeves: true };
   let sirenCars = [], wanted = null, fines = 0, policeCool = 0, policeSpawnT = 0;
   // The limit where you are. With a heading (the sign by the speedometer) it is the street you are driving along. Without
   // one (what the police go by) it is the fastest street there, so crossing a slower street at a junction is never
-  // speeding. Off the streets (squares, quays, parks) 40 in Gamla stan and 50 elsewhere
+  // speeding. Off the streets (squares, quays, parks) 50 in Gamla stan and 70 elsewhere
   function limitAt(x, z, h) {
     let top = 0, along = 0, bs = -Infinity;
     // every street within 30 m of a point is listed in that point's cell
@@ -4471,12 +4979,11 @@ body.touch .tk-sign .key { display: none; }
       const A = nodes[e.a], B = nodes[e.b], s = Math.abs(((B.x - A.x) * Math.sin(h) + (B.z - A.z) * Math.cos(h)) / e.len) - d / 40;
       if (s > bs) { bs = s; along = e.limit; }
     }
-    return (h === undefined ? top : along) || (districtAt(x, z) === 'Gamla stan' ? 40 : 50);
+    return (h === undefined ? top : along) || (districtAt(x, z) === 'Gamla stan' ? 50 : 70);
   }
   const fmtKr = (n) => n.toLocaleString('sv-SE') + ' kr';
-  // a Swedish registration number, made up the first time anyone asks for it (ABC 12D)
-  const PLATE_L = 'ABCDEFGHJKLMNOPRSTUWXYZ';
-  const plateOf = (c) => c.reg || (c.reg = [0, 0, 0].map(() => PLATE_L[Math.floor(Math.random() * PLATE_L.length)]).join('') + ' ' + Math.floor(Math.random() * 100).toString().padStart(2, '0') + (Math.random() < 0.5 ? Math.floor(Math.random() * 10) : PLATE_L[Math.floor(Math.random() * PLATE_L.length)]));
+  // the registration number on the car's plates (ABC 12D)
+  const plateOf = (c) => c.reg || (c.reg = PLATE_REGS[c.plateSlot]);
   function makePolice(c) {
     c.police = { state: 'patrol', direct: false, goalNode: -1, callIn: 15 + Math.random() * 40 };
     c.siren = false; c.yelp = false;
@@ -4498,6 +5005,11 @@ body.touch .tk-sign .key { display: none; }
     return clear;
   }
   const sees = (c, x, z, range) => Math.hypot(x - c.x, z - c.z) < range && clearView(c.x, c.z, x, z);
+  // a patrol only clocks your speed if you are in front of it (within 75° of where it is heading) or right beside it
+  const clocks = (c, x, z) => {
+    const dx = x - c.x, dz = z - c.z, d = Math.hypot(dx, dz);
+    return (d < 15 || (dx * Math.sin(c.h) + dz * Math.cos(c.h)) / (d || 1) > 0.26) && sees(c, x, z, SPEED_EYE);
+  };
   // can a car drive in a straight line from a to b: land all the way, no lamp posts, trees or other cars in the way
   const landAround = (x, z) => walkable(x - 1, z - 1) && walkable(x + 1, z - 1) && walkable(x - 1, z + 1) && walkable(x + 1, z + 1);
   function drivableLine(ax, az, bx, bz, skipA, skipB) {
@@ -4546,13 +5058,13 @@ body.touch .tk-sign .key { display: none; }
     const rows = [];
     if (w.kinds.has('fart')) {
       const o = Math.max(1, Math.round(w.over));
-      rows.push({ why: o + ' km/h för fort', text: 'Hastighetsöverträdelse, ' + o + ' km/h över ' + (w.limit || 50) + ' km/h', kr: o <= 10 ? 1500 : o <= 15 ? 2000 : o <= 20 ? 2400 : o <= 25 ? 2800 : o <= 30 ? 3200 : 4000 });
+      rows.push({ why: o + ' km/h för fort', text: 'Hastighetsöverträdelse, ' + o + ' km/h över ' + (w.limit || 50) + ' km/h', kr: o <= 20 ? 1500 : o <= 25 ? 2000 : o <= 30 ? 2400 : o <= 40 ? 3200 : 4000 });
     }
     if (w.kinds.has('krock')) rows.push({ why: 'krock med polisbil', text: 'Vårdslöshet i trafik, krock med polisfordon', kr: 3000 });
     if (w.kinds.has('stöld')) rows.push({ why: 'bilstöld', text: 'Olovligt brukande av fordon', kr: 5000 });
     if (w.kinds.has('påkörning')) rows.push({ why: 'påkörning', text: 'Påkörning av fotgängare', kr: 4000 });
-    if ((w.fleeT || 0) > 12) rows.push({ why: 'du stannade inte', text: 'Underlåtenhet att stanna på polisens tecken', kr: 1500 });
-    if (w.over >= 30) rows.push({ why: 'grov hastighetsöverträdelse', text: 'Grov hastighetsöverträdelse, körkortet dras in', kr: 2000 });
+    if ((w.fleeT || 0) > FLEE_ARREST) rows.push({ why: 'du stannade inte', text: 'Underlåtenhet att stanna på polisens tecken', kr: 1500 });
+    if (w.over >= ARREST_OVER) rows.push({ why: 'grov hastighetsöverträdelse', text: 'Grov hastighetsöverträdelse, körkortet dras in', kr: 2000 });
     if (w.kinds.has('smitning')) rows.push({ why: 'du smet från kontrollen', text: 'Avvikande från poliskontroll', kr: 3000 });
     if (!rows.length) rows.push({ why: 'ordningsstörning', text: 'Ordningsstörning', kr: 800 });
     return { f: rows.reduce((a, r) => a + r.kr, 0), why: rows.map((r) => r.why), rows };
@@ -4561,7 +5073,7 @@ body.touch .tk-sign .key { display: none; }
     if (caught) {
       const { f, why } = fineFor(wanted);
       fines += f;
-      toast('Polisen stoppade dig: ' + why.join(', ') + '. Böter ' + fmtKr(f) + '.' + (wanted.over > 30 ? ' Körkortet dras in.' : ''));
+      toast('Polisen stoppade dig: ' + why.join(', ') + '. Böter ' + fmtKr(f) + '.' + (wanted.over >= ARREST_OVER ? ' Körkortet dras in.' : ''));
     } else toast('Du kom undan polisen.');
     for (const fc of footCops) fc.mode = 'return';
     wanted = null;
@@ -4645,7 +5157,7 @@ body.touch .tk-sign .key { display: none; }
     // speeding where a patrol can see it
     if (driving && !wanted && policeCool <= 0 && !driving.siren) {
       const kmh = Math.hypot(driving.vx, driving.vz) * 3.6, over = kmh - limitAt(driving.x, driving.z);
-      if (over > TOLERANCE) for (const c of cars) if (c.police && !c.dead && sees(c, T.x, T.z, 75)) { startChase('fart', over); wanted.limit = limitAt(driving.x, driving.z); break; }
+      if (over > TOLERANCE) for (const c of cars) if (c.police && !c.dead && clocks(c, T.x, T.z)) { startChase('fart', over); wanted.limit = limitAt(driving.x, driving.z); break; }
     }
     if (!wanted) return;
     wanted.t += dt;
@@ -4721,15 +5233,15 @@ body.touch .tk-sign .key { display: none; }
   // Pull over and the nearest patrol turns its siren off (blue lights stay on) and parks right behind you, or in front
   // of you facing you if it is already ahead, lined up with your car and just as far out from the kerb. A constable
   // gets out and walks up to your window. For an ordinary offence that means an ordningsbot (E signs it). Drive far
-  // too fast (30 km/h or more over the limit) or run from them, and it is an arrest instead: out of the car, handcuffs,
+  // too fast (50 km/h or more over the limit) or run from them, and it is an arrest instead: out of the car, handcuffs,
   // the back seat of the police car and a ride to the station on Stora Nygatan, where you are put in a cell.
   // On foot the patrols pull up and the constables get out and run after you, along the streets, through the lanes,
   // up the stairs and into buildings. Get into a car and they run back to theirs and chase you by car again.
   let stop = null;
   const footCops = [];
   const CONSTABLES = ['Andersson', 'Lindqvist', 'Nyström', 'Berg', 'Holm', 'Karlsson', 'Ek', 'Sandberg', 'Öberg', 'Lundin'];
-  const COP_RUN = 9.7, ARREST_OVER = 30, IDLE = () => ({ mx: 0, mz: 0, speed: 0, jump: false });
-  const arrestable = (w) => w.over >= ARREST_OVER || w.kinds.has('smitning') || (w.fleeT || 0) > 12;
+  const COP_RUN = 9.7, ARREST_OVER = 50, FLEE_ARREST = 20, IDLE = () => ({ mx: 0, mz: 0, speed: 0, jump: false });
+  const arrestable = (w) => w.over >= ARREST_OVER || w.kinds.has('smitning') || (w.fleeT || 0) > FLEE_ARREST;
   const stopTarget = () => (driving ? { x: driving.x, z: driving.z, h: driving.h, L: driving.M.L } : { x: player.x, z: player.z, h: player.rot, L: 1 });
   // the phases in which you have no say in where you go
   const inCustody = () => !!(stop && stop.locked && stop.phase !== 'jail');
@@ -4787,6 +5299,84 @@ body.touch .tk-sign .key { display: none; }
     }
     return { x: nodes[n].x, z: nodes[n].z };
   }
+  // Cars standing in the way of someone on foot (your car after an arrest, the patrol car, cars parked at the kerb):
+  // the walk goes round the nearest one the straight line would run into, by the shorter way round its corners.
+  // Each car is a box as big as the car plus room for a person; the corners are a little further out still.
+  const CAR_ROOM = 0.6, CORNER = 0.35;
+  function carBox(c) {
+    return { c, co: Math.cos(c.h), si: Math.sin(c.h), hx: c.M.W / 2 + CAR_ROOM, hz: c.M.L / 2 + CAR_ROOM };
+  }
+  const toLocal = (b, x, z) => { const dx = x - b.c.x, dz = z - b.c.z; return [dx * b.co - dz * b.si, dx * b.si + dz * b.co]; };
+  const toWorld = (b, lx, lz) => ({ x: b.c.x + lx * b.co + lz * b.si, z: b.c.z - lx * b.si + lz * b.co });
+  // where (0..1) a segment in the box's own frame first enters the box, or Infinity if it never does
+  function segEntersBox(ax, az, bx, bz, hx, hz) {
+    let t0 = 0, t1 = 1;
+    for (const [p, d, h] of [[ax, bx - ax, hx], [az, bz - az, hz]]) {
+      if (Math.abs(d) < 1e-9) { if (p <= -h || p >= h) return Infinity; continue; }
+      let ta = (-h - p) / d, tb = (h - p) / d;
+      if (ta > tb) { const t = ta; ta = tb; tb = t; }
+      t0 = Math.max(t0, ta); t1 = Math.min(t1, tb);
+      if (t0 >= t1) return Infinity;
+    }
+    return t0;
+  }
+  const insideBox = (b, x, z) => { const [lx, lz] = toLocal(b, x, z); return Math.abs(lx) < b.hx && Math.abs(lz) < b.hz; };
+  // is (x, z) within pad metres of the body of car c
+  const byCar = (c, x, z, pad) => { const dx = x - c.x, dz = z - c.z, co = Math.cos(c.h), si = Math.sin(c.h); return Math.abs(dx * co - dz * si) < c.M.W / 2 + pad && Math.abs(dx * si + dz * co) < c.M.L / 2 + pad; };
+  function aroundCars(x, z, wp) {
+    const len = Math.hypot(wp.x - x, wp.z - z);
+    if (len < 0.3) return wp;
+    // only cars standing still: one rolling past is gone again before anyone could walk round it
+    const boxes = [];
+    for (const c of cars) {
+      if (Math.hypot(c.vx, c.vz) > 0.5 || Math.abs(c.x - x) > len + c.M.L + 2 || Math.abs(c.z - z) > len + c.M.L + 2) continue;
+      if (stop && stop.riding && c === stop.car) continue;
+      boxes.push(carBox(c));
+    }
+    const S0 = { x, z }, d0 = (p, q) => Math.hypot(p.x - q.x, p.z - q.z);
+    const free = (p, b) => personFits(p.x, p.z) && !blockedAt(p.x, p.z, 0.3) && !boxes.some((o) => o !== b && insideBox(o, p.x, p.z));
+    // squeezed in close beside a car: first step out of the room kept round it, along its side (never through it)
+    for (const b of boxes) {
+      if (!insideBox(b, x, z) || insideBox(b, wp.x, wp.z)) continue;
+      const [lx, lz] = toLocal(b, x, z), sx = Math.sign(lx) || 1, sz = Math.sign(lz) || 1;
+      const outs = [[sx * (b.hx + 0.15), lz], [lx, sz * (b.hz + 0.15)], [lx, -sz * (b.hz + 0.15)]].map(([a, c]) => toWorld(b, a, c)).filter((p) => free(p, b));
+      if (!outs.length) continue;
+      outs.sort((p, q) => d0(S0, p) + d0(p, wp) * 0.5 - d0(S0, q) - d0(q, wp) * 0.5);
+      return outs[0];
+    }
+    let hit = null, ht = Infinity;
+    for (const b of boxes) {
+      // already inside the box (being pushed out of it) or going to a spot inside it: nothing to go round
+      if (insideBox(b, x, z) || insideBox(b, wp.x, wp.z)) continue;
+      const [ax, az] = toLocal(b, x, z), [bx, bz] = toLocal(b, wp.x, wp.z), t = segEntersBox(ax, az, bx, bz, b.hx, b.hz);
+      if (t < ht) { ht = t; hit = b; }
+    }
+    if (!hit) return wp;
+    const b = hit, X = b.hx + CORNER, Z = b.hz + CORNER;
+    const C = [[-X, -Z], [X, -Z], [X, Z], [-X, Z]].map(([lx, lz]) => toWorld(b, lx, lz));
+    // a corner is no good in a wall, in the water or inside another car
+    const ok = C.map((p) => free(p, b));
+    const sees = (p, q) => { const [ax, az] = toLocal(b, p.x, p.z), [bx, bz] = toLocal(b, q.x, q.z); return segEntersBox(ax, az, bx, bz, b.hx, b.hz) === Infinity; };
+    const S = { x, z }, dist = (p, q) => Math.hypot(p.x - q.x, p.z - q.z);
+    let best = null, bl = Infinity;
+    for (let i = 0; i < 4; i++) {
+      if (!ok[i] || !sees(S, C[i])) continue;
+      for (const d of [1, 3]) {
+        const path = [i];
+        let j = i, L = dist(S, C[i]), good = true;
+        while (good && !sees(C[j], wp)) {
+          const n = (j + d) % 4;
+          if (path.length >= 4 || !ok[n]) good = false;
+          else { L += dist(C[j], C[n]); j = n; path.push(n); }
+        }
+        if (!good) continue;
+        L += dist(C[j], wp);
+        // (a corner you are already standing at is passed: the next one along, or the goal, is where to go)
+        if (L < bl) { bl = L; const k = path.find((q) => dist(S, C[q]) > 0.5); best = k === undefined ? wp : C[k]; }
+      }
+    }
+    return best || wp;
+  }
   function walkWaypoint(nav, x, z, tx, tz, dt) {
     if ((nav.t = (nav.t || 0) - dt) > 0 && nav.wp && Math.hypot(nav.wp.x - x, nav.wp.z - z) > 0.6) return nav.wp;
     nav.t = 0.25;
@@ -4805,11 +5395,15 @@ body.touch .tk-sign .key { display: none; }
         wp = k === path.length - 1 && Math.hypot(P[0] - x, P[1] - z) < 0.7 ? (bIn ? { x: tx, z: tz } : streetWaypoint(x, z, tx, tz)) : { x: P[0], z: P[1] };
       }
     } else wp = streetWaypoint(x, z, tx, tz);
+    wp = aroundCars(x, z, wp);
+    // a waypoint on the way (a corner, a junction, a room) is walked through, not stopped at
+    wp.via = Math.hypot(wp.x - tx, wp.z - tz) > 0.05;
     nav.wp = wp;
     return wp;
   }
   function seek(p, wp, speed, stopAt = 0.15) {
     const dx = wp.x - p.x, dz = wp.z - p.z, d = Math.hypot(dx, dz);
+    if (wp.via) return d < 0.02 ? IDLE() : { mx: dx / d, mz: dz / d, speed, jump: false };
     if (d <= stopAt) return IDLE();
     return { mx: dx / d, mz: dz / d, speed: Math.min(speed, (d - stopAt) * 3 + 0.4), jump: false };
   }
@@ -4839,8 +5433,12 @@ body.touch .tk-sign .key { display: none; }
   // where the constable stands to talk to you: by the driver's window, or a step from you if you are on foot
   function windowSpot(o) {
     if (driving) {
-      const co = Math.cos(driving.h), si = Math.sin(driving.h), lx = driving.M.W / 2 + 0.75, lz = driving.driver.position.z + 0.35;
-      return { x: driving.x + lx * co + lz * si, z: driving.z - lx * si + lz * co, fx: driving.x, fz: driving.z };
+      const c = driving, co = Math.cos(c.h), si = Math.sin(c.h), lz = c.driver.position.z + 0.35;
+      const at = (s) => { const lx = s * (c.M.W / 2 + 0.75); return { x: c.x + lx * co + lz * si, z: c.z - lx * si + lz * co, fx: c.x, fz: c.z }; };
+      // the driver's window, unless a wall or another car is in the way there: then the passenger's
+      const free = (p) => personFits(p.x, p.z) && !blockedAt(p.x, p.z, 0.35) && !cars.some((q) => q !== c && byCar(q, p.x, p.z, 0.4));
+      if (stop && stop.winSide === undefined) stop.winSide = free(at(1)) || !free(at(-1)) ? 1 : -1;
+      return at(stop ? stop.winSide : 1);
     }
     const dx = o.x - player.x, dz = o.z - player.z, d = Math.hypot(dx, dz) || 1;
     return { x: player.x + (dx / d) * 1.0, z: player.z + (dz / d) * 1.0, fx: player.x, fz: player.z };
@@ -4939,7 +5537,7 @@ body.touch .tk-sign .key { display: none; }
     if (!stop || stop.phase !== 'talk' || !stop.ticket) return;
     fines += stop.ticket.f;
     $('ticket').hidden = true;
-    toast('Du skrev under. Böter ' + fmtKr(stop.ticket.f) + '.' + (wanted.over > 20 ? ' Körkortet dras in.' : ' Kör försiktigt nu!'));
+    toast('Du skrev under. Böter ' + fmtKr(stop.ticket.f) + '.' + (wanted.over > 35 ? ' Körkortet dras in.' : ' Kör försiktigt nu!'));
     stop.phase = 'back'; stop.t = 0;
   }
   // E during a stop or an arrest
@@ -4978,7 +5576,7 @@ body.touch .tk-sign .key { display: none; }
   }
   function startJail() {
     const S = stop, w = wanted || { over: 0, kinds: new Set(), fleeT: 0 };
-    S.jailT = Math.min(90, 30 + Math.max(0, Math.round((w.over - ARREST_OVER) / 10)) * 10 + (w.kinds.has('smitning') || (w.fleeT || 0) > 12 ? 15 : 0));
+    S.jailT = Math.min(90, 30 + Math.max(0, Math.round((w.over - ARREST_OVER) / 10)) * 10 + (w.kinds.has('smitning') || (w.fleeT || 0) > FLEE_ARREST ? 15 : 0));
     S.phase = 'jail'; S.t = 0; S.wait = false; S.locked = true;
     if (!S.ticket) S.ticket = fineFor(w);
     wanted = null;
@@ -5078,6 +5676,16 @@ body.touch .tk-sign .key { display: none; }
         break;
       case 'escort':
         $('ticket').hidden = S.t > 6;
+        // held up and left behind (traffic, a crowd): a short fade and you are both at the car
+        S.lagT = Math.hypot(o.x - player.x, o.z - player.z) > 6 ? (S.lagT || 0) + dt : 0;
+        if (S.lagT > 4 && !S.fade) {
+          S.lagT = 0;
+          fadeThen(() => {
+            const rd = S.rearDoor;
+            player.x = rd.x; player.z = rd.z; player.vx = player.vz = 0;
+            if (S.officer) { S.officer.x = rd.x + Math.sin(c.h) * 1.3; S.officer.z = rd.z + Math.cos(c.h) * 1.3; }
+          });
+        }
         if ((Math.hypot(o.x - S.rearDoor.x, o.z - S.rearDoor.z) < 1.4 && Math.hypot(player.x - S.rearDoor.x, player.z - S.rearDoor.z) < 1.6) || S.t > 40) {
           $('ticket').hidden = true;
           player.model.group.visible = false; player.vx = player.vz = 0;
@@ -5320,7 +5928,7 @@ body.touch .tk-sign .key { display: none; }
       spawnParked(M, color, ...at(b.s, d), Math.atan2(wx * out, wz * out), true);
     };
     const bays = LOT.bays.slice().sort((a, b) => Math.abs(a.s - SPAWN.s + 8) - Math.abs(b.s - SPAWN.s + 8));
-    const show = ['superbil', 'sport', 'muskel', 'halvkombi', 'sedan', 'kombi', 'taxi', 'suv', 'skapbil'];
+    const show = ['jesko', 'superbil', 'sport', 'muskel', 'halvkombi', 'sedan', 'polestar', 'kombi', 'v240', 'saab', 'taxi', 'suv', 'skapbil'];
     show.forEach((id, i) => inBay(MODEL[id], MODEL[id].colors[0], bays[i], true));
     for (const b of bays.slice(show.length)) {
       if (Math.random() > 0.27) continue;
@@ -5456,6 +6064,421 @@ body.touch .tk-sign .key { display: none; }
     for (let i = bursts.length - 1; i >= 0; i--) if ((bursts[i].t -= dt) <= 0) { bursts[i].fn(); bursts.splice(i, 1); }
   }
 
+  /* ================= jobs and street races ================= */
+  // J starts a job in the car you drive: fares in the taxi, parcels in the Sprinter, a route in the SL bus. At the
+  // yellow pillars of light around town J starts a street race against the clock. A pillar of light marks where to go
+  // and a GPS line on both maps shows the way along the streets. What you earn goes in the Kassa, kept between visits.
+  const JOBS = (() => {
+    const CASH_KEY = 'gubbe-kassa', RACE_KEY = 'gubbe-gatlopp';
+    let earned = 0, records = {};
+    try { earned = Math.max(0, +localStorage.getItem(CASH_KEY) || 0); records = JSON.parse(localStorage.getItem(RACE_KEY) || '{}') || {}; } catch (e) { /* a private window: kept for this visit only */ }
+    const save = () => { try { localStorage.setItem(CASH_KEY, String(earned)); localStorage.setItem(RACE_KEY, JSON.stringify(records)); } catch (e) { /* counted anyway */ } };
+    const fmtTime = (t) => Math.floor(t / 60) + ':' + (t % 60).toFixed(1).padStart(4, '0').replace('.', ',');
+    const fmtDist = (m) => (m < 1000 ? Math.round(m / 10) * 10 + ' m' : (m / 1000).toFixed(1).replace('.', ',') + ' km');
+    // places a fare can ask for, in the real spots
+    const PLACES = [
+      ['Stadshuset', -1000, -100], ['Centralstationen', -610, -490], ['Kungliga Operan', -56, -320], ['Grand Hôtel', 200, -295], ['Nationalmuseum', 335, -305],
+      ['Östermalmstorg', 387, -903], ['Stureplan', 130, -968], ['Hötorget', -455, -890], ['Sergels torg', -254, -606], ['Kungliga biblioteket', 155, -1110],
+      ['Vasamuseet', 1029, -265], ['Moderna museet', 600, 135], ['Slussen', 40, 700], ['Medborgarplatsen', 152, 1422], ['Mariatorget', -500, 1080],
+      ['Katarina kyrka', 240, 1262], ['Nytorget', 680, 1263], ['Rådhuset', -1067, -600], ['Polishuset', -1315, -604], ['Riddarholmskyrkan', -435, 125],
+      ['Kungsträdgården', 29, -500], ['Strandvägen', 700, -620], ['Djurgården', 1200, -100], ['Odenplan', -380, -1430], ['Fridhemsplan', -1500, -640],
+      ['Mosebacke torg', 210, 822], ['Skeppsbron', 225, 160], ['Kungsholms strand', -930, -700], ['Hornstull', -950, 1250], ['Tegnérlunden', -816, -1192]
+    ];
+    const SAYS = ['Hej! Till {p}, tack.', 'Till {p}, och gärna lite fort, jag är sen!', 'Kan du köra mig till {p}?', '{p}, tack. Ta det lugnt i kurvorna.', 'Hej hej! {p} blir bra.'];
+    // the street races: a route of named junctions; every junction after the start is a checkpoint
+    const RACES = [
+      { id: 'gamla', name: 'Gamla stan runt', route: 'SK1 SK2 SK3 SK4 SL0 KH MB3 MB2 MB1 RT gRHN MT LB SBs SK1' },
+      { id: 'djurgarden', name: 'Strandvägen–Djurgården', route: 'NP SV1 SV2 SV3 SV4 DJ0 DJ1 DJ2 DJ3' },
+      { id: 'soder', name: 'Söder runt', route: 'SMT GG1 GG2 GG3 GG4 MP GG5 OG3 RG3 RG2 RG1 RG0 KV2 KV1 SL1' },
+      { id: 'city', name: 'Cityslingan', route: 'TB V2 V3 V4 V5 D5 S2 R4 SP BJs BJr NP NT KT2 KT1 KT0 OP GA D0 TB' }
+    ].map((r) => ({ ...r, pts: r.route.split(' ').map((id) => { const n = nodes[nodeIndex.get(id)]; return { x: n.x, z: n.z }; }) }));
+
+    /* pillars of light: where to go (gold), the checkpoint after it (orange), and the race starts (yellow) */
+    const beamTex = canvasTex(4, 128, (g, w, h) => {
+      const gr = g.createLinearGradient(0, h, 0, 0);
+      gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.12, 'rgba(255,255,255,.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    });
+    function beam(color, r, h) {
+      const g = new THREE.Group();
+      const b = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 28, 1, true), new THREE.MeshBasicMaterial({ map: beamTex, color, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+      b.position.y = h / 2;
+      const ring = new THREE.Mesh(new THREE.RingGeometry(r * 1.5, r * 1.85, 48), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
+      ring.rotation.x = -Math.PI / 2; ring.position.y = 0.07;
+      g.add(b, ring); g.visible = false; scene.add(g);
+      return g;
+    }
+    const goalBeam = beam(0xffc21a, 1.7, 70), nextBeam = beam(0xff7a1a, 1.3, 45);
+    const startBeams = RACES.map((r) => { const b = beam(0xffe14a, 2.3, 90); b.position.set(r.pts[0].x, 0, r.pts[0].z); b.visible = true; return b; });
+    // parcels waiting at the kerb, and bus stop poles with the SL sign
+    const parcelGeo = (() => { const m = new Merger(); m.box(0.6, 0.45, 0.5, 0xa77c4f, 0, 0.225, 0); m.box(0.5, 0.4, 0.45, 0xb98d5c, 0.1, 0.65, 0.05); m.box(0.4, 0.3, 0.4, 0x9c7147, -0.05, 1.0, 0); m.box(0.62, 0.04, 0.06, 0xd8c9a0, 0, 0.46, 0); return m.build(); })();
+    const parcels = new THREE.Mesh(parcelGeo, personMat); parcels.visible = false; parcels.castShadow = true; scene.add(parcels);
+    const slTex = canvasTex(128, 128, (g, w) => {
+      g.fillStyle = '#ffffff'; g.fillRect(0, 0, w, w);
+      g.fillStyle = '#1f5fae'; roundRect(g, 8, 8, w - 16, w - 16, 14); g.fill();
+      g.fillStyle = '#ffffff'; g.font = '900 64px Overpass, "Arial Black", Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('SL', w / 2, w / 2 + 4);
+    });
+    const stopGeo = (() => { const m = new Merger(); m.add(new THREE.CylinderGeometry(0.045, 0.045, 2.9, 8), 0x5d646a, 0, 1.45, 0); m.box(0.5, 0.06, 0.06, 0x5d646a, 0, 2.6, 0); return m.build(); })();
+    const stopSignMat = std({ map: slTex, roughness: 0.4, emissive: 0x222222, emissiveMap: slTex });
+    const stopSignGeo = new THREE.PlaneGeometry(0.55, 0.55);
+    const stopMeshes = [];
+    function busStop(k) {
+      const g = new THREE.Group(), pole = new THREE.Mesh(stopGeo, std({ vertexColors: true, roughness: 0.5, metalness: 0.5 }));
+      const s1 = new THREE.Mesh(stopSignGeo, stopSignMat), s2 = new THREE.Mesh(stopSignGeo, stopSignMat);
+      s1.position.set(0, 2.62, 0.04); s2.position.set(0, 2.62, -0.04); s2.rotation.y = Math.PI;
+      g.add(pole, s1, s2); g.position.set(k.walkX, 0, k.walkZ); g.rotation.y = k.h + Math.PI / 2;
+      scene.add(g); stopMeshes.push(g);
+      return g;
+    }
+
+    /* where to stop: the kerb of a street, on one side or the other, and the pavement beside it */
+    function kerbOn(e, t, side) {
+      const A = nodes[e.a], B = nodes[e.b], ux = (B.x - A.x) / e.len, uz = (B.z - A.z) / e.len;
+      const s = clamp(t * e.len, Math.min(e.len / 2, A.r + 7), Math.max(e.len / 2, e.len - B.r - 7)), lat = side * Math.max(1.6, e.hw - 1.3), walk = side * (e.hw + Math.max(0.9, Math.min(2.2, e.walk * 0.55)));
+      return { x: A.x + ux * s - uz * lat, z: A.z + uz * s + ux * lat, walkX: A.x + ux * s - uz * walk, walkZ: A.z + uz * s + ux * walk, h: Math.atan2(ux * side, uz * side), e };
+    }
+    function kerbNear(x, z) {
+      const ne = nearestEdge(x, z, (e) => e.drive && !e.bridge && e.len > 25), e = ne.e, A = nodes[e.a], B = nodes[e.b];
+      const t = ((x - A.x) * (B.x - A.x) + (z - A.z) * (B.z - A.z)) / (e.len * e.len), side = (x - A.x) * -(B.z - A.z) + (z - A.z) * (B.x - A.x) >= 0 ? 1 : -1;
+      return kerbOn(e, t, side);
+    }
+    // only streets that run through the ring between dmin and dmax are tried (picking from the whole map, most tries
+    // would land too far away); if none of them has a free kerb, the ring is widened
+    function randomKerb(cx, cz, dmin, dmax) {
+      for (let wide = 1; wide <= 2; wide++) {
+        const lo = dmin / wide, hi = dmax * wide;
+        const pool = edges.filter((e) => {
+          if (!e.drive || e.bridge || e.len <= 35 || e.hw < 4.5) return false;
+          const A = nodes[e.a], B = nodes[e.b], d = Math.hypot((A.x + B.x) / 2 - cx, (A.z + B.z) / 2 - cz);
+          return d > lo - e.len / 2 && d < hi + e.len / 2;
+        });
+        if (!pool.length) continue;
+        for (let i = 0; i < 80; i++) {
+          const e = rpick(pool), k = kerbOn(e, 0.25 + Math.random() * 0.5, Math.random() < 0.5 ? 1 : -1), d = Math.hypot(k.x - cx, k.z - cz);
+          if (d < lo || d > hi || !personFits(k.walkX, k.walkZ) || blockedAt(k.walkX, k.walkZ, 0.5)) continue;
+          return k;
+        }
+      }
+      return null;
+    }
+
+    /* the way there along the streets, for the maps */
+    let route = null, routeT = 0;
+    const driveNode = (x, z) => { let b = 0, bd = Infinity; nodes.forEach((n, i) => { if (!n.nb.length) return; const d = Math.hypot(n.x - x, n.z - z); if (d < bd) { bd = d; b = i; } }); return b; };
+    function routeTo(x0, z0, x1, z1) {
+      const goal = driveNode(x1, z1), D = distTo(goal, false);
+      let n = driveNode(x0, z0);
+      const path = [[x0, z0], [nodes[n].x, nodes[n].z]];
+      for (let k = 0; k < 500 && n !== goal; k++) {
+        let best = -1, bv = D[n];
+        for (const m of nodes[n].nb) if (D[m] < bv) { bv = D[m]; best = m; }
+        if (best < 0) break;
+        n = best; path.push([nodes[n].x, nodes[n].z]);
+      }
+      path.push([x1, z1]);
+      return path;
+    }
+    const routeLen = (p) => { let L = 0; for (let i = 1; i < p.length; i++) L += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]); return L; };
+
+    /* the job */
+    let job = null, nearRace = null, bigT = 0, hinted = false;
+    const el2 = { job: $('job'), icon: $('jobIcon'), title: $('jobTitle'), hint: $('jobHint'), clock: $('jobClock'), big: $('bigText'), cash: $('cash'), cashTag: $('cashTag') };
+    function big(text, sub, t = 2.2) { el2.big.textContent = text; if (sub) { const s = document.createElement('small'); s.textContent = sub; el2.big.append(s); } el2.big.hidden = false; bigT = t; }
+    function pay(kr, why) { earned += kr; save(); beep([660, 880, 1320], 0.03, 0.3); toast(why + ' +' + fmtKr(kr)); }
+    const speed = () => (driving ? Math.hypot(driving.vx, driving.vz) : 0);
+    const kindOf = (c) => (!c ? null : c.M.shape.taxi ? 'taxi' : c.M.id === 'skapbil' ? 'paket' : c.M.bus ? 'buss' : null);
+    function target() { return !job ? null : job.kind === 'race' ? job.race.pts[job.i] : job.goal; }
+    function setGoal(k, name) { job.goal = { x: k.x, z: k.z, name, k }; route = routeTo(driving ? driving.x : player.x, driving ? driving.z : player.z, k.x, k.z); routeT = 1.5; }
+    function cleanup() {
+      goalBeam.visible = nextBeam.visible = false; parcels.visible = false; route = null;
+      if (job && job.npcs) for (const p of job.npcs) { if (persons.includes(p)) { p.keep = false; p.ai = { state: 'wander', wx: Math.random() - 0.5, wz: Math.random() - 0.5, t: 15, dodgeT: 0 }; } }
+      if (job && job.rider && job.car && job.car.rearSeat) job.car.rearSeat.visible = false;
+      while (stopMeshes.length) scene.remove(stopMeshes.pop());
+    }
+    function end(msg) { cleanup(); job = null; if (msg) toast(msg); }
+
+    // a fare: someone waiting on the pavement of a street a little way off
+    function newFare() {
+      const k = randomKerb(driving.x, driving.z, 110, 450);
+      if (!k) { end('Inga kunder här just nu.'); return; }
+      const p = makePerson(makeIdentity(), k.walkX, k.walkZ, { state: 'idle', face: k.h - Math.PI / 2, dodgeT: 0 });
+      p.keep = true; p.rot = k.h - Math.PI / 2;
+      Object.assign(job, { phase: 'find', npcs: [p], who: p, t: 0 });
+      setGoal(k, 'Kund på ' + k.e.name);
+      toast('En kund väntar på ' + k.e.name + '. Kör dit och stanna vid trottoaren.');
+    }
+    function newParcel() {
+      const k = randomKerb(driving.x, driving.z, 120, 500);
+      if (!k) { end('Inga paket att hämta här just nu.'); return; }
+      parcels.position.set(k.walkX, 0, k.walkZ); parcels.rotation.y = k.h; parcels.visible = true;
+      Object.assign(job, { phase: 'find', t: 0 });
+      setGoal(k, 'Paket på ' + k.e.name);
+      toast('Hämta paketen på ' + k.e.name + '.');
+    }
+    function newRoute() {
+      // a run of stops along the streets ahead, about 250 m apart
+      const stops = [];
+      let e0 = nearestEdge(driving.x, driving.z, (e) => e.drive).e, from = Math.hypot(nodes[e0.a].x - driving.x, nodes[e0.a].z - driving.z) < Math.hypot(nodes[e0.b].x - driving.x, nodes[e0.b].z - driving.z) ? e0.a : e0.b;
+      let at = from === e0.a ? e0.b : e0.a, run = 0, prev = from;
+      for (let k = 0; k < 120 && stops.length < 6; k++) {
+        const opts = nodes[at].nb.filter((n) => n !== prev);
+        if (!opts.length) break;
+        const nx = rpick(opts), e = edgeBetween(at, nx) || edgeToward(at, nx);
+        run += e ? e.len : 50;
+        if (e && run > 230 && e.len > 40 && !e.bridge && e.hw >= 4.5) {
+          const side = e.a === at ? 1 : -1, ks = kerbOn(e, e.a === at ? 0.6 : 0.4, side);
+          if (personFits(ks.walkX, ks.walkZ) && !blockedAt(ks.walkX, ks.walkZ, 0.5)) { stops.push(ks); run = 0; }
+        }
+        prev = at; at = nx;
+      }
+      if (stops.length < 2) { end('Ingen busslinje gick att lägga härifrån. Kör ut på en större gata och försök igen.'); return; }
+      job.stops = stops; job.si = 0; job.npcs = []; job.waiting = [];
+      stops.forEach((k, i) => {
+        busStop(k);
+        const n = 1 + Math.floor(Math.random() * 4), list = [];
+        for (let j = 0; j < n; j++) {
+          const p = makePerson(makeIdentity(), k.walkX + (Math.random() - 0.5) * 2.4, k.walkZ + (Math.random() - 0.5) * 1.2, { state: 'idle', face: k.h - Math.PI / 2, dodgeT: 0 });
+          p.keep = true; job.npcs.push(p); list.push(p);
+        }
+        job.waiting.push(list);
+      });
+      job.phase = 'drive';
+      setGoal(stops[0], 'Hållplats 1 av ' + stops.length);
+      toast('Busslinje med ' + stops.length + ' hållplatser. Stanna vid varje så kliver resenärerna på.');
+    }
+    function start(kind) {
+      job = { kind, car: driving, t: 0, done: 0, offT: 0 };
+      if (kind === 'taxi') newFare(); else if (kind === 'paket') newParcel(); else newRoute();
+    }
+    function startRace(r) {
+      job = { kind: 'race', race: r, car: driving, i: 1, t: -3.5, offT: 0 };
+      goalBeam.visible = true;
+      route = null;
+      big('3', r.name);
+    }
+    // J
+    function key() {
+      if (stop && stop.locked) return;
+      if (job) { end(job.kind === 'race' ? 'Gatloppet avbrutet.' : 'Du slutade jobba.'); return; }
+      if (!driving) { toast('Jobben görs med bil: taxin, Sprintern eller bussen. Gatloppen startar vid de gula ljuspelarna.'); return; }
+      if (nearRace) { startRace(nearRace); return; }
+      const kind = kindOf(driving);
+      if (kind) start(kind);
+      else toast('Med ' + driving.M.def + ' kan du köra gatlopp vid de gula ljuspelarna. Taxin, Sprintern och bussen har egna jobb.');
+    }
+
+    function update(dt) {
+      if (bigT > 0 && (bigT -= dt) <= 0) el2.big.hidden = true;
+      // near a race start in a car, with nothing else on: say so once
+      nearRace = null;
+      if (driving && !job) for (const r of RACES) if (Math.hypot(r.pts[0].x - driving.x, r.pts[0].z - driving.z) < 11) nearRace = r;
+      if (nearRace && nearRace !== update.lastNear) toast('Gatlopp: ' + nearRace.name + (records[nearRace.id] ? ', rekord ' + fmtTime(records[nearRace.id]) : '') + '. Tryck J för att starta.');
+      update.lastNear = nearRace;
+      for (const b of startBeams) b.visible = !job || job.kind !== 'race';
+      if (!job) return;
+      job.t += dt;
+      // the car is gone, wrecked or left behind, or you were arrested
+      if (stop && stop.locked) { end('Uppdraget avbröts, du är gripen.'); return; }
+      if (!cars.includes(job.car) || job.car.dead) { end('Bilen är förstörd. Uppdraget är slut.'); return; }
+      job.offT = driving === job.car ? 0 : job.offT + dt;
+      if (job.offT > (job.kind === 'race' ? 3 : 25)) { end(job.kind === 'race' ? 'Du klev ur bilen. Gatloppet är slut.' : 'Du lämnade bilen. Uppdraget är slut.'); return; }
+      const T = target();
+      if (T) {
+        goalBeam.position.set(T.x, 0, T.z); goalBeam.visible = true;
+        goalBeam.children[1].scale.setScalar(1 + 0.06 * Math.sin(clock * 5));
+      }
+      if (job.kind !== 'race' && (routeT -= dt) <= 0 && T && driving) { route = routeTo(driving.x, driving.z, T.x, T.z); routeT = 1.5; }
+      const c = job.car, d = T ? Math.hypot(T.x - c.x, T.z - c.z) : Infinity, still = speed() < 1.3 && driving === c;
+      if (job.kind === 'race') {
+        const R = job.race;
+        if (job.t < 0) {
+          // countdown: the car is held on the line
+          c.vx = c.vz = 0;
+          const n = Math.ceil(-job.t);
+          if (n !== job.shown) { job.shown = n; if (n <= 3) { big(String(n), R.name, 1.1); beep([440], 0.04, 0.25); } }
+          return;
+        }
+        if (job.shown !== 0) { job.shown = 0; big('KÖR!', null, 1); beep([880], 0.05, 0.4); }
+        const nx = R.pts[job.i + 1];
+        nextBeam.visible = !!nx; if (nx) nextBeam.position.set(nx.x, 0, nx.z);
+        if (d < 13) {
+          job.i++;
+          if (job.i >= R.pts.length) {
+            const t = job.t, rec = records[R.id], best = !rec || t < rec;
+            if (best) records[R.id] = t;
+            save();
+            big('MÅL! ' + fmtTime(t), best ? (rec ? 'Nytt rekord! Förra: ' + fmtTime(rec) : 'Första rekordet på ' + R.name) : 'Rekord: ' + fmtTime(rec), 4);
+            pay(best ? 600 : 250, R.name + ' klart.');
+            end();
+            return;
+          }
+          beep([988, 1319], 0.03, 0.18);
+        }
+        return;
+      }
+      if (job.kind === 'taxi') {
+        if (job.phase === 'find') {
+          if (d < 10 && still) {
+            const p = job.who;
+            p.ai = { state: 'board', car: c, dodgeT: 0 };
+            job.phase = 'board'; job.bt = 0;
+          }
+        } else if (job.phase === 'board') {
+          const p = job.who;
+          job.bt += dt;
+          if (!persons.includes(p) || Math.hypot(p.x - c.x, p.z - c.z) < c.M.W / 2 + 1.1 || job.bt > 6) {
+            if (persons.includes(p)) removePerson(p);
+            job.npcs = []; job.rider = p.id;
+            if (c.rearSeat) { c.rearSeat.geometry = p.id.driverGeo; c.rearSeat.visible = true; }
+            // where to: somewhere a fair way off
+            const here = PLACES.filter(([, x, z]) => { const dd = Math.hypot(x - c.x, z - c.z); return dd > 380 && dd < 1700; });
+            const [name, px, pz] = rpick(here.length ? here : PLACES), k = kerbNear(px, pz);
+            setGoal(k, name);
+            const L = routeLen(route);
+            Object.assign(job, { phase: 'ride', t: 0, par: L / 10.5 + 25, len: L, hp: c.health });
+            toast('Kunden: ' + rpick(SAYS).replace('{p}', name));
+          }
+        } else if (job.phase === 'ride' && d < 13 && still) {
+          const late = job.t > job.par, dmg = Math.max(0, job.hp - c.health);
+          let kr = Math.round((75 + job.len * 0.3) * (job.t < job.par * 0.8 ? 1.3 : late ? 0.75 : 1) - dmg * 4);
+          kr = Math.max(20, kr);
+          const exit = exitSpot(c) || { x: c.x, z: c.z };
+          if (c.rearSeat) c.rearSeat.visible = false;
+          const p = makePerson(job.rider, exit.x, exit.z, { state: 'wander', wx: Math.random() - 0.5, wz: Math.random() - 0.5, t: 20, dodgeT: 0 });
+          p.rot = c.h; job.rider = null;
+          job.done++;
+          pay(kr, dmg > 8 ? 'Kunden betalar, men klagar på bucklorna.' : job.t < job.par * 0.8 ? 'Snabbt! Kunden ger dricks.' : late ? 'Kunden betalar, men tyckte det tog för lång tid.' : 'Kunden betalar.');
+          newFare();
+        }
+        return;
+      }
+      if (job.kind === 'paket') {
+        if (job.phase === 'find' && d < 10 && still) {
+          job.lt = (job.lt || 0) + dt;
+          if (job.lt > 1.2) {
+            job.lt = 0; parcels.visible = false;
+            const k = randomKerb(c.x, c.z, 300, 1300);
+            if (!k) { end('Ingen adress att leverera till härifrån.'); return; }
+            const no = 1 + Math.floor(Math.random() * 60);
+            setGoal(k, k.e.name + ' ' + no);
+            const L = routeLen(route);
+            Object.assign(job, { phase: 'deliver', t: 0, par: L / 10 + 30, len: L, hp: c.health });
+            toast('Paketen är lastade. Leverera till ' + job.goal.name + '.');
+          }
+        } else if (job.phase === 'deliver' && d < 13 && still) {
+          job.lt = (job.lt || 0) + dt;
+          if (job.lt > 1.2) {
+            job.lt = 0;
+            const dmg = Math.max(0, job.hp - c.health), late = job.t > job.par;
+            const kr = Math.max(30, Math.round((110 + job.len * 0.25) * (late ? 0.7 : job.t < job.par * 0.75 ? 1.3 : 1) - dmg * 3));
+            job.done++;
+            pay(kr, late ? 'Paketen kom fram, men sent.' : 'Paketen levererade.');
+            newParcel();
+          }
+        } else job.lt = 0;
+        return;
+      }
+      if (job.kind === 'buss') {
+        if (d < 12 && still) {
+          job.lt = (job.lt || 0) + dt;
+          const list = job.waiting[job.si];
+          // they walk up to the door and get on, one by one
+          for (const p of list) if (persons.includes(p) && p.ai.state === 'idle') p.ai = { state: 'board', car: c, dodgeT: 0 };
+          for (const p of list) if (persons.includes(p) && (Math.hypot(p.x - c.x, p.z - c.z) < c.M.W / 2 + 1.2 || job.lt > 5)) removePerson(p);
+          if (job.lt > 2.5 && !list.some((p) => persons.includes(p))) {
+            job.lt = 0;
+            const n = list.length, last = job.si === job.stops.length - 1;
+            if (stopMeshes[job.si]) stopMeshes[job.si].visible = false;
+            pay(40 + n * 30 + (last ? 250 : 0), last ? 'Slutstation! ' + (job.done + n) + ' resenärer.' : n + (n === 1 ? ' resenär' : ' resenärer') + ' klev på.');
+            job.done += n;
+            if (last) { end(); return; }
+            job.si++;
+            setGoal(job.stops[job.si], 'Hållplats ' + (job.si + 1) + ' av ' + job.stops.length);
+          }
+        } else job.lt = 0;
+      }
+    }
+
+    // the panel at the top: what to do, how far, the clock
+    let lastHud = '';
+    function hud() {
+      el2.cashTag.hidden = !earned && !job;
+      el2.cash.textContent = fmtKr(earned);
+      document.body.classList.toggle('job', !!job);
+      el2.job.hidden = !job;
+      if (!job) { lastHud = ''; return; }
+      const T = target(), c = job.car, d = T ? Math.hypot(T.x - c.x, T.z - c.z) : 0;
+      let icon, title, hint, clockTxt = '';
+      if (job.kind === 'race') {
+        icon = '⚑'; title = 'Gatlopp: ' + job.race.name;
+        hint = job.t < 0 ? 'Gör dig redo …' : 'Kontroll ' + Math.min(job.i, job.race.pts.length - 1) + ' av ' + (job.race.pts.length - 1) + ' · ' + fmtDist(d) + (records[job.race.id] ? ' · rekord ' + fmtTime(records[job.race.id]) : '');
+        clockTxt = job.t < 0 ? '' : fmtTime(job.t);
+      } else if (job.kind === 'taxi') {
+        icon = 'T'; title = job.phase === 'ride' ? 'Taxi till ' + job.goal.name : 'Taxi: hämta kunden';
+        hint = (job.phase === 'board' ? 'Kunden kliver in …' : fmtDist(d) + (job.phase === 'ride' ? ' · stanna vid trottoaren' : ' · ' + job.goal.name)) + ' · ' + job.done + ' körda';
+        if (job.phase === 'ride') clockTxt = fmtTime(Math.max(0, job.par - job.t));
+      } else if (job.kind === 'paket') {
+        icon = '▣'; title = job.phase === 'deliver' ? 'Leverera till ' + job.goal.name : 'Hämta paketen';
+        hint = fmtDist(d) + ' · ' + (job.phase === 'deliver' ? 'stanna vid adressen' : job.goal.name) + ' · ' + job.done + ' levererade';
+        if (job.phase === 'deliver') clockTxt = fmtTime(Math.max(0, job.par - job.t));
+      } else {
+        icon = 'SL'; title = 'Busslinje: ' + job.goal.name;
+        hint = fmtDist(d) + ' · stanna vid hållplatsen · ' + job.done + ' resenärer';
+      }
+      const key = icon + title + hint + clockTxt;
+      if (key === lastHud) return;
+      lastHud = key;
+      el2.icon.textContent = icon; el2.title.textContent = title; el2.hint.textContent = hint; el2.clock.textContent = clockTxt;
+    }
+
+    // on the maps: the GPS line, where to go (an arrow at the edge of the minimap when it is further off) and the races
+    function drawMini(g, px, pz, u) {
+      const T = target();
+      if (route && T) {
+        g.strokeStyle = 'rgba(255,194,26,.9)'; g.lineWidth = 4.2 * u; g.lineJoin = g.lineCap = 'round';
+        g.beginPath(); route.forEach(([x, z], i) => (i ? g.lineTo(x, z) : g.moveTo(x, z))); g.stroke();
+      }
+      const mark = (x, z, col, r) => {
+        const dx = x - px, dz = z - pz, d = Math.hypot(dx, dz), R = 100;
+        if (d < R) { g.fillStyle = col; g.strokeStyle = '#ffffff'; g.lineWidth = 2 * u; g.beginPath(); g.arc(x, z, r * u, 0, TAU); g.fill(); g.stroke(); return; }
+        const ux = dx / d, uz = dz / d, ex = px + ux * R, ez = pz + uz * R;
+        g.fillStyle = col; g.strokeStyle = '#ffffff'; g.lineWidth = 1.5 * u;
+        g.beginPath(); g.moveTo(ex + ux * 9 * u, ez + uz * 9 * u); g.lineTo(ex - uz * 6 * u, ez + ux * 6 * u); g.lineTo(ex + uz * 6 * u, ez - ux * 6 * u); g.closePath(); g.fill(); g.stroke();
+      };
+      if (!job || job.kind !== 'race') for (const r of RACES) if (Math.hypot(r.pts[0].x - px, r.pts[0].z - pz) < 105) mark(r.pts[0].x, r.pts[0].z, '#ffe14a', 4.5);
+      if (T) mark(T.x, T.z, job.kind === 'race' ? '#ff7a1a' : '#ffc21a', 6);
+    }
+    function drawBig(g, toX, toY, k) {
+      if (route && target()) {
+        g.strokeStyle = 'rgba(240,160,0,.9)'; g.lineWidth = Math.max(3, 5 * k); g.lineJoin = g.lineCap = 'round';
+        g.beginPath(); route.forEach(([x, z], i) => (i ? g.lineTo(toX(x), toY(z)) : g.moveTo(toX(x), toY(z)))); g.stroke();
+      }
+      if (job && job.kind === 'race') {
+        g.strokeStyle = 'rgba(255,122,26,.75)'; g.lineWidth = 3; g.setLineDash([6, 5]);
+        g.beginPath(); job.race.pts.forEach((p, i) => (i ? g.lineTo(toX(p.x), toY(p.z)) : g.moveTo(toX(p.x), toY(p.z)))); g.stroke(); g.setLineDash([]);
+      }
+      for (const r of RACES) {
+        const X = toX(r.pts[0].x), Y = toY(r.pts[0].z);
+        g.fillStyle = '#ffe14a'; g.strokeStyle = '#1b1c1e'; g.lineWidth = 1.5;
+        g.beginPath(); g.moveTo(X, Y + 7); g.lineTo(X, Y - 11); g.lineTo(X + 11, Y - 7); g.lineTo(X, Y - 3); g.stroke(); g.fill();
+        if (k > 0.3) { g.font = '800 11px Overpass, sans-serif'; g.textAlign = 'left'; g.textBaseline = 'middle'; g.lineWidth = 3; g.strokeStyle = 'rgba(255,255,255,.85)'; g.strokeText(r.name, X + 13, Y - 6); g.fillStyle = '#7a5600'; g.fillText(r.name, X + 13, Y - 6); }
+      }
+      const T = target();
+      if (T) { g.fillStyle = '#ffc21a'; g.strokeStyle = '#ffffff'; g.lineWidth = 2.5; g.beginPath(); g.arc(toX(T.x), toY(T.z), 7, 0, TAU); g.fill(); g.stroke(); }
+    }
+    // say what J does the first time you sit in a car that has a job
+    function entered(c) {
+      const k = kindOf(c);
+      if (k && !job && !hinted) { hinted = true; setTimeout(() => toast(k === 'taxi' ? 'Tryck J för att köra taxi.' : k === 'paket' ? 'Tryck J för att köra ut paket.' : 'Tryck J för att köra en busslinje.'), 2600); }
+    }
+    return {
+      key, update, hud, drawMini, drawBig, entered, RACES, PLACES,
+      get job() { return job; }, get earned() { return earned; }, get route() { return route; },
+      // test hooks: hold the race countdown short, skip to a checkpoint
+      _skipCountdown() { if (job && job.kind === 'race') job.t = 0; }
+    };
+  })();
+
   /* ================= game state ================= */
   let started = false, pickerOpen = false, nearCar = null;
   // the car picker and the big map both pause the game
@@ -5467,7 +6490,7 @@ body.touch .tk-sign .key { display: none; }
   let touchBrake = false, isTouch = window.matchMedia('(pointer: coarse)').matches;
 
   function readInput() {
-    if (!started || paused() || inCustody()) return { fwd: 0, right: 0, run: false, brake: false };
+    if (!started || paused() || inCustody() || (JOBS.job && JOBS.job.kind === 'race' && JOBS.job.t < 0)) return { fwd: 0, right: 0, run: false, brake: !!driving };
     const k = keys;
     const fwd = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0) - joy.y;
     const right = (k.KeyD || k.ArrowRight ? 1 : 0) - (k.KeyA || k.ArrowLeft ? 1 : 0) + joy.x;
@@ -5521,6 +6544,7 @@ body.touch .tk-sign .key { display: none; }
     c.bot = null;
     driving = c;
     setOccupant(c, playerId);
+    for (const m of c.calipers) m.visible = true;
     // keep whichever gearbox you used last; a car taken on the move starts in a gear that suits its speed
     c.auto = gearAuto;
     const vf = Math.max(0, c.vx * Math.sin(c.h) + c.vz * Math.cos(c.h));
@@ -5529,6 +6553,7 @@ body.touch .tk-sign .key { display: none; }
     player.model.group.visible = false;
     player.vx = player.vz = player.vy = 0;
     lastLook = -1e9;
+    JOBS.entered(c);
   }
   let gearAuto = true;
   const evNote = () => toast(driving.M.def[0].toUpperCase() + driving.M.def.slice(1) + ' är en elbil och har bara en växel.');
@@ -5620,8 +6645,9 @@ body.touch .tk-sign .key { display: none; }
       drawSilhouette(cv, M);
       const title = document.createElement('div'); title.className = 'model-title';
       const name = document.createElement('b'); name.textContent = M.name;
-      const num = document.createElement('span'); num.className = 'key'; num.textContent = String((i + 1) % 10);
-      title.append(name, num);
+      title.append(name);
+      // the first ten have a number key
+      if (i < 10) { const num = document.createElement('span'); num.className = 'key'; num.textContent = String((i + 1) % 10); title.append(num); }
       const stats = document.createElement('div'); stats.className = 'stats';
       stats.textContent = M.kind + '\nToppfart ' + Math.round(M.max * 3.6) + ' km/h\n0–' + M.sprint.kmh + ' på ' + M.sprint.t.toFixed(1).replace('.', ',') + ' s\n' + (M.ev ? 'Elmotor, en växel' : M.gears + ' växlar');
       btn.append(cv, title, stats);
@@ -5777,6 +6803,7 @@ body.touch .tk-sign .key { display: none; }
       c.group.position.set(c.x, 0, c.z);
       c.group.rotation.y = c.h;
       for (const w of c.wheels) w.pivot.rotation.set(0, (w.sz === 1 ? c.steer : 0) + w.toe, w.camber);
+      c.plates.visible = Math.abs(c.x - camera.position.x) + Math.abs(c.z - camera.position.z) < 90;
       for (const s of c.spins) s.rotation.x = c.wheelRot;
       const glow = c.mat.userData.glow;
       glow.y = c.braking ? BRAKE_GLOW : TAIL_GLOW;
@@ -5826,6 +6853,8 @@ body.touch .tk-sign .key { display: none; }
     const dist = camDist * clipT;
     let cx = camTarget.x - Math.sin(camYaw) * cp * dist, cz = camTarget.z - Math.cos(camYaw) * cp * dist;
     let cy = Math.max(0.5, camTarget.y + sp * dist);
+    // indoors at the police station the camera stays under the ceiling
+    if (!car && (STATION.inside(player.x, player.z) || STATION.inside(cx, cz))) cy = Math.min(cy, STATION.GH - 0.3);
     if (shake > 0.001) {
       cx += (Math.random() - 0.5) * shake; cy += (Math.random() - 0.5) * shake; cz += (Math.random() - 0.5) * shake;
       shake *= Math.exp(-7 * dt);
@@ -5913,6 +6942,7 @@ body.touch .tk-sign .key { display: none; }
       el.wanted.classList.toggle('calm', !!stop);
     }
     if (fines !== lastFines) { lastFines = fines; el.fineTag.hidden = !fines; el.fines.textContent = fmtKr(fines); }
+    JOBS.hud();
     if (horsesFound.size !== lastHorses) { lastHorses = horsesFound.size; el.horses.textContent = lastHorses + '/' + HORSES.length; }
     locT -= dt;
     if (locT <= 0) {
@@ -5970,6 +7000,7 @@ body.touch .tk-sign .key { display: none; }
     g.scale(s, s);
     g.translate(-px, -pz);
     g.drawImage(mapStatic, MAP.x0, MAP.z0, MAP.w, MAP.h);
+    JOBS.drawMini(g, px, pz, 1 / s);
     for (const c of cars) {
       if (c === driving || Math.abs(c.x - px) > 160 || Math.abs(c.z - pz) > 160) continue;
       g.save(); g.translate(c.x, c.z); g.rotate(-c.h);
@@ -6095,6 +7126,7 @@ body.touch .tk-sign .key { display: none; }
       g.fillStyle = '#c8102e'; g.strokeStyle = '#fff'; g.lineWidth = 1.5;
       g.beginPath(); g.moveTo(X, Y - 6); g.lineTo(X + 5, Y); g.lineTo(X, Y + 6); g.lineTo(X - 5, Y); g.closePath(); g.fill(); g.stroke();
     }
+    JOBS.drawBig(g, toX, toY, k);
     // police and you
     for (const c of cars) {
       if (!c.M.police || c === driving) continue;
@@ -6448,7 +7480,7 @@ body.touch .tk-sign .key { display: none; }
     if (!started) { if (code === 'Enter' || code === 'Space') startGame(); return; }
     if (repeat) return;
     // under arrest most keys do nothing: you can still look at the map, the help and the sound, and E moves things on
-    if (stop && stop.locked && !['KeyE', 'Enter', 'KeyH', 'KeyT', 'KeyK'].includes(code) && !(stop.phase === 'jail' && code === 'Space')) return;
+    if (stop && stop.locked && !['KeyE', 'Enter', 'KeyH', 'KeyT', 'KeyK', 'KeyQ'].includes(code) && !(stop.phase === 'jail' && code === 'Space')) return;
     if (code === 'KeyE' || code === 'Enter') { if (!useKey()) toggleCar(); }
     else if (code === 'Space') jumpQueued = true;
     else if (code === 'KeyH') el.help.hidden = !el.help.hidden;
@@ -6461,6 +7493,8 @@ body.touch .tk-sign .key { display: none; }
     else if (code === 'KeyG') toggleGearbox();
     else if (code === 'KeyL') toggleSiren();
     else if (code === 'KeyK') openBigmap();
+    else if (code === 'KeyQ') POST.cycle();
+    else if (code === 'KeyJ') JOBS.key();
   }
   window.addEventListener('keydown', (e) => {
     if (bigmap.open) { if (e.code === 'Escape' || e.code === 'KeyK') { e.preventDefault(); onKey(e.code, e.repeat); } return; }
@@ -6521,6 +7555,7 @@ body.touch .tk-sign .key { display: none; }
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.btnJump.addEventListener(ev, () => { touchBrake = false; });
   el.btnUse.addEventListener('pointerdown', (e) => { e.preventDefault(); if (!useKey()) toggleCar(); });
   $('btnCars').addEventListener('pointerdown', (e) => { e.preventDefault(); openPicker(); });
+  $('btnJob').addEventListener('pointerdown', (e) => { e.preventDefault(); JOBS.key(); });
   el.btnUp.addEventListener('pointerdown', (e) => { e.preventDefault(); playerShift(1); });
   el.btnDown.addEventListener('pointerdown', (e) => { e.preventDefault(); playerShift(-1); });
 
@@ -6541,6 +7576,284 @@ body.touch .tk-sign .key { display: none; }
   $('dGloben').textContent = fmtKm(Math.hypot(SPAWN.x - 648, SPAWN.z - 3685));
   buildPicker();
 
+  /* ================= post-processing ================= */
+  // Quality 2: the city mirrored in the water, ambient occlusion (the soft shade where things meet), bloom, anti-aliasing
+  // and a photographic grade (contrast, colour, vignette, film grain). Quality 1: bloom, grade and anti-aliasing only.
+  // Quality 0: straight to the screen as before. Q steps through them; a slow computer steps down by itself.
+  // Everything is drawn to an off-screen picture first, in the same screen colours as before (tone mapping and fog
+  // happen in the materials), and the passes work on that picture.
+  const POST = (() => {
+    const gl2 = renderer.capabilities.isWebGL2, depthOk = gl2 || renderer.extensions.has('WEBGL_depth_texture');
+    const half = gl2 ? THREE.HalfFloatType : THREE.UnsignedByteType;
+    const rt = (w, h, o = {}) => {
+      const t = new THREE.WebGLRenderTarget(w, h, Object.assign({ minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat, depthBuffer: false, stencilBuffer: false }, o));
+      t.texture.generateMipmaps = false;
+      return t;
+    };
+    const VERT = 'varying vec2 vUv;\nvoid main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
+    const pass = (frag, uniforms) => new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: frag, uniforms, depthTest: false, depthWrite: false });
+    const fsCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), fsScene = new THREE.Scene();
+    const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
+    quad.frustumCulled = false; fsScene.add(quad);
+    const draw = (mat, target) => { quad.material = mat; renderer.setRenderTarget(target); renderer.render(fsScene, fsCam); };
+
+    // the picture of the scene, with the depth the occlusion pass reads
+    const main = rt(1, 1, { depthBuffer: true });
+    main.texture.encoding = THREE.sRGBEncoding;
+    // (32-bit float depth where there is WebGL2: finer than 24-bit integer depth far off, where the occlusion needs it)
+    if (depthOk) { main.depthTexture = new THREE.DepthTexture(1, 1); main.depthTexture.type = gl2 ? THREE.FloatType : THREE.UnsignedIntType; }
+
+    /* ambient occlusion, at half size: a dozen samples in the half sphere above each point, then a blur that keeps edges */
+    const DEPTH_FN = [
+      'uniform sampler2D tDepth; uniform float uNear, uFar; uniform vec2 uTan;',
+      'float viewZ(vec2 uv) { float d = texture2D(tDepth, uv).x; return (uNear * uFar) / ((uFar - uNear) * d - uFar); }',
+      'vec3 viewPos(vec2 uv) { float z = viewZ(uv); return vec3((uv * 2.0 - 1.0) * uTan * -z, z); }'
+    ].join('\n');
+    const aoU = { tDepth: { value: main.depthTexture }, uNear: { value: 0.1 }, uFar: { value: 2400 }, uTan: { value: new THREE.Vector2() }, uProj: { value: new THREE.Matrix4() }, uRes: { value: new THREE.Vector2() }, uSeed: { value: 0 } };
+    const aoMat = pass([
+      DEPTH_FN,
+      'uniform mat4 uProj; uniform vec2 uRes; uniform float uSeed; varying vec2 vUv;',
+      'float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }',
+      'void main() {',
+      // read the depth at the middle of one full-size pixel, where its position is exactly known: a half-size pixel
+      // falls on the corner between four of them, and flat ground seen at a low angle would come out jagged
+      '  vec2 uv = (floor(vUv * uRes) + 0.5) / uRes;',
+      '  if (texture2D(tDepth, uv).x >= 0.99999) { gl_FragColor = vec4(1.0); return; }',
+      '  vec3 P = viewPos(uv);',
+      '  if (-P.z > 160.0) { gl_FragColor = vec4(1.0); return; }',
+      '  vec2 px = 1.0 / uRes;',
+      '  vec3 r = viewPos(uv + vec2(px.x, 0.0)), l = viewPos(uv - vec2(px.x, 0.0)), t = viewPos(uv + vec2(0.0, px.y)), b = viewPos(uv - vec2(0.0, px.y));',
+      '  vec3 dx = abs(r.z - P.z) < abs(P.z - l.z) ? r - P : P - l, dy = abs(t.z - P.z) < abs(P.z - b.z) ? t - P : P - b;',
+      '  vec3 N = normalize(cross(dx, dy));',
+      '  float a = hash(gl_FragCoord.xy + uSeed) * 6.2831853;',
+      '  vec3 rv = vec3(cos(a), sin(a), 0.3), T = normalize(rv - N * dot(rv, N)), B = cross(N, T);',
+      // (the tolerance grows with distance: depth is stored more coarsely further off, and on some GPUs it is read
+      // back with less precision, which would otherwise darken flat ground)
+      '  float rad = 0.9 * clamp(-P.z / 14.0, 0.5, 3.0), bias = 0.03 * rad + 1.5e-4 * P.z * P.z, occ = 0.0;',
+      '  for (int i = 0; i < 12; i++) {',
+      '    float s = (float(i) + 0.5) / 12.0, ang = float(i) * 2.3999632, h = sqrt(1.0 - s);',
+      '    vec3 k = vec3(cos(ang) * h, sin(ang) * h, sqrt(s)) * mix(0.15, 1.0, s * s);',
+      '    vec3 S = P + (T * k.x + B * k.y + N * k.z) * rad;',
+      '    vec4 c = uProj * vec4(S, 1.0);',
+      '    vec2 suv = c.xy / c.w * 0.5 + 0.5;',
+      '    float sz = viewZ((floor(suv * uRes) + 0.5) / uRes);',
+      '    occ += (sz >= S.z + bias ? 1.0 : 0.0) * smoothstep(0.0, 1.0, rad / abs(P.z - sz));',
+      '  }',
+      '  float ao = 1.0 - occ / 12.0;',
+      '  gl_FragColor = vec4(vec3(mix(ao, 1.0, smoothstep(100.0, 160.0, -P.z))), 1.0);',
+      '}'
+    ].join('\n'), aoU);
+    const aoBlurU = { tAO: { value: null }, tDepth: { value: main.depthTexture }, uNear: aoU.uNear, uFar: aoU.uFar, uTan: aoU.uTan, uRes: { value: new THREE.Vector2() } };
+    const aoBlur = pass([
+      DEPTH_FN,
+      'uniform sampler2D tAO; uniform vec2 uRes; varying vec2 vUv;',
+      'void main() {',
+      '  float z0 = -viewZ(vUv), sum = 0.0, wsum = 0.0;',
+      '  for (int x = -2; x <= 2; x++) for (int y = -2; y <= 2; y++) {',
+      '    vec2 uv = vUv + vec2(float(x), float(y)) / uRes;',
+      '    float w = exp(-abs(-viewZ(uv) - z0) / (0.03 * z0 + 0.15));',
+      '    sum += texture2D(tAO, uv).r * w; wsum += w;',
+      '  }',
+      '  gl_FragColor = vec4(vec3(sum / max(wsum, 1e-4)), 1.0);',
+      '}'
+    ].join('\n'), aoBlurU);
+    const aoA = rt(1, 1), aoB = rt(1, 1);
+
+    /* bloom: the brightest parts, blurred over a chain of ever smaller pictures and back up again (dual Kawase) */
+    const bloomPre = pass([
+      'uniform sampler2D tSrc; uniform vec2 uPx; varying vec2 vUv;',
+      'void main() {',
+      '  vec3 c = (texture2D(tSrc, vUv + vec2(-uPx.x, -uPx.y)).rgb + texture2D(tSrc, vUv + vec2(uPx.x, -uPx.y)).rgb + texture2D(tSrc, vUv + vec2(-uPx.x, uPx.y)).rgb + texture2D(tSrc, vUv + vec2(uPx.x, uPx.y)).rgb) * 0.25;',
+      '  float br = max(c.r, max(c.g, c.b)), knee = 0.18, soft = clamp(br - 0.82 + knee, 0.0, 2.0 * knee);',
+      '  soft = soft * soft / (4.0 * knee + 1e-4);',
+      '  gl_FragColor = vec4(c * max(soft, br - 0.82) / max(br, 1e-4), 1.0);',
+      '}'
+    ].join('\n'), { tSrc: { value: null }, uPx: { value: new THREE.Vector2() } });
+    const down = pass([
+      'uniform sampler2D tSrc; uniform vec2 uPx; varying vec2 vUv;',
+      'void main() {',
+      '  vec4 s = texture2D(tSrc, vUv) * 4.0 + texture2D(tSrc, vUv - uPx) + texture2D(tSrc, vUv + uPx) + texture2D(tSrc, vUv + vec2(uPx.x, -uPx.y)) + texture2D(tSrc, vUv - vec2(uPx.x, -uPx.y));',
+      '  gl_FragColor = s / 8.0;',
+      '}'
+    ].join('\n'), { tSrc: { value: null }, uPx: { value: new THREE.Vector2() } });
+    const up = pass([
+      'uniform sampler2D tSrc, tAdd; uniform vec2 uPx; varying vec2 vUv;',
+      'void main() {',
+      '  vec4 s = texture2D(tSrc, vUv + vec2(-uPx.x * 2.0, 0.0)) + texture2D(tSrc, vUv + vec2(0.0, uPx.y * 2.0)) + texture2D(tSrc, vUv + vec2(uPx.x * 2.0, 0.0)) + texture2D(tSrc, vUv + vec2(0.0, -uPx.y * 2.0));',
+      '  s += (texture2D(tSrc, vUv + vec2(-uPx.x, uPx.y)) + texture2D(tSrc, vUv + vec2(uPx.x, uPx.y)) + texture2D(tSrc, vUv + vec2(uPx.x, -uPx.y)) + texture2D(tSrc, vUv + vec2(-uPx.x, -uPx.y))) * 2.0;',
+      '  gl_FragColor = s / 12.0 + texture2D(tAdd, vUv);',
+      '}'
+    ].join('\n'), { tSrc: { value: null }, tAdd: { value: null }, uPx: { value: new THREE.Vector2() } });
+    const lvDown = [0, 1, 2, 3].map(() => rt(1, 1, { type: half })), lvUp = [0, 1, 2].map(() => rt(1, 1, { type: half }));
+
+    /* the final picture: anti-aliasing (FXAA), occlusion, bloom and the grade */
+    const finU = {
+      tColor: { value: main.texture }, tAO: { value: aoB.texture }, tBloom: { value: lvUp[0].texture }, uPx: { value: new THREE.Vector2() },
+      uAO: { value: 1 }, uBloom: { value: 0.32 }, uTime: { value: 0 }, uAspect: { value: 1 }, uShowAO: { value: 0 }
+    };
+    const finMat = pass([
+      'uniform sampler2D tColor, tAO, tBloom; uniform vec2 uPx; uniform float uAO, uBloom, uTime, uAspect, uShowAO; varying vec2 vUv;',
+      'vec3 fxaa(vec2 uv) {',
+      '  vec3 nw = texture2D(tColor, uv + vec2(-1.0, -1.0) * uPx).rgb, ne = texture2D(tColor, uv + vec2(1.0, -1.0) * uPx).rgb;',
+      '  vec3 sw = texture2D(tColor, uv + vec2(-1.0, 1.0) * uPx).rgb, se = texture2D(tColor, uv + vec2(1.0, 1.0) * uPx).rgb, m = texture2D(tColor, uv).rgb;',
+      '  vec3 L = vec3(0.299, 0.587, 0.114);',
+      '  float lnw = dot(nw, L), lne = dot(ne, L), lsw = dot(sw, L), lse = dot(se, L), lm = dot(m, L);',
+      '  float lmin = min(lm, min(min(lnw, lne), min(lsw, lse))), lmax = max(lm, max(max(lnw, lne), max(lsw, lse)));',
+      '  vec2 dir = vec2(-((lnw + lne) - (lsw + lse)), (lnw + lsw) - (lne + lse));',
+      '  float red = max((lnw + lne + lsw + lse) * 0.03125, 0.0078125), rmin = 1.0 / (min(abs(dir.x), abs(dir.y)) + red);',
+      '  dir = clamp(dir * rmin, vec2(-8.0), vec2(8.0)) * uPx;',
+      '  vec3 a = 0.5 * (texture2D(tColor, uv + dir * (1.0 / 3.0 - 0.5)).rgb + texture2D(tColor, uv + dir * (2.0 / 3.0 - 0.5)).rgb);',
+      '  vec3 b = a * 0.5 + 0.25 * (texture2D(tColor, uv - dir * 0.5).rgb + texture2D(tColor, uv + dir * 0.5).rgb);',
+      '  float lb = dot(b, L);',
+      '  return (lb < lmin || lb > lmax) ? a : b;',
+      '}',
+      'float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }',
+      'void main() {',
+      '  vec3 c = fxaa(vUv);',
+      // a touch of colour fringing towards the corners, as in a real lens
+      '  vec2 off = (vUv - 0.5) * 0.0016;',
+      '  c.r = mix(c.r, texture2D(tColor, vUv + off).r, 0.5); c.b = mix(c.b, texture2D(tColor, vUv - off).b, 0.5);',
+      '  vec3 lin = pow(max(c, 0.0), vec3(2.2));',
+      '  lin *= mix(1.0, texture2D(tAO, vUv).r, uAO);',
+      '  lin += pow(max(texture2D(tBloom, vUv).rgb, 0.0), vec3(2.2)) * uBloom;',
+      // the grade: a little less candy colour, cool shadows and warm highlights, a soft S-curve
+      '  float lum = dot(lin, vec3(0.2126, 0.7152, 0.0722));',
+      '  lin = mix(vec3(lum), lin, 0.9);',
+      '  lin *= mix(vec3(0.96, 1.0, 1.05), vec3(1.04, 1.0, 0.95), smoothstep(0.02, 0.6, lum));',
+      '  c = pow(max(lin, 0.0), vec3(1.0 / 2.2));',
+      '  c = mix(c, c * c * (3.0 - 2.0 * c), 0.22);',
+      '  vec2 q = (vUv - 0.5) * vec2(uAspect, 1.0);',
+      '  c *= 1.0 - 0.32 * smoothstep(0.35, 1.05, length(q));',
+      '  c += (hash(vUv * 1013.0 + uTime) - 0.5) * 0.022;',
+      '  gl_FragColor = vec4(uShowAO > 0.5 ? texture2D(tAO, vUv).rrr : c, 1.0);',
+      '}'
+    ].join('\n'), finU);
+
+    /* the city mirrored in the water: drawn from below the water surface, upside down, at about a third of the size */
+    const refl = rt(1, 1, { depthBuffer: true });
+    refl.texture.encoding = THREE.sRGBEncoding;
+    const mirror = new THREE.PerspectiveCamera(), reflU = { tReflect: { value: refl.texture }, uReflMatrix: { value: new THREE.Matrix4() }, uReflOn: { value: 0 } };
+    const WATER_Y = water.position.y, _p = new THREE.Plane(), _v4 = new THREE.Vector4(), _q = new THREE.Vector4(), _tgt = new THREE.Vector3(), _dir = new THREE.Vector3();
+    water.material.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, reflU);
+      sh.vertexShader = 'uniform mat4 uReflMatrix;\nvarying vec4 vRefl;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n\tvRefl = uReflMatrix * modelMatrix * vec4( transformed, 1.0 );');
+      sh.fragmentShader = 'uniform sampler2D tReflect;\nuniform float uReflOn;\nvarying vec4 vRefl;\n' + sh.fragmentShader.replace('#include <encodings_fragment>', [
+        '#include <encodings_fragment>',
+        '\tif ( uReflOn > 0.5 ) {',
+        // the ripples break the mirror image up, less so far off where they are small on screen
+        '\t\tvec2 wob = ( normal - geometryNormal ).xy * 0.05 * clamp( 14.0 / length( vViewPosition ), 0.1, 1.0 );',
+        '\t\tvec3 refl = texture2D( tReflect, vRefl.xy / vRefl.w + wob ).rgb;',
+        '\t\tfloat fres = 0.03 + 0.97 * pow( 1.0 - clamp( dot( normal, normalize( vViewPosition ) ), 0.0, 1.0 ), 5.0 );',
+        '\t\tgl_FragColor.rgb = mix( gl_FragColor.rgb, refl * vec3( 0.84, 0.92, 0.95 ), clamp( 0.22 + fres * 0.75, 0.0, 0.9 ) );',
+        '\t}'
+      ].join('\n'));
+    };
+    water.material.needsUpdate = true;
+    // is any water in sight: look out from the camera across its field of view, each way until a house is in the way
+    // (seen from up high, nothing is in the way)
+    function waterInView() {
+      camera.getWorldDirection(_dir);
+      if (_dir.y > 0.6) return false;
+      const yaw = Math.atan2(_dir.x, _dir.z), spread = (camera.fov * camera.aspect * Math.PI) / 360 + 0.15, high = camera.position.y > 25;
+      for (let k = -4; k <= 4; k++) {
+        const a = yaw + (k / 4) * spread, sx = Math.sin(a), sz = Math.cos(a);
+        for (const d of [6, 12, 20, 32, 50, 80, 125, 200, 320, 500, 750]) {
+          const x = camera.position.x + sx * d, z = camera.position.z + sz * d;
+          if (!walkable(x, z)) return true;
+          if (!high && blockedAt(x, z, 1)) break;
+        }
+      }
+      return false;
+    }
+    function renderMirror() {
+      camera.updateMatrixWorld();
+      mirror.copy(camera);
+      mirror.position.set(camera.position.x, 2 * WATER_Y - camera.position.y, camera.position.z);
+      camera.getWorldDirection(_dir);
+      _tgt.copy(camera.position).add(_dir); _tgt.y = 2 * WATER_Y - _tgt.y;
+      mirror.up.set(0, 1, 0).applyQuaternion(camera.quaternion); mirror.up.y = -mirror.up.y;
+      mirror.lookAt(_tgt);
+      mirror.updateMatrixWorld();
+      mirror.updateProjectionMatrix();
+      reflU.uReflMatrix.value.set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1).multiply(mirror.projectionMatrix).multiply(mirror.matrixWorldInverse);
+      // an oblique near plane on the water surface, so nothing below the water shows up in the mirror
+      _p.setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, WATER_Y, 0)).applyMatrix4(mirror.matrixWorldInverse);
+      _v4.set(_p.normal.x, _p.normal.y, _p.normal.z, _p.constant);
+      const e = mirror.projectionMatrix.elements;
+      _q.set((Math.sign(_v4.x) + e[8]) / e[0], (Math.sign(_v4.y) + e[9]) / e[5], -1, (1 + e[10]) / e[14]);
+      _v4.multiplyScalar(2 / _v4.dot(_q));
+      e[2] = _v4.x; e[6] = _v4.y; e[10] = _v4.z + 1; e[14] = _v4.w;
+      const sp = sky.position.clone(), sh = renderer.shadowMap.autoUpdate;
+      water.visible = false; sky.position.copy(mirror.position); renderer.shadowMap.autoUpdate = false;
+      renderer.setRenderTarget(refl); renderer.render(scene, mirror);
+      water.visible = true; sky.position.copy(sp); renderer.shadowMap.autoUpdate = sh;
+    }
+
+    let level = isTouch ? 1 : 2, W = 0, H = 0;
+    const stats = { calls: 0, triangles: 0, mirror: false };
+    let aoOn = true;
+    const size = new THREE.Vector2();
+    function resize() {
+      renderer.getDrawingBufferSize(size);
+      if (size.x === W && size.y === H) return;
+      W = size.x; H = size.y;
+      main.setSize(W, H);
+      const hw = Math.max(1, W >> 1), hh = Math.max(1, H >> 1);
+      aoA.setSize(hw, hh); aoB.setSize(hw, hh);
+      lvDown.forEach((t, i) => t.setSize(Math.max(1, W >> (i + 1)), Math.max(1, H >> (i + 1))));
+      lvUp.forEach((t, i) => t.setSize(Math.max(1, W >> (i + 1)), Math.max(1, H >> (i + 1))));
+      refl.setSize(Math.max(1, Math.round(W * 0.38)), Math.max(1, Math.round(H * 0.38)));
+    }
+    function render() {
+      if (level === 0) { reflU.uReflOn.value = 0; renderer.setRenderTarget(null); renderer.render(scene, camera); return; }
+      resize();
+      const mirrored = level >= 2 && waterInView();
+      reflU.uReflOn.value = mirrored ? 1 : 0;
+      if (mirrored) renderMirror();
+      renderer.setRenderTarget(main); renderer.render(scene, camera);
+      stats.calls = renderer.info.render.calls; stats.triangles = renderer.info.render.triangles; stats.mirror = mirrored;
+      const ao = level >= 2 && depthOk && aoOn;
+      if (ao) {
+        aoU.uNear.value = camera.near; aoU.uFar.value = camera.far;
+        const ty = Math.tan((camera.fov * Math.PI) / 360);
+        aoU.uTan.value.set(ty * camera.aspect, ty);
+        aoU.uProj.value.copy(camera.projectionMatrix);
+        aoU.uRes.value.set(W, H); aoU.uSeed.value = (aoU.uSeed.value + 1.37) % 100;
+        draw(aoMat, aoA);
+        aoBlurU.tAO.value = aoA.texture; aoBlurU.uRes.value.set(aoA.width, aoA.height);
+        draw(aoBlur, aoB);
+      }
+      bloomPre.uniforms.tSrc.value = main.texture; bloomPre.uniforms.uPx.value.set(0.5 / W, 0.5 / H);
+      draw(bloomPre, lvDown[0]);
+      for (let i = 1; i < lvDown.length; i++) {
+        down.uniforms.tSrc.value = lvDown[i - 1].texture; down.uniforms.uPx.value.set(0.5 / lvDown[i - 1].width, 0.5 / lvDown[i - 1].height);
+        draw(down, lvDown[i]);
+      }
+      for (let i = lvUp.length - 1; i >= 0; i--) {
+        const src = i === lvUp.length - 1 ? lvDown[i + 1] : lvUp[i + 1];
+        up.uniforms.tSrc.value = src.texture; up.uniforms.tAdd.value = lvDown[i].texture; up.uniforms.uPx.value.set(0.5 / src.width, 0.5 / src.height);
+        draw(up, lvUp[i]);
+      }
+      finU.uPx.value.set(1 / W, 1 / H); finU.uAO.value = ao ? 0.85 : 0; finU.uTime.value = (finU.uTime.value + 0.618) % 50; finU.uAspect.value = W / H;
+      draw(finMat, null);
+    }
+    const NAMES = ['Enkel grafik', 'Mellangrafik: bloom och färgkorrigering', 'Högsta grafik: speglingar i vattnet, skuggning och bloom'];
+    return {
+      render,
+      get level() { return level; },
+      setLevel(l, quiet) {
+        level = clamp(l, 0, 2);
+        sun.shadow.mapSize.setScalar(level >= 2 && renderer.capabilities.maxTextureSize >= 8192 ? 4096 : 2048);
+        if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+        if (!quiet) toast(NAMES[level] + ' (Q byter).');
+      },
+      cycle() { this.setLevel((level + 2) % 3); },
+      waterInView, stats,
+      set ao(v) { aoOn = !!v; }, set showAO(v) { finU.uShowAO.value = v ? 1 : 0; }
+    };
+  })();
+  POST.setLevel(POST.level, true);
+
   /* ================= loop ================= */
   function tick(dt) {
     const inp = readInput();
@@ -6554,6 +7867,7 @@ body.touch .tk-sign .key { display: none; }
       manageTraffic(dt);
       policeUpdate(dt);
       updateSurprises(dt);
+      JOBS.update(dt);
       STATION.update(dt, player.x, player.z);
       nearCar = findNearCar();
       animate(dt);
@@ -6565,14 +7879,16 @@ body.touch .tk-sign .key { display: none; }
     updateAudio(dt);
   }
   // dynamic resolution: render fewer pixels when the frame rate drops, and creep back up when there is room
-  let dpr = MAX_DPR, perfSum = 0, perfN = 0, holdUp = 0;
+  let dpr = MAX_DPR, perfSum = 0, perfN = 0, holdUp = 0, qualityDropped = false;
   function adaptQuality(raw) {
     perfSum += Math.min(raw, 0.1); perfN++;
     if (perfSum < 2) return;
     const avg = perfSum / perfN;
     perfSum = 0; perfN = 0; holdUp -= 2;
     let next = dpr;
-    if (avg > 1 / 40 && dpr > 0.7) { next = Math.max(0.7, dpr - 0.2); holdUp = 20; }
+    // still too slow at the lowest resolution: one step down in graphics quality (Q brings it back)
+    if (avg > 1 / 32 && dpr <= 0.7 && POST.level > 0 && !qualityDropped) { qualityDropped = true; POST.setLevel(POST.level - 1); holdUp = 20; }
+    else if (avg > 1 / 40 && dpr > 0.7) { next = Math.max(0.7, dpr - 0.2); holdUp = 20; }
     else if (avg < 1 / 55 && dpr < MAX_DPR && holdUp <= 0) next = Math.min(MAX_DPR, dpr + 0.1);
     if (next !== dpr) { dpr = next; renderer.setPixelRatio(dpr); renderer.setSize(window.innerWidth, window.innerHeight); }
   }
@@ -6583,13 +7899,13 @@ body.touch .tk-sign .key { display: none; }
     last = now;
     adaptQuality(raw);
     tick(dt);
-    renderer.render(scene, camera);
+    POST.render();
     requestAnimationFrame(frame);
   }
 
   // test hooks: step the simulation without relying on animation frames
   window.gubbeTest = {
-    run(seconds, dt = 1 / 60) { const n = Math.round(seconds / dt); for (let i = 0; i < n; i++) tick(dt); renderer.render(scene, camera); return this.state(); },
+    run(seconds, dt = 1 / 60) { const n = Math.round(seconds / dt); for (let i = 0; i < n; i++) tick(dt); POST.render(); return this.state(); },
     key(code, down) { keys[code] = down; },
     press(code) { keys[code] = true; onKey(code, false); keys[code] = false; },
     start() { startGame(); },
@@ -6599,17 +7915,19 @@ body.touch .tk-sign .key { display: none; }
       return ids.map((id, i) => {
         const M = MODEL[id], c = makeCar(M, M.colors[0]);
         c.x = x; c.z = z + i * gap; c.h = Math.PI / 2;
+        for (const m of c.calipers) m.visible = true;
         c.group.position.set(c.x, 0, c.z); c.group.rotation.y = c.h;
         return { id, z: c.z, tris: c.geo.body.attributes.position.count / 3 + c.geo.glass.attributes.position.count / 3, wheel: wheelGeometry(M.R, M.rim).attributes.position.count / 3 };
       });
     },
-    shot(cx, cy, cz, tx, ty, tz) { testHold = true; camera.position.set(cx, cy, cz); camera.lookAt(tx, ty, tz); camera.updateMatrixWorld(); renderer.render(scene, camera); },
+    shot(cx, cy, cz, tx, ty, tz) { testHold = true; camera.position.set(cx, cy, cz); camera.lookAt(tx, ty, tz); camera.updateMatrixWorld(); sky.position.copy(camera.position); POST.render(); },
+    quality(l) { POST.setLevel(l, true); }, get post() { return POST; }, jobs: JOBS,
     look(yaw, pitch) { camYaw = yaw; if (pitch !== undefined) camPitch = pitch; lastLook = performance.now(); },
     choose(id) { chooseModel(MODEL[id]); },
     openPicker, closePicker, crash, limitAt, startChase, endChase, openBigmap, closeBigmap, drawBigmap, bigmap, carShape, MODELS,
     info() {
       const r = renderer.info;
-      return { calls: r.render.calls, triangles: r.render.triangles, geometries: r.memory.geometries, chunks: chunks.size, buildings: mapPolys.length, lamps: lamps.length, trees: lindens.length + cherries.length, loadMs: Math.round(loadMs) };
+      return { calls: POST.level ? POST.stats.calls : r.render.calls, triangles: POST.level ? POST.stats.triangles : r.render.triangles, mirror: POST.stats.mirror, geometries: r.memory.geometries, chunks: chunks.size, buildings: mapPolys.length, lamps: lamps.length, trees: lindens.length + cherries.length, loadMs: Math.round(loadMs) };
     },
     // landmarks that stand on a street or its pavement
     mapProblems() {
@@ -6647,7 +7965,7 @@ body.touch .tk-sign .key { display: none; }
     },
     get cars() { return cars; }, blockedAt: (x, z, r) => blockedAt(x, z, r), obstaclesNear(x, z, r) { const out = []; forNear(x - r, z - r, x + r, z + r, (o) => out.push({ ...o })); return out; }, distTo, get persons() { return persons; }, get player() { return player; }, get driving() { return driving; },
     get wanted() { return wanted; }, get fines() { return fines; }, get audio() { return audio; }, get stop() { return stop; }, footCops, STATION, useKey, walkWaypoint, walkLine, landmarkList, mapSquares, mapGreens, signTicket, beginStop, setCall, resyncBot, get horses() { return horses; }, fireworks(s) { fireworksT = s; },
-    nodes, edges, walkable, fitsM, MODEL, driveAccel, limitAt, nearestEdgeAt(x, z) { const ne = nearestEdge(x, z); return ne.e && ne.d < ne.e.hw + ne.e.walk + 2 ? ne.e : null; },
+    nodes, edges, walkable, fitsM, MODEL, driveAccel, limitAt, bridgeTrims, nearestEdgeAt(x, z) { const ne = nearestEdge(x, z); return ne.e && ne.d < ne.e.hw + ne.e.walk + 2 ? ne.e : null; },
     state() {
       const bad = [];
       for (const c of cars) { if (!isFinite(c.x + c.z + c.h + c.vx + c.vz)) bad.push('nan-car'); else if (!fitsM(c.M, c.x, c.z, c.h)) bad.push('car-off ' + c.M.id + ' ' + c.x.toFixed(1) + ',' + c.z.toFixed(1)); }
