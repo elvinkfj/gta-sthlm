@@ -68,6 +68,7 @@ body.playing #hud { opacity: 1; }
   font-weight: 900; font-size: 1.05rem; white-space: nowrap;
 }
 #prompt.steal { background: var(--sign-red); box-shadow: inset 0 0 0 3px var(--sign-red), inset 0 0 0 5px var(--snow), 0 8px 20px rgba(0, 0, 0, 0.3); }
+#prompt.shop { background: #d23a6c; box-shadow: inset 0 0 0 3px #d23a6c, inset 0 0 0 5px var(--snow), 0 8px 20px rgba(0, 0, 0, 0.3); }
 #prompt .key { font-size: 0.9rem; }
 
 #toast {
@@ -232,6 +233,8 @@ h1 { margin: 0; font: 900 clamp(2.2rem, 9vw, 3.1rem)/0.95 var(--font-sign); lett
 .lg-t { background: #1062b4; color: #fff; box-shadow: 0 0 0 2px var(--snow); }
 .lg-park { border-radius: 3px !important; background: #a9cf8c; }
 .lg-main { border-radius: 3px !important; background: #fbe7a6; }
+.lg-ice { border-radius: 50% 50% 50% 50% / 40% 40% 60% 60% !important; background: linear-gradient(#e8457a 0 55%, #d9a35f 55%); box-shadow: 0 0 0 2px var(--snow); }
+.lg-balloon { border-radius: 50% 50% 50% 50% / 45% 45% 55% 55% !important; width: 12px !important; height: 14px !important; background: #e0203a; box-shadow: 0 0 0 2px var(--snow); }
 .lg-race { border-radius: 2px !important; background: #ffe14a; box-shadow: 0 0 0 2px #1b1c1e; }
 .lg-goal { background: #ffc21a; box-shadow: 0 0 0 2px var(--snow); }
 
@@ -308,7 +311,7 @@ body.touch .tk-sign .key { display: none; }
     <div class="tag"><span class="key">K</span>Karta</div>
     <div class="tag"><span class="key">T</span><span id="soundLabel">Ljud på</span></div>
     <div class="tag fine" id="fineTag" hidden>Böter <b id="fines">0 kr</b></div>
-    <div class="tag cash" id="cashTag" hidden title="Det du tjänat på uppdrag">Kassa <b id="cash">0 kr</b></div>
+    <div class="tag cash" id="cashTag" hidden title="Dina pengar: fickpengarna och det du tjänat på jobb">Kassa <b id="cash">0 kr</b></div>
     <div class="tag dala-tag" title="Dalahästar du hittat"><svg class="dala" viewBox="0 0 20 20" aria-hidden="true"><path d="M4 18V11L3 10V8l2-1 1-4h3l1 2-2 1v1h7l1 1v8h-3v-4H8v4z" fill="#c8102e" stroke="#fff" stroke-width="1"/></svg><b id="horses">0/20</b></div>
   </div>
   <div id="loc"><span id="locStreet"></span><span id="locDistrict">Norrmalm</span></div>
@@ -348,6 +351,8 @@ body.touch .tk-sign .key { display: none; }
     <span class="key">Polis</span><span>Kör in till kanten och stanna, så kommer en konstapel fram. E skriver under boten. 50 km/h för fort eller flykt: du blir gripen och hamnar i cellen på polisstationen i Gamla stan</span>
     <span class="key">Dalahäst</span><span>20 st gömda i stan, 9 i Gamla stan. Gå eller kör in i dem</span>
     <span class="key">J</span><span>Jobb: taxi i taxin, paket i Sprintern, busslinje i bussen. Vid en gul ljuspelare: starta gatlopp</span>
+    <span class="key">Glass</span><span>Glasskiosk och ballongförsäljare vid Skeppsbron, i Kungsträdgården, på Medborgarplatsen och på Djurgården. Gå fram och tryck E för att köpa</span>
+    <span class="key">V</span><span>Släpp en ballong</span>
     <span class="key">R</span><span>Ställ bilen på gatan igen</span>
     <span class="key">T</span><span>Ljud av och på</span>
     <span class="key">Q</span><span>Grafikkvalitet: hög, mellan eller enkel</span>
@@ -415,7 +420,7 @@ body.touch .tk-sign .key { display: none; }
     <canvas id="bigmapCanvas"></canvas>
     <div class="legend">
       <span><i class="lg-you"></i>Du</span><span><i class="lg-police"></i>Polis</span><span><i class="lg-car"></i>Din bil</span>
-      <span><i class="lg-t">T</i>Tunnelbana</span><span><i class="lg-dala"></i>Hittad dalahäst</span><span><i class="lg-park"></i>Park</span><span><i class="lg-main"></i>Huvudgata</span><span><i class="lg-race"></i>Gatlopp</span><span><i class="lg-goal"></i>Mål och GPS</span>
+      <span><i class="lg-t">T</i>Tunnelbana</span><span><i class="lg-dala"></i>Hittad dalahäst</span><span><i class="lg-park"></i>Park</span><span><i class="lg-main"></i>Huvudgata</span><span><i class="lg-race"></i>Gatlopp</span><span><i class="lg-goal"></i>Mål och GPS</span><span><i class="lg-ice"></i>Glasskiosk</span><span><i class="lg-balloon"></i>Ballonger</span>
     </div>
   </div>
 </div>
@@ -4643,8 +4648,8 @@ body.touch .tk-sign .key { display: none; }
         if (cvn > 4.5 && p.knockT <= 0) {
           p.vx = c.vx * 0.7 + wx * 3; p.vz = c.vz * 0.7 + wz * 3; p.vy = 5; p.grounded = false; p.knockT = 1.2;
           if (c === driving && p !== player) offense('påkörning', 0, p.x, p.z);
-          // knocked down: ordinary people run off afterwards, constables and the desk officer get up and carry on
-          if (p.ai && p.ai.state !== 'cop' && p.ai.state !== 'idle') { p.ai.state = 'flee'; p.ai.t = 4; p.ai.from = null; }
+          // knocked down: ordinary people run off afterwards, constables, the desk officer and the sellers get up and carry on
+          if (p.ai && p.ai.state !== 'cop' && p.ai.state !== 'idle' && p.ai.state !== 'vendor') { p.ai.state = 'flee'; p.ai.t = 4; p.ai.from = null; }
         } else {
           const vn = p.vx * wx + p.vz * wz;
           if (vn < cvn) { p.vx += (cvn - vn) * wx; p.vz += (cvn - vn) * wz; }
@@ -4671,7 +4676,7 @@ body.touch .tk-sign .key { display: none; }
       else if (personFits(ox, p.z)) { p.x = ox; p.vx = 0; }
       else { p.x = ox; p.z = oz; p.vx = p.vz = 0; }
     }
-    p.vy -= 24 * dt;
+    p.vy -= 24 * dt * (p.vy < 0 && p.floaty ? p.floaty : 1);
     p.y += p.vy * dt;
     if (p.y <= gy && p.vy <= 0) { p.y = gy; p.vy = 0; p.grounded = true; } else p.grounded = false;
   }
@@ -4935,6 +4940,11 @@ body.touch .tk-sign .key { display: none; }
       const g = guardTarget(ai.post, clock), dx = g.x - p.x, dz = g.z - p.z, d = Math.hypot(dx, dz);
       if (d > 0.15) { out.mx = dx / d; out.mz = dz / d; out.speed = Math.min(1.25, d * 2.5); }
       else p.rot = lerpAngle(p.rot, g.face, 0.2);
+    } else if (ai.state === 'vendor') {
+      // a balloon seller: back to the spot after stepping out of the way, turned towards you when you come up on foot
+      const P = ai.post, dx = P.x - p.x, dz = P.z - p.z, d = Math.hypot(dx, dz);
+      if (d > 0.3) { out.mx = dx / d; out.mz = dz / d; out.speed = Math.min(1.4, d * 2); }
+      else p.rot = lerpAngle(p.rot, !driving && Math.hypot(player.x - p.x, player.z - p.z) < 7 ? Math.atan2(player.x - p.x, player.z - p.z) : P.face, 0.08);
     } else {
       if (p.blocked) { const a = Math.atan2(ai.wx, ai.wz) + (Math.random() < 0.5 ? 1 : -1) * (Math.PI / 2); ai.wx = Math.sin(a); ai.wz = Math.cos(a); }
       out.mx = ai.wx; out.mz = ai.wz; out.speed = 1.5;
@@ -6069,9 +6079,10 @@ body.touch .tk-sign .key { display: none; }
   // yellow pillars of light around town J starts a street race against the clock. A pillar of light marks where to go
   // and a GPS line on both maps shows the way along the streets. What you earn goes in the Kassa, kept between visits.
   const JOBS = (() => {
-    const CASH_KEY = 'gubbe-kassa', RACE_KEY = 'gubbe-gatlopp';
-    let earned = 0, records = {};
-    try { earned = Math.max(0, +localStorage.getItem(CASH_KEY) || 0); records = JSON.parse(localStorage.getItem(RACE_KEY) || '{}') || {}; } catch (e) { /* a private window: kept for this visit only */ }
+    // you start with some pocket money, enough for an ice cream and a balloon
+    const CASH_KEY = 'gubbe-kassa', RACE_KEY = 'gubbe-gatlopp', POCKET_MONEY = 100;
+    let earned = POCKET_MONEY, records = {};
+    try { const kept = localStorage.getItem(CASH_KEY); earned = kept === null ? POCKET_MONEY : Math.max(0, +kept || 0); records = JSON.parse(localStorage.getItem(RACE_KEY) || '{}') || {}; } catch (e) { /* a private window: kept for this visit only */ }
     const save = () => { try { localStorage.setItem(CASH_KEY, String(earned)); localStorage.setItem(RACE_KEY, JSON.stringify(records)); } catch (e) { /* counted anyway */ } };
     const fmtTime = (t) => Math.floor(t / 60) + ':' + (t % 60).toFixed(1).padStart(4, '0').replace('.', ',');
     const fmtDist = (m) => (m < 1000 ? Math.round(m / 10) * 10 + ' m' : (m / 1000).toFixed(1).replace('.', ',') + ' km');
@@ -6473,9 +6484,420 @@ body.touch .tk-sign .key { display: none; }
     }
     return {
       key, update, hud, drawMini, drawBig, entered, RACES, PLACES,
+      // paying out of the Kassa: false (and nothing taken) when there is not enough
+      spend(kr) { if (earned < kr) return false; earned -= kr; save(); return true; },
       get job() { return job; }, get earned() { return earned; }, get route() { return route; },
       // test hooks: hold the race countdown short, skip to a checkpoint
       _skipCountdown() { if (job && job.kind === 'race') job.t = 0; }
+    };
+  })();
+
+  /* ================= ice cream kiosks and balloon sellers ================= */
+  // A glasskiosk and a balloon seller at the car park where you start, in Kungsträdgården, on Medborgarplatsen and on
+  // Djurgården. Walk up and press E to buy with what is in the Kassa. You eat the ice cream as you walk, lick by lick,
+  // and the balloons follow you on their strings, out of the car window when you drive. V lets one go, and with
+  // balloons in your hand you fall slowly when you jump.
+  const VENDORS = (() => {
+    const ICE_PRICE = 35, BALLOON_PRICE = 40, MAX_BALLOONS = 6, SELLER_STOCK = 10, BITES = 10;
+    const FLAVORS = [['vanilj', 0xf6e7b8], ['choklad', 0x6b3e26], ['jordgubb', 0xf28bb0], ['päron', 0xdfe68f], ['pistage', 0xa9cf8c],
+      ['lakrits', 0x2c2a2b], ['mango', 0xffb23f], ['blåbär', 0x6d5bc4], ['hallon', 0xd6336c], ['citron', 0xfff27a]];
+    const BALLOONS = [[0xe0203a, 'röd'], [0x2f6fdb, 'blå'], [0xf7c600, 'gul'], [0x2fae5a, 'grön'], [0xff6fb0, 'rosa'], [0x8e44ad, 'lila'], [0xff8a1f, 'orange'], [0x4fc3f7, 'ljusblå']];
+    const PINK = 0xe8457a, CREAM = 0xf6f1e8, STEEL = 0xc5c9ce;
+    // where they stand: x, z and which way the hatch and the seller face
+    const lotFace = Math.atan2(LOT.f.ux, LOT.f.uz);
+    const SPOTS = [
+      { name: 'Skeppsbron', kiosk: [...LOT.at(4, 27), lotFace], seller: [...LOT.at(9, 20.5), lotFace] },
+      { name: 'Kungsträdgården', kiosk: [55, -512.5, 0], seller: [31, -489, 0] },
+      { name: 'Medborgarplatsen', kiosk: [190, 1452, Math.PI], seller: [172, 1446, Math.PI] },
+      { name: 'Djurgården', kiosk: [1252, -112, -Math.PI / 2], seller: [1247, -100, -Math.PI / 2] }
+    ];
+    // a point given in a kiosk's own frame (front towards +z) out in the world
+    const toWorld = (k, lx, lz) => [k.x + lx * Math.cos(k.face) + lz * Math.sin(k.face), k.z - lx * Math.sin(k.face) + lz * Math.cos(k.face)];
+    const toLocal = (k, x, z) => { const dx = x - k.x, dz = z - k.z; return [dx * Math.cos(k.face) - dz * Math.sin(k.face), dx * Math.sin(k.face) + dz * Math.cos(k.face)]; };
+
+    /* textures: the GLASS sign, the waffle of the cones and the chalkboard with the flavours */
+    const drawCone = (g, x, y, s) => {
+      g.fillStyle = '#d9a35f'; g.beginPath(); g.moveTo(x - s * 0.5, y); g.lineTo(x + s * 0.5, y); g.lineTo(x, y + s * 1.25); g.closePath(); g.fill();
+      g.fillStyle = '#f7c8d8'; g.beginPath(); g.arc(x, y - s * 0.12, s * 0.5, 0, TAU); g.fill();
+      g.fillStyle = '#fff6dc'; g.beginPath(); g.arc(x, y - s * 0.62, s * 0.4, 0, TAU); g.fill();
+    };
+    const signTex = canvasTex(512, 112, (g, w, h) => {
+      g.fillStyle = '#e8457a'; g.fillRect(0, 0, w, h);
+      g.strokeStyle = '#ffffff'; g.lineWidth = 5; roundRect(g, 8, 8, w - 16, h - 16, 14); g.stroke();
+      g.fillStyle = '#ffffff'; g.font = '900 74px Overpass, "Arial Black", Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText('G L A S S', w / 2, h / 2 + 5);
+      drawCone(g, 58, 44, 34); drawCone(g, w - 58, 44, 34);
+    });
+    const waffleTex = canvasTex(64, 64, (g, w, h) => {
+      g.fillStyle = '#d9a35f'; g.fillRect(0, 0, w, h);
+      g.strokeStyle = '#a8712f'; g.lineWidth = 3;
+      for (let i = -64; i < 128; i += 16) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i + 64, 64); g.stroke(); g.beginPath(); g.moveTo(i + 64, 0); g.lineTo(i, 64); g.stroke(); }
+    }, true);
+    waffleTex.repeat.set(5, 2);
+    const menuTex = canvasTex(256, 384, (g, w, h) => {
+      g.fillStyle = '#7a5230'; g.fillRect(0, 0, w, h);
+      g.fillStyle = '#24372c'; g.fillRect(10, 10, w - 20, h - 20);
+      g.fillStyle = '#ffffff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.font = '900 44px Overpass, "Arial Black", Arial, sans-serif'; g.fillText('GLASS', w / 2, 46);
+      drawCone(g, 40, 36, 22); drawCone(g, w - 40, 36, 22);
+      g.font = '700 22px Overpass, Arial, sans-serif'; g.fillStyle = '#ffe7a3'; g.fillText('Strut, två kulor', w / 2, 96);
+      g.font = '900 30px Overpass, Arial, sans-serif'; g.fillText(ICE_PRICE + ' kr', w / 2, 128);
+      g.font = '600 20px Overpass, Arial, sans-serif'; g.fillStyle = '#ffffff';
+      FLAVORS.forEach(([n, c], i) => {
+        const x = i % 2 ? w * 0.7 : w * 0.3, y = 178 + Math.floor(i / 2) * 38;
+        g.fillStyle = hex(c); g.beginPath(); g.arc(x - 52, y, 9, 0, TAU); g.fill();
+        g.fillStyle = '#ffffff'; g.fillText(n[0].toUpperCase() + n.slice(1), x + 6, y);
+      });
+    });
+
+    /* an ice cream: a waffle cone with two scoops, in your hand (and the kiosk seller's) */
+    const iceCone = new THREE.ConeGeometry(0.06, 0.18, 12, 1, true).rotateX(Math.PI);
+    const iceScoop = new THREE.SphereGeometry(0.066, 12, 9);
+    function makeIce(cols) {
+      const group = new THREE.Group(), cone = new THREE.Mesh(iceCone, waffleMat), s = [];
+      cone.position.y = -0.03;
+      group.add(cone);
+      cols.forEach((c, i) => { const m = new THREE.Mesh(iceScoop, std({ color: c, roughness: 0.5 })); m.position.y = 0.08 + i * 0.085; m.castShadow = true; group.add(m); s.push(m); });
+      cone.castShadow = true;
+      return { group, cone, scoops: s };
+    }
+    /* the kiosk: a little white hut with a serving hatch, a striped awning, a big cone on the roof and a menu board */
+    const kioskGeo = (() => {
+      const B = new Builder();
+      B.box(-1.4, 0, -1.2, 1.4, 0.06, 1.2, 0x8a8f94);
+      B.box(-1.4, 0.06, -1.2, -1.32, 2.6, 1.2, CREAM); B.box(1.32, 0.06, -1.2, 1.4, 2.6, 1.2, CREAM);
+      B.box(-1.32, 0.06, -1.2, 1.32, 2.6, -1.12, CREAM);
+      B.box(-1.32, 0.06, 1.12, 1.32, 1.0, 1.2, CREAM);
+      B.box(-1.32, 1.0, 1.12, -1.12, 2.0, 1.2, CREAM); B.box(1.12, 1.0, 1.12, 1.32, 2.0, 1.2, CREAM);
+      B.box(-1.32, 2.0, 1.12, 1.32, 2.6, 1.2, PINK);
+      // pink bands round the bottom, a steel counter in the hatch, a back door
+      B.box(-1.44, 0.06, -1.24, 1.44, 0.2, 1.24, 0xb7385f);
+      B.box(-1.42, 0.82, 1.2, 1.42, 0.9, 1.23, PINK); B.box(-1.43, 0.82, -1.2, -1.4, 0.9, 1.2, PINK); B.box(1.4, 0.82, -1.2, 1.43, 0.9, 1.2, PINK);
+      B.box(-1.18, 1.0, 0.98, 1.18, 1.05, 1.42, STEEL);
+      B.box(-0.42, 0.2, -1.24, 0.42, 2.02, -1.2, 0x5f7480); B.box(0.24, 1.0, -1.27, 0.32, 1.06, -1.24, STEEL);
+      // the roof, with a pink edge and the ceiling inside
+      B.box(-1.56, 2.6, -1.36, 1.56, 2.74, 1.36, 0xefe9df);
+      B.box(-1.57, 2.6, 1.35, 1.57, 2.78, 1.39, PINK); B.box(-1.57, 2.6, -1.39, 1.57, 2.78, -1.35, PINK);
+      B.quad([-1.32, 2.59, -1.12], [1.32, 2.59, -1.12], [1.32, 2.59, 1.12], [-1.32, 2.59, 1.12], 0xfdfcf8, null, [0, -1, 0]);
+      // inside: the freezer with the tubs of ice cream under its glass lid
+      B.box(-1.2, 0.06, 0.42, 1.2, 0.92, 1.08, 0xf2f4f6);
+      FLAVORS.slice(0, 7).forEach(([, c], i) => B.box(-1.1 + i * 0.315, 0.92, 0.5, -0.83 + i * 0.315, 0.98, 0.98, c));
+      // a litter bin by the hatch
+      B.prism(1.9, 1.55, 0.24, 0, 0.82, 12, 0x2f6b43); B.prism(1.9, 1.55, 0.26, 0.82, 0.88, 12, 0x24372c);
+      return B.build();
+    })();
+    const kioskMat = std({ vertexColors: true, roughness: 0.65 });
+    // the awning: stripes sloping out over the hatch with a scalloped edge, seen from both sides
+    const awningGeo = (() => {
+      const B = new Builder(), n = 10, x0 = -1.5, x1 = 1.5;
+      for (let i = 0; i < n; i++) {
+        const a = x0 + ((x1 - x0) * i) / n, b = x0 + ((x1 - x0) * (i + 1)) / n, col = i % 2 ? 0xffffff : PINK;
+        B.quad([a, 2.14, 1.22], [b, 2.14, 1.22], [b, 1.96, 1.86], [a, 1.96, 1.86], col, null, [0, 1, 0.3]);
+        B.quad([a, 1.96, 1.86], [b, 1.96, 1.86], [b, 1.84, 1.86], [a, 1.84, 1.86], col, null, [0, 0, 1]);
+        B.tri([a, 1.84, 1.86], [b, 1.84, 1.86], [(a + b) / 2, 1.76, 1.86], col, [0, 0, 1]);
+      }
+      for (const s of [-1, 1]) B.tri([s * 1.5, 2.14, 1.22], [s * 1.5, 1.96, 1.86], [s * 1.5, 1.84, 1.86], PINK, [s, 0, 0]);
+      return B.build();
+    })();
+    const awningMat = std({ vertexColors: true, roughness: 0.8, side: THREE.DoubleSide });
+    const signMat = std({ map: signTex, roughness: 0.5, emissive: 0x331018, emissiveMap: signTex });
+    const menuMat = std({ map: menuTex, roughness: 0.85, side: THREE.DoubleSide });
+    const waffleMat = std({ map: waffleTex, roughness: 0.8, side: THREE.DoubleSide });
+    const scoopMat = std({ vertexColors: true, roughness: 0.45 });
+    // the big cone on the roof
+    const bigConeGeo = new THREE.ConeGeometry(0.44, 1.1, 20, 1, true).rotateX(Math.PI).translate(0, 3.32, 0);
+    const bigScoopGeo = (() => {
+      const m = new Merger();
+      m.add(new THREE.SphereGeometry(0.47, 18, 12), 0xf28bb0, 0, 3.92, 0);
+      m.add(new THREE.SphereGeometry(0.4, 18, 12), 0xfff6dc, 0, 4.48, 0);
+      m.add(new THREE.SphereGeometry(0.1, 10, 8), 0xc8102e, 0, 4.92, 0);
+      m.add(new THREE.CylinderGeometry(0.012, 0.012, 0.16, 5), 0x3f6b22, 0.03, 5.05, 0, 0, 0, -0.3);
+      return m.build();
+    })();
+    const frontSignGeo = new THREE.PlaneGeometry(2.6, 0.57), sideSignGeo = new THREE.PlaneGeometry(2.3, 0.5), menuGeo = new THREE.PlaneGeometry(0.6, 0.9);
+    const kiosks = SPOTS.map((sp) => {
+      const [x, z, face] = sp.kiosk, k = { name: sp.name, x, z, face, serveT: 0 };
+      const g = new THREE.Group();
+      g.position.set(x, 0, z); g.rotation.y = face;
+      const body = new THREE.Mesh(kioskGeo, kioskMat), awning = new THREE.Mesh(awningGeo, awningMat);
+      const cone = new THREE.Mesh(bigConeGeo, waffleMat), scoops = new THREE.Mesh(bigScoopGeo, scoopMat);
+      for (const m of [body, awning, cone, scoops]) { m.castShadow = true; m.receiveShadow = true; g.add(m); }
+      // the GLASS sign on the front and both sides, the menu on both faces of the A-frame
+      const sign = (geo, px, pz, ry) => { const m = new THREE.Mesh(geo, signMat); m.position.set(px, 2.3, pz); m.rotation.y = ry; g.add(m); };
+      sign(frontSignGeo, 0, 1.205, 0); sign(sideSignGeo, 1.405, 0, Math.PI / 2); sign(sideSignGeo, -1.405, 0, -Math.PI / 2);
+      for (const s of [1, -1]) {
+        const m = new THREE.Mesh(menuGeo, menuMat);
+        m.position.set(-1.95, 0.55, 1.73 + s * 0.135); m.rotation.set(-s * 0.29, s > 0 ? 0 : Math.PI, 0); m.castShadow = true;
+        g.add(m);
+      }
+      scene.add(g);
+      // the seller behind the counter: in a white coat and a pink cap, turning to whoever comes up
+      const id = makeIdentity({ shirt: 0xfbfbf8, hat: 'cap', hatColor: PINK, sleeves: true });
+      k.seller = makePersonModel(id);
+      const [sx, sz] = toWorld(k, 0, 0.1);
+      k.seller.group.position.set(sx, 0, sz);
+      k.seller.group.rotation.y = face; k.look = face;
+      const hand = makeIce([FLAVORS[2][1], FLAVORS[0][1]]);
+      hand.group.position.set(0, -0.6, 0.06); hand.group.rotation.x = 1.4; hand.group.visible = false;
+      k.seller.armR.add(hand.group); k.handIce = hand.group;
+      addOBox(x, z, Math.cos(face), -Math.sin(face), 1.46, 1.32, 3);
+      addCircle(...toWorld(k, -1.95, 1.73), 0.42, 1.1);
+      addCircle(...toWorld(k, 1.9, 1.55), 0.3, 0.9);
+      return k;
+    });
+
+    // your ice cream: held up in the right hand, and every few seconds a lick
+    const HOLD = -0.75;
+    let ice = null;
+    function dropIce() { if (ice) { player.model.armR.remove(ice.model.group); for (const s of ice.model.scoops) s.material.dispose(); } ice = null; }
+
+    /* balloons on strings: lift, a little wind, drag through the air, kept apart from each other and held by the string */
+    const balloonGeo = (() => {
+      const m = new Merger();
+      m.add(new THREE.SphereGeometry(0.27, 16, 12).scale(1, 1.17, 1), 0xffffff, 0, 0, 0);
+      m.add(new THREE.ConeGeometry(0.045, 0.07, 8), 0xffffff, 0, -0.33, 0, Math.PI, 0, 0);
+      return m.build();
+    })();
+    const balloonMats = new Map(BALLOONS.map(([c]) => [c, std({ color: c, vertexColors: true, roughness: 0.2, metalness: 0.05 })]));
+    const stringMat = new THREE.LineBasicMaterial({ color: 0xf2f2f2, transparent: true, opacity: 0.85 });
+    const tailGeo = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([0, -0.35, 0, 0.04, -0.9, 0.02, 0.04, -0.9, 0.02, -0.02, -1.45, 0], 3));
+    const UP = new THREE.Vector3(0, 1, 0), _v = new THREE.Vector3(), _q = new THREE.Vector3();
+    const wind = { x: 0, z: 0 };
+    function makeBalloon(col, x, y, z, len) {
+      const mesh = new THREE.Mesh(balloonGeo, balloonMats.get(col));
+      mesh.castShadow = true; mesh.position.set(x, y, z);
+      scene.add(mesh);
+      return { col, mesh, x, y, z, ox: x, oy: y, oz: z, vx: 0, vy: 0, vz: 0, len, want: len, ph: Math.random() * TAU };
+    }
+    function makeBunch(cap) {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(cap * 12), 3));
+      const lines = new THREE.LineSegments(geo, stringMat);
+      lines.frustumCulled = false;
+      scene.add(lines);
+      return { list: [], lines, ax: null, ay: 0, az: 0 };
+    }
+    function stepBunch(B, ax, ay, az, dt) {
+      const L = B.list;
+      // a jump of the hand further than a balloon can follow (a teleport, a ride skipped ahead): they come along
+      if (B.ax !== null && (ax - B.ax) ** 2 + (ay - B.ay) ** 2 + (az - B.az) ** 2 > 64) {
+        for (const b of L) { b.x += ax - B.ax; b.y += ay - B.ay; b.z += az - B.az; b.vx = b.vy = b.vz = 0; }
+      }
+      B.ax = ax; B.ay = ay; B.az = az;
+      const drag = 1 - Math.exp(-2.4 * dt);
+      for (const b of L) {
+        b.ox = b.x; b.oy = b.y; b.oz = b.z;
+        const wx = wind.x + Math.sin(clock * 1.3 + b.ph) * 0.5, wz = wind.z + Math.cos(clock * 1.1 + b.ph * 1.7) * 0.5;
+        b.vx += (wx - b.vx) * drag; b.vz += (wz - b.vz) * drag; b.vy += 5 * dt - b.vy * drag;
+        b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt;
+      }
+      for (let i = 0; i < L.length; i++) for (let j = i + 1; j < L.length; j++) {
+        const p = L[i], q = L[j], dx = p.x - q.x, dy = p.y - q.y, dz = p.z - q.z, d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 > 0.3 || d2 < 1e-8) continue;
+        const d = Math.sqrt(d2), push = (0.55 - d) * 0.25 / d;
+        p.x += dx * push; p.y += dy * push; p.z += dz * push; q.x -= dx * push; q.y -= dy * push; q.z -= dz * push;
+      }
+      const pos = B.lines.geometry.attributes.position.array;
+      L.forEach((b, i) => {
+        if (b.len > b.want) b.len = Math.max(b.want, b.len - 2.2 * dt);
+        const dx = b.x - ax, dy = b.y - ay, dz = b.z - az, d = Math.hypot(dx, dy, dz) || 1e-4;
+        if (d > b.len) { const k = b.len / d; b.x = ax + dx * k; b.y = ay + dy * k; b.z = az + dz * k; }
+        b.y = Math.max(b.y, 0.4);
+        b.vx = clamp((b.x - b.ox) / dt, -30, 30); b.vy = clamp((b.y - b.oy) / dt, -30, 30); b.vz = clamp((b.z - b.oz) / dt, -30, 30);
+        // the knot points down the string
+        _q.set(b.x - ax, b.y - ay, b.z - az).normalize();
+        b.mesh.position.set(b.x, b.y, b.z);
+        b.mesh.quaternion.setFromUnitVectors(UP, _q);
+        // the string: from the hand to the knot, with a slight curl halfway
+        const kx = b.x - _q.x * 0.36, ky = b.y - _q.y * 0.36, kz = b.z - _q.z * 0.36, mx = (ax + kx) / 2 + Math.sin(clock * 2 + b.ph) * 0.03, my = (ay + ky) / 2, mz = (az + kz) / 2;
+        pos.set([ax, ay, az, mx, my, mz, mx, my, mz, kx, ky, kz], i * 12);
+      });
+      B.lines.geometry.setDrawRange(0, L.length * 4);
+      B.lines.geometry.attributes.position.needsUpdate = true;
+    }
+    function hideBunch(B, on) { B.lines.visible = on; for (const b of B.list) b.mesh.visible = on; }
+    // balloons let go: up and away with the wind, a bit of string trailing
+    const flying = [];
+    function letFly(b) {
+      const tail = new THREE.LineSegments(tailGeo, stringMat);
+      b.mesh.add(tail); b.mesh.visible = true; b.t = 0;
+      flying.push(b);
+    }
+
+    /* the balloon sellers: a bunch held up high, back to their spot after jumping out of the way of a car */
+    const SELLER_ID = makeIdentity({ shirt: 0x6a3d9a, pants: 0x3b5b8c, hair: 0x2b1d14, hat: 'beanie', hatColor: 0xc8102e, sleeves: true });
+    const sellers = SPOTS.map((sp) => {
+      const [x, z, face] = sp.seller, p = makePerson(SELLER_ID, x, z, { state: 'vendor', post: { x, z, face }, dodgeT: 0 });
+      p.keep = true; p.rot = face;
+      const s = { name: sp.name, p, bunch: makeBunch(SELLER_STOCK), restock: [] };
+      for (let i = 0; i < SELLER_STOCK; i++) addToBunch(s);
+      return s;
+    });
+    function addToBunch(s) {
+      const B = s.bunch, have = new Set(B.list.map((b) => b.col)), free = BALLOONS.filter(([c]) => !have.has(c)), [col] = rpick(free.length ? free : BALLOONS);
+      B.list.push(makeBalloon(col, s.p.x + (Math.random() - 0.5), 3.4 + Math.random() * 0.6, s.p.z + (Math.random() - 0.5), 1.1 + Math.random() * 0.75));
+    }
+    const mine = makeBunch(MAX_BALLOONS);
+
+    /* where your balloons are tied: your left hand, or out of the window of the car you sit in */
+    function anchor() {
+      const S = stop;
+      const seat = driving ? driving.driver : S && S.riding && S.car && S.car.rearSeat && S.car.rearSeat.visible ? S.car.rearSeat : null;
+      if (seat) {
+        const c = driving || S.car, side = Math.sign(seat.position.x) || 1;
+        c.group.updateMatrixWorld(true);
+        return seat.parent.localToWorld(_v.set(side * (c.M.W / 2 + 0.06), seat.position.y + 0.42, seat.position.z + 0.1));
+      }
+      if (player.model.group.visible) { player.model.group.updateMatrixWorld(true); return player.model.armL.localToWorld(_v.set(0, -0.6, 0.02)); }
+      return _v.set(player.x, player.y + 1, player.z);
+    }
+
+    /* buying */
+    let near = null;
+    const broke = (what, kr) => toast(what + ' kostar ' + fmtKr(kr) + ', men du har bara ' + fmtKr(JOBS.earned) + '. Tjäna pengar på ett jobb: ta taxin, Sprintern eller SL-bussen och tryck J.');
+    function buyIce(k) {
+      if (ice) { toast('Du har redan en glass. Ät upp den först!'); return; }
+      if (!JOBS.spend(ICE_PRICE)) { broke('En strut', ICE_PRICE); return; }
+      const a = rpick(FLAVORS), b = rpick(FLAVORS.filter((f) => f !== a));
+      ice = { model: makeIce([a[1], b[1]]), eaten: 0, t: -0.8 };
+      ice.model.group.position.set(0, -0.6, 0.07); ice.model.group.rotation.x = -HOLD; ice.model.group.visible = false;
+      player.model.armR.add(ice.model.group);
+      k.serveT = 1.1;
+      beep([988, 1319], 0.03, 0.16);
+      toast('En strut med ' + a[0] + ' och ' + b[0] + '. Mums! −' + fmtKr(ICE_PRICE));
+    }
+    const handsFull = () => mine.list.length >= MAX_BALLOONS;
+    function buyBalloon(s) {
+      if (handsFull()) { toast('Du har redan ' + MAX_BALLOONS + ' ballonger. Fler orkar du inte hålla i!'); return; }
+      if (!s.bunch.list.length) { toast('Ballongförsäljaren har sålt slut. Vänta lite, snart finns det fler.'); return; }
+      if (!JOBS.spend(BALLOON_PRICE)) { broke('En ballong', BALLOON_PRICE); return; }
+      // one from the seller's bunch, in a colour you don't have yet if there is one
+      const have = new Set(mine.list.map((b) => b.col)), L = s.bunch.list;
+      const pickB = L.find((b) => !have.has(b.col)) || L[0], first = !mine.list.length;
+      L.splice(L.indexOf(pickB), 1);
+      pickB.want = 1.25 + Math.random() * 0.2;
+      pickB.len = Math.max(pickB.want, Math.hypot(pickB.x - player.x, pickB.y - 1, pickB.z - player.z));
+      mine.list.push(pickB);
+      s.restock.push(7 + Math.random() * 5);
+      beep([784, 1175], 0.03, 0.16);
+      const name = BALLOONS.find(([c]) => c === pickB.col)[1];
+      toast('En ' + name + ' ballong! −' + fmtKr(BALLOON_PRICE) + (first && !isTouch ? ' Tryck V om du vill släppa den.' : ''));
+    }
+    function use() {
+      if (!near || driving || !started || paused()) return false;
+      if (near.seller) buyIce(near); else buyBalloon(near);
+      return true;
+    }
+    function letGo() {
+      if (!mine.list.length || paused()) return;
+      const b = mine.list.pop();
+      b.vy = Math.max(b.vy, 1);
+      letFly(b);
+      if (audio && !muted) tone(audio.ctx.currentTime, 'sine', 520, 1250, 0.5, 0.05);
+      toast(mine.list.length ? 'Ballongen flög iväg!' : 'Hej då, ballong!');
+    }
+    function prompt() {
+      if (!near) return null;
+      return near.seller ? (ice ? 'Du har redan en glass' : 'Köp glass · ' + fmtKr(ICE_PRICE)) : handsFull() ? 'Händerna är fulla av ballonger' : 'Köp en ballong · ' + fmtKr(BALLOON_PRICE);
+    }
+
+    /* every frame, after the people have been posed */
+    function update(dt) {
+      wind.x = 0.6 + Math.sin(clock * 0.07) * 0.5; wind.z = -0.3 + Math.cos(clock * 0.05) * 0.45;
+      const walking = !driving && !(stop && (stop.locked || stop.riding)) && player.y < 1.5;
+      near = null;
+      // the kiosks: the seller turns to you, and reaches out with your cone when you buy one
+      for (const k of kiosks) {
+        const [lx, lz] = toLocal(k, player.x, player.z), d = Math.hypot(lx, lz - 1.2);
+        if (walking && lz > 1.25 && lz < 3.6 && Math.abs(lx) < 1.9) near = k;
+        const S = k.seller;
+        if (d > 60) continue;
+        const want = d < 9 ? k.face + clamp(wrapAngle(Math.atan2(player.x - S.group.position.x, player.z - S.group.position.z) - k.face), -0.7, 0.7) : k.face;
+        k.look = lerpAngle(k.look, want, 1 - Math.exp(-4 * dt));
+        S.group.rotation.y = k.look;
+        S.inner.position.y = Math.sin(clock * 1.7 + k.x) * 0.012;
+        k.serveT = Math.max(0, k.serveT - dt);
+        const reach = k.serveT > 0 ? -1.35 : 0;
+        S.armR.rotation.x = lerp(S.armR.rotation.x, reach, 1 - Math.exp(-10 * dt));
+        k.handIce.visible = k.serveT > 0.35;
+      }
+      // the balloon sellers: one arm up holding the bunch
+      for (const s of sellers) {
+        const p = s.p, on = !p.asleep;
+        hideBunch(s.bunch, on);
+        for (let i = s.restock.length - 1; i >= 0; i--) if ((s.restock[i] -= dt) <= 0) { s.restock.splice(i, 1); addToBunch(s); }
+        if (!on) continue;
+        if (walking && Math.hypot(player.x - p.x, player.z - p.z) < 2.3 && !near) near = s;
+        const G = p.model;
+        if (p.grounded) { G.armR.rotation.x = -2.55; G.armR.rotation.z = -0.12; }
+        G.group.updateMatrixWorld(true);
+        const h = G.armR.localToWorld(_v.set(0, -0.62, 0));
+        stepBunch(s.bunch, h.x, h.y, h.z, dt);
+      }
+      // your ice cream: hold it, lick it now and then until it is gone
+      const shown = player.model.group.visible && !player.cuffed;
+      if (ice) {
+        const G = player.model;
+        ice.t += dt;
+        ice.model.group.visible = shown && ice.t > 0;
+        if (shown && ice.t > 0) {
+          const ph = ice.t % 3.2, licking = ph > 2.2;
+          if (licking) ice.eaten += dt;
+          const up = licking ? Math.sin((ph - 2.2) * Math.PI) : 0;
+          G.armR.rotation.x = lerp(HOLD, -2.05, up);
+          G.armR.rotation.z = lerp(0.12, 0.45, up);
+          // tipped towards the mouth, not right over
+          ice.model.group.rotation.set(lerp(-HOLD, 1.25, up), 0, lerp(-0.12, -0.35, up));
+          // the top scoop goes first, then the bottom one, then the cone
+          const [s1, s2] = ice.model.scoops, b = ice.eaten;
+          s2.scale.setScalar(clamp(1 - b / 4, 0, 1)); s2.visible = b < 4;
+          s1.scale.setScalar(clamp(1 - (b - 4) / 4, 0, 1)); s1.visible = b < 8;
+          ice.model.cone.scale.setScalar(clamp(1 - (b - 8) / 2.5, 0.2, 1));
+          if (b >= BITES && !licking) { dropIce(); toast('Mums! Glassen är uppäten.'); }
+        }
+      }
+      // your balloons: they make you fall slowly
+      const n = mine.list.length;
+      player.floaty = n ? 0.6 / (1 + 0.2 * (n - 1)) : 0;
+      if (n) { const a = anchor(); stepBunch(mine, a.x, a.y, a.z, dt); hideBunch(mine, true); }
+      else mine.ax = null;
+      // and the ones that got away
+      for (let i = flying.length - 1; i >= 0; i--) {
+        const b = flying[i];
+        b.t += dt;
+        b.vx += (wind.x * 2.5 - b.vx) * dt * 0.6; b.vz += (wind.z * 2.5 - b.vz) * dt * 0.6; b.vy = Math.min(3.2, b.vy + 2 * dt);
+        b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt;
+        b.mesh.position.set(b.x, b.y, b.z);
+        b.mesh.rotation.set(Math.sin(clock * 1.4 + b.ph) * 0.15, b.ph + b.t * 0.3, Math.cos(clock * 1.2 + b.ph) * 0.15);
+        if (b.y > 170 || b.t > 60) { scene.remove(b.mesh); flying.splice(i, 1); }
+      }
+    }
+
+    /* on the maps: a cone for the kiosks, a balloon for the sellers */
+    function icon(g, kind, X, Y, s) {
+      if (kind === 'ice') {
+        g.fillStyle = '#d9a35f'; g.strokeStyle = '#ffffff'; g.lineWidth = 1.5 * s;
+        g.beginPath(); g.moveTo(X - 3.6 * s, Y - 1 * s); g.lineTo(X + 3.6 * s, Y - 1 * s); g.lineTo(X, Y + 7 * s); g.closePath(); g.fill(); g.stroke();
+        g.fillStyle = '#e8457a'; g.beginPath(); g.arc(X, Y - 2.6 * s, 3.8 * s, 0, TAU); g.fill(); g.stroke();
+      } else {
+        g.strokeStyle = '#ffffff'; g.lineWidth = 1.2 * s; g.beginPath(); g.moveTo(X, Y + 1.5 * s); g.lineTo(X + 1.2 * s, Y + 8 * s); g.stroke();
+        g.fillStyle = '#e0203a'; g.lineWidth = 1.5 * s; g.beginPath(); g.ellipse(X, Y - 2.5 * s, 3.6 * s, 4.4 * s, 0, 0, TAU); g.fill(); g.stroke();
+      }
+    }
+    function drawMini(g, px, pz, u) {
+      for (const k of kiosks) if (Math.abs(k.x - px) < 110 && Math.abs(k.z - pz) < 110) icon(g, 'ice', k.x, k.z, u);
+      for (const s of sellers) if (Math.abs(s.p.x - px) < 110 && Math.abs(s.p.z - pz) < 110) icon(g, 'balloon', s.p.x, s.p.z, u);
+    }
+    function drawBig(g, toX, toY, k) {
+      if (k < 0.2) return;
+      const sc = clamp(k / 0.35, 1.3, 2);
+      for (const q of kiosks) icon(g, 'ice', toX(q.x), toY(q.z), sc);
+      for (const s of sellers) icon(g, 'balloon', toX(s.p.x), toY(s.p.z), sc);
+    }
+
+    return {
+      update, use, letGo, prompt, drawMini, drawBig, kiosks, sellers,
+      get near() { return near; }, get ice() { return ice; }, get balloons() { return mine.list.length; }, get flying() { return flying.length; }
     };
   })();
 
@@ -6885,11 +7307,13 @@ body.touch .tk-sign .key { display: none; }
     return String(c.gear + 1);
   }
   function updateHUD(dt) {
-    const prompt = started && !driving && nearCar ? (nearCar.bot ? 'Ta ' + nearCar.M.def : 'Kliv in i ' + nearCar.M.def) : null;
+    // at a kiosk or a balloon seller E buys, otherwise it is for the car you stand by
+    const shop = started && !driving ? VENDORS.prompt() : null;
+    const prompt = shop || (started && !driving && nearCar ? (nearCar.bot ? 'Ta ' + nearCar.M.def : 'Kliv in i ' + nearCar.M.def) : null);
     if (prompt !== lastPrompt) {
       lastPrompt = prompt;
       el.prompt.hidden = !prompt || isTouch;
-      if (prompt) { el.promptText.textContent = prompt; el.prompt.classList.toggle('steal', !!nearCar.bot); }
+      if (prompt) { el.promptText.textContent = prompt; el.prompt.classList.toggle('steal', !shop && !!nearCar.bot); el.prompt.classList.toggle('shop', !!shop); }
     }
     if (driving !== lastDriving) {
       lastDriving = driving;
@@ -6900,9 +7324,10 @@ body.touch .tk-sign .key { display: none; }
       el.btnUp.hidden = el.btnDown.hidden = !driving;
     }
     const ph = stop && stop.phase;
-    const use = ph === 'talk' ? 'Skriv under' : ph === 'transport' || ph === 'park' ? 'Hoppa fram' : ph === 'jail' ? 'Sov' : driving ? 'Kliv ur' : nearCar && nearCar.bot ? 'Ta bilen' : 'Kliv in';
+    const vendor = !driving && VENDORS.near;
+    const use = ph === 'talk' ? 'Skriv under' : ph === 'transport' || ph === 'park' ? 'Hoppa fram' : ph === 'jail' ? 'Sov' : driving ? 'Kliv ur' : vendor ? (vendor.seller ? 'Köp glass' : 'Köp ballong') : nearCar && nearCar.bot ? 'Ta bilen' : 'Kliv in';
     if (use !== lastUse) { el.btnUse.textContent = use; lastUse = use; }
-    el.btnUse.classList.toggle('off', !driving && !nearCar && !['talk', 'transport', 'park', 'jail'].includes(ph));
+    el.btnUse.classList.toggle('off', !driving && !nearCar && !vendor && !['talk', 'transport', 'park', 'jail'].includes(ph));
     if (driving) {
       const c = driving, vf = c.vx * Math.sin(c.h) + c.vz * Math.cos(c.h);
       const kmh = Math.round(Math.abs(vf) * 3.6), rf = clamp(c.rpm / (c.M.red * 1.04), 0, 1);
@@ -7001,6 +7426,7 @@ body.touch .tk-sign .key { display: none; }
     g.translate(-px, -pz);
     g.drawImage(mapStatic, MAP.x0, MAP.z0, MAP.w, MAP.h);
     JOBS.drawMini(g, px, pz, 1 / s);
+    VENDORS.drawMini(g, px, pz, 1 / s);
     for (const c of cars) {
       if (c === driving || Math.abs(c.x - px) > 160 || Math.abs(c.z - pz) > 160) continue;
       g.save(); g.translate(c.x, c.z); g.rotate(-c.h);
@@ -7126,6 +7552,7 @@ body.touch .tk-sign .key { display: none; }
       g.fillStyle = '#c8102e'; g.strokeStyle = '#fff'; g.lineWidth = 1.5;
       g.beginPath(); g.moveTo(X, Y - 6); g.lineTo(X + 5, Y); g.lineTo(X, Y + 6); g.lineTo(X - 5, Y); g.closePath(); g.fill(); g.stroke();
     }
+    VENDORS.drawBig(g, toX, toY, k);
     JOBS.drawBig(g, toX, toY, k);
     // police and you
     for (const c of cars) {
@@ -7481,7 +7908,7 @@ body.touch .tk-sign .key { display: none; }
     if (repeat) return;
     // under arrest most keys do nothing: you can still look at the map, the help and the sound, and E moves things on
     if (stop && stop.locked && !['KeyE', 'Enter', 'KeyH', 'KeyT', 'KeyK', 'KeyQ'].includes(code) && !(stop.phase === 'jail' && code === 'Space')) return;
-    if (code === 'KeyE' || code === 'Enter') { if (!useKey()) toggleCar(); }
+    if (code === 'KeyE' || code === 'Enter') { if (!useKey() && !VENDORS.use()) toggleCar(); }
     else if (code === 'Space') jumpQueued = true;
     else if (code === 'KeyH') el.help.hidden = !el.help.hidden;
     else if (code === 'KeyT') toggleMute();
@@ -7495,6 +7922,7 @@ body.touch .tk-sign .key { display: none; }
     else if (code === 'KeyK') openBigmap();
     else if (code === 'KeyQ') POST.cycle();
     else if (code === 'KeyJ') JOBS.key();
+    else if (code === 'KeyV') VENDORS.letGo();
   }
   window.addEventListener('keydown', (e) => {
     if (bigmap.open) { if (e.code === 'Escape' || e.code === 'KeyK') { e.preventDefault(); onKey(e.code, e.repeat); } return; }
@@ -7553,7 +7981,7 @@ body.touch .tk-sign .key { display: none; }
   stick.addEventListener('pointercancel', endStick);
   el.btnJump.addEventListener('pointerdown', (e) => { e.preventDefault(); touchBrake = true; jumpQueued = true; });
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.btnJump.addEventListener(ev, () => { touchBrake = false; });
-  el.btnUse.addEventListener('pointerdown', (e) => { e.preventDefault(); if (!useKey()) toggleCar(); });
+  el.btnUse.addEventListener('pointerdown', (e) => { e.preventDefault(); if (!useKey() && !VENDORS.use()) toggleCar(); });
   $('btnCars').addEventListener('pointerdown', (e) => { e.preventDefault(); openPicker(); });
   $('btnJob').addEventListener('pointerdown', (e) => { e.preventDefault(); JOBS.key(); });
   el.btnUp.addEventListener('pointerdown', (e) => { e.preventDefault(); playerShift(1); });
@@ -7871,6 +8299,7 @@ body.touch .tk-sign .key { display: none; }
       STATION.update(dt, player.x, player.z);
       nearCar = findNearCar();
       animate(dt);
+      VENDORS.update(dt);
     }
     updateCamera(dt);
     updateHUD(dt);
@@ -7921,7 +8350,7 @@ body.touch .tk-sign .key { display: none; }
       });
     },
     shot(cx, cy, cz, tx, ty, tz) { testHold = true; camera.position.set(cx, cy, cz); camera.lookAt(tx, ty, tz); camera.updateMatrixWorld(); sky.position.copy(camera.position); POST.render(); },
-    quality(l) { POST.setLevel(l, true); }, get post() { return POST; }, jobs: JOBS,
+    quality(l) { POST.setLevel(l, true); }, get post() { return POST; }, jobs: JOBS, vendors: VENDORS,
     look(yaw, pitch) { camYaw = yaw; if (pitch !== undefined) camPitch = pitch; lastLook = performance.now(); },
     choose(id) { chooseModel(MODEL[id]); },
     openPicker, closePicker, crash, limitAt, startChase, endChase, openBigmap, closeBigmap, drawBigmap, bigmap, carShape, MODELS,
