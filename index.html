@@ -40,7 +40,35 @@ body.locked #game { cursor: none; }
 /* ---------- HUD ---------- */
 #hud { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.4s ease; }
 body.playing #hud { opacity: 1; }
-.tags { position: absolute; top: calc(14px + env(safe-area-inset-top, 0px)); left: calc(14px + env(safe-area-inset-left, 0px)); display: flex; gap: 8px; flex-wrap: wrap; max-width: min(46vw, calc(50vw - 200px)); }
+.tags { position: absolute; top: calc(56px + env(safe-area-inset-top, 0px)); left: calc(14px + env(safe-area-inset-left, 0px)); display: flex; gap: 8px; flex-wrap: wrap; max-width: min(46vw, calc(50vw - 200px)); }
+/* how much the police want you: five stars in the top left corner, lit one by one (they flash while the police search) */
+#stars {
+  position: absolute; top: calc(12px + env(safe-area-inset-top, 0px)); left: calc(14px + env(safe-area-inset-left, 0px));
+  display: flex; gap: 3px; padding: 5px 9px; border-radius: 10px; background: var(--glass);
+}
+#stars svg { width: 27px; height: 27px; display: block; transition: transform 0.2s ease; }
+#stars path { fill: rgba(255, 255, 255, 0.12); stroke: rgba(255, 255, 255, 0.55); stroke-width: 1.4; stroke-linejoin: round; }
+#stars svg.on path { fill: var(--sign-yellow); stroke: #1b1c1e; }
+#stars svg.new { animation: starPop 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) both; }
+#stars.search svg.on path { animation: starBlink 0.7s steps(1) infinite; }
+#stars .heli { display: none; align-self: center; margin-left: 4px; font: 900 0.68rem/1 var(--font-sign); letter-spacing: 0.08em; color: var(--sign-yellow); }
+#stars.heli-on .heli { display: block; }
+/* the lift's buttons while you ride it: brass buttons on a mahogany panel */
+#liftPanel {
+  position: absolute; left: calc(18px + env(safe-area-inset-left, 0px)); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); pointer-events: auto;
+  display: grid; gap: 4px; padding: 10px 14px 12px 10px; border-radius: 10px; background: #3a2416;
+  box-shadow: inset 0 0 0 2px #c9a24a, 0 10px 26px rgba(0, 0, 0, 0.35); animation: rise 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.lp-head { padding: 0 4px 2px; font: 900 0.7rem/1 var(--font-sign); letter-spacing: 0.16em; text-transform: uppercase; color: #c9a24a; }
+#liftPanel button { display: flex; align-items: center; gap: 9px; padding: 2px 4px; border: 0; border-radius: 6px; background: none; color: #f4ead2; font: 700 0.86rem/1 var(--font-sign); text-align: left; cursor: pointer; }
+#liftPanel button:hover, #liftPanel button:focus-visible { background: rgba(201, 162, 74, 0.18); outline: none; }
+#liftPanel button b { width: 26px; height: 26px; flex: none; display: grid; place-items: center; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #f6e6b4, #c9a24a); color: #3a2416; font: 900 0.85rem/1 var(--font-gauge); box-shadow: 0 0 0 2px #7a5a2a; }
+#liftPanel button.want b { background: radial-gradient(circle at 40% 35%, #fff6d0, #ffb84a); box-shadow: 0 0 10px 2px rgba(255, 190, 80, 0.8), 0 0 0 2px #7a5a2a; }
+#liftPanel button.at { color: var(--sign-yellow); }
+#liftPanel button.at::after { content: '◀'; font-size: 0.7rem; }
+body.touch #liftPanel { bottom: auto; top: calc(150px + env(safe-area-inset-top, 0px)); }
+@keyframes starPop { from { transform: scale(1.9); } to { transform: none; } }
+@keyframes starBlink { 50% { fill: rgba(255, 255, 255, 0.12); stroke: rgba(255, 255, 255, 0.55); } }
 .tag { display: flex; align-items: center; gap: 8px; padding: 5px 11px 5px 5px; border-radius: 9px; background: var(--glass); font-weight: 700; font-size: 0.82rem; letter-spacing: 0.02em; }
 
 #loc {
@@ -173,7 +201,7 @@ body.job #wanted { top: calc(112px + env(safe-area-inset-top, 0px)); }
 .dash-foot .hint { display: flex; align-items: center; gap: 6px; letter-spacing: 0.04em; text-transform: none; font-size: 0.8rem; white-space: nowrap; }
 
 #help {
-  position: absolute; top: calc(56px + env(safe-area-inset-top, 0px)); left: calc(14px + env(safe-area-inset-left, 0px));
+  position: absolute; top: calc(98px + env(safe-area-inset-top, 0px)); left: calc(14px + env(safe-area-inset-left, 0px));
   max-width: min(330px, calc(100vw - 32px)); box-sizing: border-box; padding: 14px 16px; border-radius: 12px; background: var(--glass);
   display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; align-items: center; font-size: 0.88rem;
 }
@@ -237,6 +265,7 @@ h1 { margin: 0; font: 900 clamp(2.2rem, 9vw, 3.1rem)/0.95 var(--font-sign); lett
 .lg-balloon { border-radius: 50% 50% 50% 50% / 45% 45% 55% 55% !important; width: 12px !important; height: 14px !important; background: #e0203a; box-shadow: 0 0 0 2px var(--snow); }
 .lg-race { border-radius: 2px !important; background: #ffe14a; box-shadow: 0 0 0 2px #1b1c1e; }
 .lg-goal { background: #ffc21a; box-shadow: 0 0 0 2px var(--snow); }
+.lg-heli { background: radial-gradient(circle, #163d8c 0 38%, rgba(255,255,255,.75) 40%); box-shadow: 0 0 0 1px #11161b; }
 
 /* ---------- car picker ---------- */
 #picker { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; box-sizing: border-box; overflow-y: auto; background: rgba(6, 16, 26, 0.55); }
@@ -273,6 +302,8 @@ h1 { margin: 0; font: 900 clamp(2.2rem, 9vw, 3.1rem)/0.95 var(--font-sign); lett
 #btnDown { right: calc(174px + env(safe-area-inset-right, 0px)); bottom: calc(160px + env(safe-area-inset-bottom, 0px)); }
 
 body.touch .tags { display: none; }
+body.touch #stars svg { width: 22px; height: 22px; }
+body.touch.driving #stars { top: calc(132px + env(safe-area-inset-top, 0px)); }
 body.touch #map { width: 118px; height: 118px; }
 body.touch #dash { right: auto; bottom: auto; width: 160px; padding: 10px 12px; left: calc(14px + env(safe-area-inset-left, 0px)); top: calc(14px + env(safe-area-inset-top, 0px)); }
 body.touch .speed { font-size: 2.3rem; }
@@ -314,6 +345,7 @@ body.touch .tk-sign .key { display: none; }
     <div class="tag cash" id="cashTag" hidden title="Dina pengar: fickpengarna och det du tjänat på jobb">Kassa <b id="cash">0 kr</b></div>
     <div class="tag dala-tag" title="Dalahästar du hittat"><svg class="dala" viewBox="0 0 20 20" aria-hidden="true"><path d="M4 18V11L3 10V8l2-1 1-4h3l1 2-2 1v1h7l1 1v8h-3v-4H8v4z" fill="#c8102e" stroke="#fff" stroke-width="1"/></svg><b id="horses">0/20</b></div>
   </div>
+  <div id="stars" role="img" aria-label="Polisen letar inte efter dig" title="Hur mycket polisen är efter dig. Från tre stjärnor kommer helikoptern"><span class="heli">HELIKOPTER</span></div>
   <div id="loc"><span id="locStreet"></span><span id="locDistrict">Norrmalm</span></div>
   <div id="job" hidden><span class="job-icon" id="jobIcon">T</span><span><b id="jobTitle"></b><small id="jobHint"></small></span><span id="jobClock"></span></div>
   <div id="bigText" hidden></div>
@@ -324,6 +356,15 @@ body.touch .tk-sign .key { display: none; }
     <ul id="tkRows"></ul>
     <div class="tk-sum"><span>Att betala inom 30 dagar</span><b id="tkSum"></b></div>
     <div class="tk-foot"><span id="tkOfficer"></span><span class="tk-sign"><span class="key">E</span><span id="tkSignText">Skriv under</span></span></div>
+  </div>
+  <div id="liftPanel" hidden role="group" aria-label="Hissens knappar">
+    <span class="lp-head">Hissen</span>
+    <button type="button" data-floor="5"><b>5</b>Sovrummen</button>
+    <button type="button" data-floor="4"><b>4</b>Biblioteket och allrummet</button>
+    <button type="button" data-floor="3"><b>3</b>Lägenheten, entrén</button>
+    <button type="button" data-floor="2"><b>2</b>Grannarna</button>
+    <button type="button" data-floor="1"><b>1</b>Grannarna</button>
+    <button type="button" data-floor="0"><b>0</b>Gatan</button>
   </div>
   <canvas id="map" aria-label="Karta, klicka för att se hela staden" title="Visa hela kartan (K)"></canvas>
   <div id="toast" hidden></div>
@@ -420,7 +461,7 @@ body.touch .tk-sign .key { display: none; }
     <canvas id="bigmapCanvas"></canvas>
     <div class="legend">
       <span><i class="lg-you"></i>Du</span><span><i class="lg-police"></i>Polis</span><span><i class="lg-car"></i>Din bil</span>
-      <span><i class="lg-t">T</i>Tunnelbana</span><span><i class="lg-dala"></i>Hittad dalahäst</span><span><i class="lg-park"></i>Park</span><span><i class="lg-main"></i>Huvudgata</span><span><i class="lg-race"></i>Gatlopp</span><span><i class="lg-goal"></i>Mål och GPS</span><span><i class="lg-ice"></i>Glasskiosk</span><span><i class="lg-balloon"></i>Ballonger</span>
+      <span><i class="lg-t">T</i>Tunnelbana</span><span><i class="lg-dala"></i>Hittad dalahäst</span><span><i class="lg-park"></i>Park</span><span><i class="lg-main"></i>Huvudgata</span><span><i class="lg-race"></i>Gatlopp</span><span><i class="lg-goal"></i>Mål och GPS</span><span><i class="lg-ice"></i>Glasskiosk</span><span><i class="lg-balloon"></i>Ballonger</span><span><i class="lg-heli"></i>Polishelikopter</span>
     </div>
   </div>
 </div>
@@ -1586,6 +1627,7 @@ body.touch .tk-sign .key { display: none; }
     const ex = Math.abs(c) * hx + Math.abs(s) * hz, ez = Math.abs(s) * hx + Math.abs(c) * hz, o = { t: 2, cx, cz, c, s, hx, hz, h };
     if (y0 !== undefined) o.y0 = y0;
     addObstacle(o, cx - ex, cz - ez, cx + ex, cz + ez);
+    return o;
   }
   function forNear(x0, z0, x1, z1, fn) {
     stamp++;
@@ -2647,48 +2689,105 @@ body.touch .tk-sign .key { display: none; }
     mapLabels.push(['Kastellet', 722, 424, 'landmark']);
   }
 
-  /* ---------- Drakens gränd: the yellow house in the middle, with a flat at the top ---------- */
+  /* ---------- Drakens gränd: the yellow house in the middle, with a penthouse on its top three floors ---------- */
   // Modelled by hand in its own frame: local x along the lane, local z from the facade on the lane (z = 0) back into
-  // the block, y up. The street door opens on a stairwell that climbs in half flights round a central wall, with a
-  // landing on every floor at the front and a half landing at the back. The stairs end at the top floor, where the
-  // flat is; the floors below are other people's flats and stay shut. Walls indoors only block the storey they are on.
+  // the block, y up. Six storeys. The street door opens on a wide stairwell where the stairs climb in half flights on
+  // either side of an open iron lift cage, with a landing on every floor at the front and a half landing at the back.
+  // The stairs end on the third floor at the flat's front door; the lift goes on up into the flat. The flat is the whole
+  // of the top three floors: the hall, the living room and the kitchen on the first, a library round the lift, a big
+  // family room with a billiard table, an office and a sauna on the second, and under the roof beams on the third the
+  // bedrooms and their bathroom, all joined by a stair of its own. Walls indoors only block the storey they are on.
   const DRAKEN = (() => {
-    const f = streetFrame('gO3c', 'gS312'), W = 9, D = 12, FLOORS = 5, F = FLOOR_H, H = FLOORS * F + 0.6, TOP = (FLOORS - 1) * F;
+    const f = streetFrame('gO3c', 'gS312'), W = 15, D = 12, FLOORS = 6, F = FLOOR_H, H = FLOORS * F + 0.6, TOP = (FLOORS - 1) * F, FL = 3;
     const fr = lotFrame(f, -1, f.len / 2 - W / 2, W, f.e.hw + f.e.walk + 0.2), [ox, oz, c, s] = fr;
     const poly = rectPoly(fr, 0, 0, W, D), col = 0xe9c25a;
     const toWorld = (lx, lz) => [ox + lx * c - lz * s, oz + lx * s + lz * c];
     const toLocal = (x, z) => { const dx = x - ox, dz = z - oz; return [dx * c + dz * s, -dx * s + dz * c]; };
     take(poly);
     mapPolys.push([poly, col]);
-    // a wall in the local frame; y0 and y1 keep it to the storeys it stands on
-    const wall = (x0, z0, x1, z1, y0, y1 = 99) => { const [cx, cz] = toWorld((x0 + x1) / 2, (z0 + z1) / 2); addOBox(cx, cz, c, s, (x1 - x0) / 2, (z1 - z0) / 2, y1, y0); };
-    // stairwell: x 0.4-2.8 with the central wall at 1.5-1.7, landings at z 0.4-1.8, flights to z 4.4, half landings to z 6.0
-    const ST = { x0: 0.4, x1: 2.8, m0: 1.5, m1: 1.7, z0: 0.4, z1: 1.8, z2: 4.4, z3: 6.0 };
+    // a wall in the local frame; y0 and y1 keep it to the storeys it stands on; see: the camera looks through it
+    const wall = (x0, z0, x1, z1, y0, y1 = 99, see) => {
+      const [cx, cz] = toWorld((x0 + x1) / 2, (z0 + z1) / 2), o = addOBox(cx, cz, c, s, (x1 - x0) / 2, (z1 - z0) / 2, y1, y0);
+      if (see) o.see = true;
+      return o;
+    };
+    // the stairwell: flights up the outer lane (x0-a1) and back down the inner one (b0-x1) on either side of the lift
+    // cage (s0-s1); landings at z0-z1, flights to z2, half landings to z3. It serves floors 0 to 3
+    const ST = { x0: 0.4, a1: 1.75, s0: 1.75, s1: 3.95, b0: 3.95, x1: 5.3, z0: 0.4, z1: 1.8, z2: 4.4, z3: 6.0 };
+    // the lift: the cab inside the cage and the door in the front of it
+    const CAB = { x0: 1.85, x1: 3.85, z0: 1.9, z1: 3.5, d0: 2.35, d1: 3.35 };
+    // the flat's own stair, between its floors: landing at the front (z0-z1), flights to z2, half landing to z3
+    const FS = { x0: 5.5, m: 6.6, x1: 7.7, z0: 2.2, z1: 3.4, z2: 6.0, z3: 7.2 };
     // outer walls, with the street door (x 0.75-2.25) at the bottom of the front
     wall(0, 0, 0.75, 0.4); wall(2.25, 0, W, 0.4); wall(0.75, 0, 2.25, 0.4, 2.85);
     wall(0, D - 0.4, W, D); wall(0, 0, 0.4, D); wall(W - 0.4, 0, W, D);
-    // round the stairwell; the doors off the landings below the top floor are shut, the top one is the flat's
-    wall(2.8, 0.4, 3.0, 0.75); wall(2.8, 1.65, 3.0, 6.2); wall(2.8, 0.75, 3.0, 1.65, 0, TOP + 0.1); wall(2.8, 0.75, 3.0, 1.65, TOP + 2.1);
-    wall(0.4, 6.0, 3.0, 6.2); wall(ST.m0, ST.z1, ST.m1, ST.z2);
+    // a wall with doorways: holes [a0, a1, y0] are 2.1 m high openings in a wall running along x (or z)
+    const wallWith = (along, a0, a1, t0, t1, y0, y1, holes) => {
+      const cuts = [a0, a1, ...holes.flatMap((h) => [h[0], h[1]])].sort((p, q) => p - q);
+      for (let i = 0; i < cuts.length - 1; i++) {
+        const p = cuts[i], q = cuts[i + 1], m = (p + q) / 2;
+        if (q - p < 1e-3) continue;
+        const ys = holes.filter((h) => h[0] < m && h[1] > m).map((h) => h[2]).sort((u, v) => u - v);
+        let y = y0;
+        const piece = (ya, yb) => { if (yb - ya > 0.15) along === 'x' ? wall(p, t0, q, t1, ya, yb) : wall(t0, p, t1, q, ya, yb); };
+        // (a piece ending just above a floor, or starting a door's height above it, blocks only the storeys it stands on)
+        for (const hy of ys) { piece(y, hy + 0.1); y = hy + 2.1; }
+        piece(y, y1);
+      }
+    };
+    // round the stairwell: the wall to the flat with the neighbours' doors (shut), the flat's door on the third floor and
+    // doorways on the floors above; the back wall, with doorways on the fourth and fifth floors
+    wallWith('z', 0.4, 6.2, ST.x1, ST.x1 + 0.2, 0, 99, [[0.6, 1.6, FL * F], [0.6, 1.6, 4 * F], [0.6, 1.6, 5 * F]]);
+    wallWith('x', 0.4, ST.x1 + 0.2, ST.z3, ST.z3 + 0.2, 0, 99, [[0.8, 1.7, 4 * F], [0.8, 1.7, 5 * F]]);
+    // the lift cage, all the way up (the camera sees through its bars); its doors are walls of their own on each floor
+    wall(ST.s0, ST.z1, ST.s0 + 0.1, ST.z2, 0, 99, true); wall(ST.s1 - 0.1, ST.z1, ST.s1, ST.z2, 0, 99, true);
+    wall(ST.s0, CAB.z1, ST.s1, ST.z2, 0, 99, true);
+    wall(ST.s0, ST.z1, CAB.d0, ST.z1 + 0.1, 0, 99, true); wall(CAB.d1, ST.z1, ST.s1, ST.z1 + 0.1, 0, 99, true);
+    const liftDoors = [];
+    for (let k = 0; k < FLOORS; k++) liftDoors.push(wall(CAB.d0, ST.z1, CAB.d1, ST.z1 + 0.1, k * F, k * F + 2.2, true));
     // the space under the first flights is shut off, and a railing stops you stepping off the top landing
-    wall(ST.m1, ST.z1, ST.x1, ST.z3, 0, F / 2);
-    wall(ST.x0, ST.z1 - 0.05, ST.m0, ST.z1 + 0.05, TOP, TOP + 1.1);
-    return { f, W, D, FLOORS, F, H, TOP, fr, col, poly, toWorld, toLocal, wall, ST, doors: [], home: false };
+    wall(ST.b0, ST.z1, ST.x1, ST.z3, 0, F / 2); wall(ST.s0, ST.z2, ST.b0, ST.z3, 0, F / 2);
+    wall(ST.x0, ST.z1 - 0.05, ST.a1, ST.z1 + 0.05, FL * F - 0.2, FL * F + 1.1);
+    // the flat's stair: a wall down the middle and round the sides, shut off under its first flights, a railing at the top
+    wall(FS.m - 0.05, FS.z1, FS.m + 0.05, FS.z2, FL * F); wall(FS.x1, FS.z1, FS.x1 + 0.15, FS.z3 + 0.15, FL * F); wall(FS.x0, FS.z3, FS.x1 + 0.15, FS.z3 + 0.15, FL * F);
+    wall(FS.m + 0.05, FS.z1, FS.x1, FS.z2, FL * F, FL * F + F / 2);
+    wall(FS.x0, FS.z1 - 0.05, FS.m, FS.z1 + 0.05, 5 * F - 0.2, 5 * F + 1.1);
+    // the rooms behind the stairwell, on the floors of the flat: the laundry's door from the kitchen on the third floor
+    wallWith('z', 6.2, D - 0.4, ST.x1, ST.x1 + 0.2, 0, 99, [[9.0, 9.9, FL * F]]);
+    // the walls between the rooms, storey by storey (a wall built from y0 = k F to k F + 3 blocks that floor only)
+    const room = (k, along, a0, a1, t0, t1, doors = []) => wallWith(along, a0, a1, t0, t1, k * F, k * F + 3.0, doors.map(([p, q]) => [p, q, k * F]));
+    room(3, 'z', 0.4, FS.z1, 8.9, 9.05, [[1.2, 2.6]]);
+    room(4, 'z', 0.4, 7.35, 8.9, 9.05, [[1.0, 2.6], [4.8, 6.6]]); room(4, 'z', 7.35, D - 0.4, 8.9, 9.05);
+    room(5, 'z', 0.4, 7.35, 8.9, 9.05, [[4.3, 5.2]]); room(5, 'z', 7.35, D - 0.4, 8.9, 9.05);
+    room(5, 'x', 9.05, W - 0.4, 7.35, 7.5, [[9.4, 10.3]]);
+    // (the rooms behind the flat's stair, the sauna and the third bedroom, are reached past the end of its east wall)
+    // the lift: where the cab is, which floor it is at, where it is going, how far its doors are open
+    const lift = { y: 0, floor: 0, want: null, doors: 0, phase: 'idle', t: 0, v: 0 };
+    return { f, W, D, FLOORS, F, H, TOP, FL, fr, col, poly, toWorld, toLocal, wall, ST, CAB, FS, lift, liftDoors, doors: [], home: false };
   })();
   // the floor under someone standing at height y in the yellow house and the ceiling over them, or null outside it
   function indoorSpan(x, z, y) {
-    const { W, D, F, FLOORS, TOP, ST } = DRAKEN, [lx, lz] = DRAKEN.toLocal(x, z);
+    const { W, D, F, FL, ST, FS, CAB, lift } = DRAKEN, [lx, lz] = DRAKEN.toLocal(x, z);
     if (lx < 0 || lx > W || lz < 0 || lz > D) return null;
-    const S = [0];
-    if (lx < 2.9 && lz < 6.1) {
-      if (lz < ST.z1) for (let k = 1; k < FLOORS; k++) S.push(k * F);
+    // in the lift cage: the floor of the cab, wherever it is
+    if (lx > ST.s0 && lx < ST.s1 && lz > ST.z1 && lz < ST.z2) return { floor: lift.y, ceil: lift.y + 2.2, lx, lz, cab: true };
+    const S = [0], ramp = (first, t, k) => k * F + (first ? t : 2 - t) * F / 2;
+    if (lx < ST.x1 + 0.1 && lz < ST.z3 + 0.1) {
+      // the stairwell up to the third floor, and the flat's floors over it
+      if (lz < ST.z1) for (let k = 1; k <= FL; k++) S.push(k * F);
       else if (lz < ST.z2) {
-        // the flights are ramps: up the lane by the outer wall to the half landing, back up the other lane to the next floor
+        // the flights are ramps: up the outer lane to the half landing, back up the inner lane to the next floor
         const t = (lz - ST.z1) / (ST.z2 - ST.z1);
-        for (let k = 0; k < FLOORS - 1; k++) S.push(k * F + (lx < (ST.m0 + ST.m1) / 2 ? t : 2 - t) * F / 2);
-      } else for (let k = 0; k < FLOORS - 1; k++) S.push(k * F + F / 2);
-    } else S.push(TOP);
-    let floor = 0, ceil = TOP + F - 0.2;
+        for (let k = 0; k < FL; k++) S.push(ramp(lx < ST.s0, t, k));
+      } else for (let k = 0; k < FL; k++) S.push(k * F + F / 2);
+      S.push(4 * F, 5 * F);
+    } else if (lx > FS.x0 - 0.1 && lx < FS.x1 + 0.1 && lz > FS.z1 && lz < FS.z3 + 0.1) {
+      // the flat's own stair: open from the third floor up to the roof
+      S.push(FL * F);
+      if (lz < FS.z2) { const t = (lz - FS.z1) / (FS.z2 - FS.z1); for (const k of [FL, FL + 1]) S.push(ramp(lx < FS.m, t, k)); }
+      else for (const k of [FL, FL + 1]) S.push(k * F + F / 2);
+    } else S.push(FL * F, 4 * F, 5 * F);
+    let floor = 0, ceil = 6 * F - 0.3;
     for (const h of S) {
       if (h <= y + 0.5 && h > floor) floor = h;
       if (h > 0 && h - 0.35 >= y + 1.2 && h - 0.35 < ceil) ceil = h - 0.35;
@@ -3062,14 +3161,15 @@ body.touch .tk-sign .key { display: none; }
   }
   /* ---------- Drakens gränd: building the yellow house ---------- */
   {
-    const { W, D, FLOORS, F, H, TOP, fr, col, ST } = DRAKEN, T = TOP;
+    const { W, D, FLOORS, F, H, FL, fr, col, ST, CAB, FS } = DRAKEN, Y3 = FL * F, Y4 = 4 * F, Y5 = 5 * F, ROOF = 6 * F - 0.3;
     const root = new THREE.Group();
     root.position.set(fr[0], 0, fr[1]);
     root.rotation.y = Math.atan2(-fr[3], fr[2]);
     scene.add(root);
+    DRAKEN.root = root;
     const ext = new Builder({ split: true, ao: AO }), inn = new Builder(), woodB = new Builder(), tileB = new Builder(), glassB = new Builder(), glowB = new Builder();
     const STAIR = 0xe4d9bf, STAIR_LOW = 0x7d8f6e, STONE = 0xbab3a6, STEP = 0xa8a195, FLAT = 0xf1ece2, BATH = 0xe9eeec, FRAME = 0xf4f1ea, OAK = 0xa8784c;
-    const REVEAL = shade(col, 0.93), CEIL = 0xf6f3ec, BEAM = 0x5b4330;
+    const REVEAL = shade(col, 0.93), CEIL = 0xf6f3ec, BEAM = 0x5b4330, IRON = 0x23272b, BED_WALL = 0xa9bccb, KID = 0xe8d9a8, KID2 = 0xd7e2cf, SAUNA = 0xc89b62;
     const FACES = (x0, y0, z0, x1, y1, z1) => [
       [[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0], [0, 0, -1]],
       [[x1, y0, z1], [x0, y0, z1], [x0, y1, z1], [x1, y1, z1], [0, 0, 1]],
@@ -3104,27 +3204,39 @@ body.touch .tk-sign .key { display: none; }
     }
     const same = (n, m) => n[0] === m[0] && n[1] === m[1] && n[2] === m[2];
     // outer walls: the facade texture outside (lined up with the window cells, so a real window can replace a painted one),
-    // plaster inside: the stairwell's colour below the top floor, the flat's on it
+    // plaster inside in the colour of the room behind
     const facadePaint = (out, inner) => (n, q) => {
       if (same(n, out)) return [col, q.map((v) => [(out[0] ? v[2] : v[0]) / CELL_W, v[1] / FLOOR_H])];
       if (same(n, [-out[0], 0, -out[2]])) return inner;
       return REVEAL;
     };
     const cell = (i, y) => [i * CELL_W + 0.8, i * CELL_W + 2.2, y + 0.7, y + 2.8];
+    // real windows: the stairwell's on its floors, every window of the flat
+    const frontWin = (k) => (k === 0 ? [] : k < FL ? [0, 1] : k < FLOORS ? [0, 1, 2, 3, 4] : []);
+    const backWin = (k) => (k >= FL && k < FLOORS ? [0, 1, 2, 3, 4] : []);
+    // the colour of the inside of the outer wall in front of each room
+    const frontIn = (k, x) => (x < 5.4 ? (k <= FL ? STAIR : FLAT) : k === 5 && x > 9 ? BED_WALL : FLAT);
+    const backIn = (k, x) => (k < FL ? STAIR : x < 5.4 ? [BATH, FLAT, KID][k - FL] : x < 9 ? [FLAT, BATH, KID2][k - FL] : k === 5 ? BATH : FLAT);
     for (let k = 0; k <= FLOORS; k++) {
-      const y0 = k * F, y1 = k < FLOORS ? y0 + F : H, inner = k >= FLOORS - 1 ? FLAT : STAIR;
-      const front = k === 0 ? [[0.75, 2.25, 0, 2.85]] : k < FLOORS - 1 ? [cell(0, y0)] : k === FLOORS - 1 ? [0, 1, 2].map((i) => cell(i, y0)) : [];
-      const back = k === FLOORS - 1 ? [0, 1, 2].map((i) => cell(i, y0)) : [];
-      wallRun(ext, 'x', 0, W, 0, 0.4, y0, y1, front, facadePaint([0, 0, -1], inner));
-      wallRun(ext, 'x', 0, W, D - 0.4, D, y0, y1, back, facadePaint([0, 0, 1], k === FLOORS - 1 ? BATH : inner));
-      wallRun(ext, 'z', 0.4, D - 0.4, 0, 0.4, y0, y1, [], facadePaint([-1, 0, 0], inner));
-      wallRun(ext, 'z', 0.4, D - 0.4, W - 0.4, W, y0, y1, [], facadePaint([1, 0, 0], inner));
+      const y0 = k * F, y1 = k < FLOORS ? y0 + F : H;
+      for (const [a, b] of [[0, 5.4], [5.4, 9], [9, W]]) {
+        const inF = k < FLOORS ? [a + 0.1, b - 0.1].map((x) => frontIn(k, x)) : [FLAT], inB = k < FLOORS ? [a + 0.1, b - 0.1].map((x) => backIn(k, x)) : [FLAT];
+        const fh = (k === 0 && a === 0 ? [[0.75, 2.25, 0, 2.85]] : []).concat(frontWin(k).map((i) => cell(i, y0)).filter((h) => h[0] >= a && h[1] <= b));
+        const bh = backWin(k).map((i) => cell(i, y0)).filter((h) => h[0] >= a && h[1] <= b);
+        wallRun(ext, 'x', a, b, 0, 0.4, y0, y1, fh, facadePaint([0, 0, -1], inF[0]));
+        wallRun(ext, 'x', a, b, D - 0.4, D, y0, y1, bh, facadePaint([0, 0, 1], inB[0]));
+      }
+      wallRun(ext, 'z', 0.4, 6.2, 0, 0.4, y0, y1, [], facadePaint([-1, 0, 0], k <= FL ? STAIR : FLAT));
+      wallRun(ext, 'z', 6.2, D - 0.4, 0, 0.4, y0, y1, [], facadePaint([-1, 0, 0], k < FL ? STAIR : backIn(k, 1)));
+      wallRun(ext, 'z', 0.4, D - 0.4, W - 0.4, W, y0, y1, [], facadePaint([1, 0, 0], k === 5 ? BED_WALL : FLAT));
     }
-    // plinth, cornice and roof as on the other houses
+    // plinth, cornice and a steep tiled roof
     const plinth = shade(col, 0.7);
     for (const [x0, z0, x1, z1] of [[-0.06, -0.06, 0.75, 0], [2.25, -0.06, W + 0.06, 0], [-0.06, D, W + 0.06, D + 0.06], [-0.06, 0, 0, D], [W, 0, W + 0.06, D]]) block(ext, x0, 0, z0, x1, 0.65, z1, plinth);
     ext.box(-0.22, H - 0.1, -0.22, W + 0.22, H + 0.22, D + 0.22, shade(col, 1.1));
-    ext.hip(0, 0, W, D, H + 0.22, W * 0.55, W / 2 - 0.02, W * 0.42, 0x3a3e42);
+    ext.hip(0, 0, W, D, H + 0.22, D * 0.5, D * 0.42, D / 2 - 0.02, 0x9e4a33);
+    // a cornice band between the storeys of the flat and the ones below
+    ext.box(-0.08, Y3 - 0.22, -0.08, W + 0.08, Y3 + 0.04, 0, shade(col, 1.08));
 
     // windows: frame and glazing bars like the painted ones, a pane of glass, a sill inside and a metal one outside
     function windowAt(x0, x1, y0, y1, t0, t1, inSign) {
@@ -3137,9 +3249,10 @@ body.touch .tk-sign .key { display: none; }
       cube(x0 - 0.06, y0 - 0.04, Math.min(tm, tin + inSign * 0.06), x1 + 0.06, y0, Math.max(tm, tin + inSign * 0.06), FRAME);
       cube(x0 - 0.04, y0 - 0.06, Math.min(tm, tout - inSign * 0.08), x1 + 0.04, y0 - 0.02, Math.max(tm, tout - inSign * 0.08), 0x4a4f54);
     }
-    for (let k = 1; k < FLOORS; k++) windowAt(...cell(0, k * F), 0, 0.4, 1);
-    for (const i of [1, 2]) windowAt(...cell(i, T), 0, 0.4, 1);
-    for (const i of [0, 1, 2]) windowAt(...cell(i, T), D - 0.4, D, -1);
+    for (let k = 0; k < FLOORS; k++) {
+      for (const i of frontWin(k)) windowAt(...cell(i, k * F), 0, 0.4, 1);
+      for (const i of backWin(k)) windowAt(...cell(i, k * F), D - 0.4, D, -1);
+    }
 
     // the street door: a stone surround, a step, a lantern beside it; the two leaves swing in as you come up to them
     const SURROUND = 0xb8ad98;
@@ -3169,162 +3282,520 @@ body.touch .tk-sign .key { display: none; }
     addDoor(leaf(0.75, 2.84, 0.07, 0x2f4a3a, 0x3a5a48, 0.64), 0.75, 0, 0.3, 0, -1.75, 1.5, 0.2);
     addDoor(leaf(-0.75, 2.84, 0.07, 0x2f4a3a, 0x3a5a48, -0.64), 2.25, 0, 0.3, 0, 1.75, 1.5, 0.2);
 
-    // the stairwell
+    /* the stairwell */
     const stairPaint = (top) => (n) => (n[1] > 0 ? top : n[1] < 0 ? shade(STAIR, 1.04) : STEP);
     inn.quad([ST.x0, 0.03, ST.z1], [ST.x1, 0.03, ST.z1], [ST.x1, 0.03, ST.z0], [ST.x0, 0.03, ST.z0], STONE, null, [0, 1, 0]);
-    for (let k = 1; k < FLOORS; k++) block(inn, ST.x0, k * F - 0.3, ST.z0, ST.x1, k * F, ST.z1, stairPaint(STONE));
-    for (let k = 0; k < FLOORS - 1; k++) block(inn, ST.x0, k ? k * F + F / 2 - 0.3 : 0, ST.z2, ST.x1, k * F + F / 2, ST.z3, stairPaint(STONE));
+    for (let k = 1; k <= FL; k++) block(inn, ST.x0, k * F - 0.3, ST.z0, ST.x1, k * F, ST.z1, stairPaint(STONE));
+    for (let k = 0; k < FL; k++) block(inn, ST.x0, k ? k * F + F / 2 - 0.3 : 0, ST.z2, ST.x1, k * F + F / 2, ST.z3, stairPaint(STONE));
     const N = 10, tread = (ST.z2 - ST.z1) / N, rise = F / 2 / N;
-    for (let k = 0; k < FLOORS - 1; k++) for (let i = 0; i < N; i++) {
+    for (let k = 0; k < FL; k++) for (let i = 0; i < N; i++) {
       // steps sit on the walking ramp, half a step above and below it
       const ya = k * F + (i + 0.5) * rise, yb = k * F + F / 2 + (i + 0.5) * rise;
-      block(inn, ST.x0, k ? ya - 0.4 : 0, ST.z1 + i * tread, ST.m0, ya, ST.z1 + (i + 1) * tread, stairPaint(STEP));
-      block(inn, ST.m1, yb - 0.4, ST.z2 - (i + 1) * tread, ST.x1, yb, ST.z2 - i * tread, stairPaint(STEP));
+      block(inn, ST.x0, k ? ya - 0.4 : 0, ST.z1 + i * tread, ST.a1, ya, ST.z1 + (i + 1) * tread, stairPaint(STEP));
+      block(inn, ST.b0, yb - 0.4, ST.z2 - (i + 1) * tread, ST.x1, yb, ST.z2 - i * tread, stairPaint(STEP));
     }
-    // the walls round it: painted dark up to the dado, light above, on every storey
-    block(inn, ST.m0, 0, ST.z1, ST.m1, T + F, ST.z2, STAIR);
+    // its walls, painted dark up to the dado and light above, and on its far sides the rooms of the flat
     for (let k = 0; k < FLOORS; k++) {
-      const y0 = k * F, top = k === FLOORS - 1;
-      wallRun(inn, 'z', 0.4, 6.2, 2.8, 3.0, y0, y0 + F, top ? [[0.75, 1.65, T, T + 2.1]] : [], (n) => (n[0] > 0 ? (top ? FLAT : null) : STAIR));
-      wallRun(inn, 'x', 0.4, 3.0, 6.0, 6.2, y0, y0 + F, [], (n) => (n[2] > 0 ? (top ? BATH : null) : STAIR));
-      // dado: a darker band on the walls of each landing, half landing and flight
+      const y0 = k * F, inFlat = k > FL, doorH = [[0.6, 1.6, y0, y0 + 2.1]];
+      wallRun(inn, 'z', 0.4, 6.2, ST.x1, ST.x1 + 0.2, y0, y0 + F, k >= FL ? doorH : [], (n) => (n[0] < 0 ? (inFlat ? FLAT : STAIR) : k >= FL ? FLAT : null));
+      wallRun(inn, 'x', 0.4, ST.x1 + 0.2, ST.z3, ST.z3 + 0.2, y0, y0 + F, inFlat ? [[0.8, 1.7, y0, y0 + 2.1]] : [], (n) => (n[2] < 0 ? (inFlat ? FLAT : STAIR) : k >= FL ? backIn(k, 1) : null));
+      if (inFlat) continue;
       const dz = (z0, z1, x0, x1, ya, yb) => cube(x0, ya, z0, x1, yb, z1, STAIR_LOW);
       dz(ST.z0, ST.z3, ST.x0, ST.x0 + 0.015, y0, y0 + 1.05);
-      dz(ST.z0, 0.66, ST.x1 - 0.015, ST.x1, y0, y0 + 1.05); dz(1.74, ST.z3, ST.x1 - 0.015, ST.x1, y0, y0 + 1.05);
-      if (!top) dz(ST.z3 - 0.015, ST.z3, ST.x0, ST.x1, y0 + F / 2, y0 + F / 2 + 1.05);
-      if (k > 0) dz(ST.z0, ST.z0 + 0.015, ST.x0, ST.x1, y0, y0 + 0.7);
-      // a globe lamp over each landing
-      block(glowB, 1.45, y0 + 2.62, 0.95, 1.75, y0 + 2.86, 1.25, 0xfff1d0);
-      if (k > 0 && k < FLOORS - 1) {
+      dz(ST.z0, 0.66, ST.x1 - 0.015, ST.x1, y0, y0 + 1.05); dz(1.64, ST.z3, ST.x1 - 0.015, ST.x1, y0, y0 + 1.05);
+      if (k < FL) dz(ST.z3 - 0.015, ST.z3, ST.x0, ST.x1, y0 + F / 2, y0 + F / 2 + 1.05);
+      if (k > 0) { dz(ST.z0, ST.z0 + 0.015, ST.x0, 0.8, y0, y0 + 0.7); dz(ST.z0, ST.z0 + 0.015, 2.2, 3.8, y0, y0 + 0.7); dz(ST.z0, ST.z0 + 0.015, 5.2, ST.x1, y0, y0 + 0.7); }
+      // a globe lamp over each landing, and one over each half landing
+      block(glowB, 0.8, y0 + 2.62, 0.95, 1.1, y0 + 2.86, 1.25, 0xfff1d0);
+      if (k < FL) block(glowB, 2.7, y0 + F / 2 + 2.5, 5.0, 3.0, y0 + F / 2 + 2.74, 5.3, 0xfff1d0);
+      if (k > 0 && k < FL) {
         // a neighbour's door, shut, with a name plate, a letterbox and a doormat
-        const dc = [0x6b3f2a, 0x2f4a5a, 0x5a2a2a][k - 1];
-        cube(2.79, y0, 0.68, 2.8, y0 + 2.18, 1.72, 0xd8cfb8);
-        cube(2.74, y0, 0.75, 2.79, y0 + 2.1, 1.65, dc);
-        cube(2.72, y0 + 0.3, 0.85, 2.74, y0 + 0.95, 1.55, shade(dc, 1.2)); cube(2.72, y0 + 1.15, 0.85, 2.74, y0 + 1.95, 1.55, shade(dc, 1.2));
-        cube(2.71, y0 + 1.0, 0.8, 2.74, y0 + 1.06, 0.95, 0xc9a24a);
-        cube(2.715, y0 + 1.45, 1.05, 2.74, y0 + 1.53, 1.35, 0xd9c9a0);
-        cube(2.715, y0 + 0.9, 1.1, 2.74, y0 + 0.97, 1.4, 0x23262a);
-        cube(2.0, y0, 0.85, 2.7, y0 + 0.02, 1.55, [0x7a3b2e, 0x3b4a5a, 0x5b5a3a][k - 1]);
+        const dc = [0x6b3f2a, 0x2f4a5a][k - 1], X = ST.x1;
+        cube(X - 0.01, y0, 0.58, X, y0 + 2.28, 1.62, 0xd8cfb8);
+        cube(X - 0.06, y0, 0.65, X - 0.01, y0 + 2.2, 1.55, dc);
+        cube(X - 0.08, y0 + 0.3, 0.75, X - 0.06, y0 + 0.95, 1.45, shade(dc, 1.2)); cube(X - 0.08, y0 + 1.15, 0.75, X - 0.06, y0 + 1.95, 1.45, shade(dc, 1.2));
+        cube(X - 0.09, y0 + 1.0, 0.7, X - 0.06, y0 + 1.06, 0.85, 0xc9a24a);
+        cube(X - 0.085, y0 + 1.45, 0.95, X - 0.06, y0 + 1.53, 1.25, 0xd9c9a0);
+        cube(X - 0.085, y0 + 0.9, 1.0, X - 0.06, y0 + 0.97, 1.3, 0x23262a);
+        cube(X - 0.8, y0, 0.75, X - 0.1, y0 + 0.02, 1.45, [0x7a3b2e, 0x3b4a5a][k - 1]);
       }
     }
-    // handrails up the outer wall of the first flight and the central wall side of the second
+    // handrails up the outer wall of the first flights and the inner wall of the second
     const rail = (x0, x1, za, ya, zb, yb) => inn.hexa([[x0, ya, za], [x1, ya, za], [x1, yb, zb], [x0, yb, zb], [x0, ya + 0.06, za], [x1, ya + 0.06, za], [x1, yb + 0.06, zb], [x0, yb + 0.06, zb]], OAK);
-    for (let k = 0; k < FLOORS - 1; k++) {
+    for (let k = 0; k < FL; k++) {
       rail(ST.x0 + 0.02, ST.x0 + 0.08, ST.z1, k * F + 0.9, ST.z2, k * F + F / 2 + 0.9);
       rail(ST.x1 - 0.08, ST.x1 - 0.02, ST.z2, k * F + F / 2 + 0.9, ST.z1, (k + 1) * F + 0.9);
     }
-    // under the first flights: a board wall with a low door to the cellar, and the list of who lives here by the door
-    cube(ST.m1, 0, ST.z1 - 0.06, ST.x1, F - 0.3, ST.z1, 0x6b4a30);
-    cube(1.95, 0, ST.z1 - 0.08, 2.6, 1.75, ST.z1 - 0.06, 0x5a3c26);
-    cube(2.45, 0.85, ST.z1 - 0.1, 2.5, 0.95, ST.z1 - 0.08, 0xc9a24a);
+    // under the first flights: a board wall with a low door to the cellar; the list of who lives here, and the post boxes
+    cube(ST.b0, 0, ST.z1 - 0.06, ST.x1, F - 0.45, ST.z1, 0x6b4a30);
+    cube(4.3, 0, ST.z1 - 0.08, 4.95, 1.75, ST.z1 - 0.06, 0x5a3c26);
+    cube(4.8, 0.85, ST.z1 - 0.1, 4.85, 0.95, ST.z1 - 0.08, 0xc9a24a);
     cube(ST.x0, 1.15, 0.75, ST.x0 + 0.04, 1.85, 1.45, 0x23262a);
     for (let i = 0; i < 5; i++) cube(ST.x0 + 0.04, 1.65 - i * 0.1, 0.83, ST.x0 + 0.045, 1.69 - i * 0.1, 1.37, 0xe8e2d0);
+    for (let i = 0; i < 6; i++) { const zz = 2.0 + (i % 3) * 0.42, yy = 1.0 + Math.floor(i / 3) * 0.36; cube(ST.x0, yy, zz, ST.x0 + 0.12, yy + 0.32, zz + 0.38, 0x2f4a3a); cube(ST.x0 + 0.12, yy + 0.22, zz + 0.06, ST.x0 + 0.125, yy + 0.25, zz + 0.32, 0x15171a); }
     // the railing at the top landing, over the drop down the stairwell
-    for (let x = ST.x0 + 0.06; x < ST.m0; x += 0.12) cube(x - 0.015, T, ST.z1 - 0.015, x + 0.015, T + 1.0, ST.z1 + 0.015, 0x2d3236);
-    cube(ST.x0, T + 1.0, ST.z1 - 0.04, ST.m0, T + 1.06, ST.z1 + 0.04, OAK);
-    // the flat's door: frame on both sides, a name plate and a doormat outside
-    for (const x of [2.79, 3.0]) { cube(x, T, 0.66, x + 0.01, T + 2.2, 0.75, FRAME); cube(x, T, 1.65, x + 0.01, T + 2.2, 1.74, FRAME); cube(x, T + 2.1, 0.66, x + 0.01, T + 2.2, 1.74, FRAME); }
-    cube(2.77, T + 1.45, 0.45, 2.8, T + 1.55, 0.65, 0xd9c9a0);
-    cube(2.0, T, 0.85, 2.72, T + 0.02, 1.55, 0x3d5a46);
-    addDoor(leaf(0.9, 2.08, 0.05, 0x2f5a3f, 0x3b6b4c, 0.8), 2.97, T, 1.65, Math.PI / 2, -1.6, 2.9, 1.2);
+    for (let x = ST.x0 + 0.06; x < ST.a1; x += 0.12) cube(x - 0.015, Y3, ST.z1 - 0.015, x + 0.015, Y3 + 1.0, ST.z1 + 0.015, 0x2d3236);
+    cube(ST.x0, Y3 + 1.0, ST.z1 - 0.04, ST.a1, Y3 + 1.06, ST.z1 + 0.04, OAK);
+    // the flat's door: frames on both sides, a brass name plate and a doormat outside
+    for (const x of [ST.x1 - 0.01, ST.x1 + 0.2]) { cube(x, Y3, 0.51, x + 0.01, Y3 + 2.2, 0.6, FRAME); cube(x, Y3, 1.6, x + 0.01, Y3 + 2.2, 1.69, FRAME); cube(x, Y3 + 2.1, 0.51, x + 0.01, Y3 + 2.2, 1.69, FRAME); }
+    cube(ST.x1 - 0.03, Y3 + 1.45, 0.25, ST.x1, Y3 + 1.55, 0.45, 0xd9c9a0);
+    cube(ST.x1 - 0.75, Y3, 0.7, ST.x1 - 0.05, Y3 + 0.02, 1.5, 0x3d5a46);
+    addDoor(leaf(0.95, 2.08, 0.05, 0x2f5a3f, 0x3b6b4c, 0.85), ST.x1 + 0.17, Y3, 1.6, Math.PI / 2, -1.6, ST.x1 + 0.1, 1.1);
+    // and the doorways from the lift landing into the flat on the floors above
+    for (const y of [Y4, Y5]) for (const x of [ST.x1 - 0.01, ST.x1 + 0.2]) { cube(x, y, 0.51, x + 0.01, y + 2.2, 0.6, FRAME); cube(x, y, 1.6, x + 0.01, y + 2.2, 1.69, FRAME); cube(x, y + 2.1, 0.51, x + 0.01, y + 2.2, 1.69, FRAME); }
 
-    // the flat: wooden floors, a tiled bathroom, white walls and a beamed ceiling under the roof
-    const floorQuad = (B, x0, z0, x1, z1, y, k) => B.quad([x0, y, z1], [x1, y, z1], [x1, y, z0], [x0, y, z0], 0xffffff, [[x0 / k, -z1 / k], [x1 / k, -z1 / k], [x1 / k, -z0 / k], [x0 / k, -z0 / k]], [0, 1, 0]);
-    floorQuad(woodB, 2.8, 0.4, W - 0.4, D - 0.4, T + 0.005, 2.4);
-    floorQuad(tileB, 0.4, 6.2, 3.0, D - 0.4, T + 0.008, 1.2);
-    inn.quad([0.4, T + F, 0.4], [W - 0.4, T + F, 0.4], [W - 0.4, T + F, D - 0.4], [0.4, T + F, D - 0.4], CEIL, null, [0, -1, 0]);
-    for (let z = 1.2; z < D - 0.5; z += 1.5) cube(0.4, T + F - 0.2, z - 0.08, W - 0.4, T + F, z + 0.08, BEAM);
-    const BED_WALL = 0xa9bccb;
-    wallRun(inn, 'z', 6.2, D - 0.4, 3.0, 3.15, T, T + F, [[6.35, 7.25, T, T + 2.1]], (n) => (n[0] < 0 ? BATH : FLAT));
-    wallRun(inn, 'x', 3.15, W - 0.4, 7.4, 7.55, T, T + F, [[3.5, 4.4, T, T + 2.1]], (n) => (n[2] > 0 ? BED_WALL : FLAT));
-    // skirting boards
-    for (const [x0, z0, x1, z1] of [[3.0, 0.4, W - 0.4, 0.42], [W - 0.42, 0.4, W - 0.4, 3.6], [3.0, 1.65, 3.02, 6.2], [3.15, 7.38, W - 0.4, 7.4]]) cube(x0, T, z0, x1, T + 0.08, z1, 0xfbf9f4);
-    const wl = (x0, z0, x1, z1, h) => DRAKEN.wall(x0, z0, x1, z1, T, T + h);
-    wl(3.0, 6.2, 3.15, 6.35, 3.2); wl(3.0, 7.25, 3.15, D - 0.4, 3.2); wl(3.15, 7.4, 3.5, 7.55, 3.2); wl(4.4, 7.4, W - 0.4, 7.55, 3.2);
-
-    // living room: rug, sofa facing the TV between the front windows, coffee table, armchair, lamp, bookcase, plants
-    cube(4.2, T, 1.2, 7.7, T + 0.012, 4.1, 0x8c3b2e); cube(4.45, T, 1.45, 7.45, T + 0.016, 3.85, 0xb0563f);
-    cube(5.1, T, 0.42, 6.9, T + 0.45, 0.88, 0xf2efe8); cube(5.15, T + 0.2, 0.41, 6.85, T + 0.24, 0.42, 0xd9d4ca);
-    cube(5.9, T + 0.45, 0.6, 6.1, T + 0.55, 0.72, 0x1c1d20); cube(5.3, T + 0.55, 0.62, 6.7, T + 1.35, 0.68, 0x111214);
-    block(glowB, 5.36, T + 0.6, 0.685, 6.64, T + 1.3, 0.69, 0x1b2a3c);
-    const SOFA = 0x4a5d6e;
-    cube(4.6, T, 3.0, 7.4, T + 0.42, 3.9, shade(SOFA, 0.85)); cube(4.8, T + 0.42, 3.0, 7.2, T + 0.52, 3.65, SOFA);
-    cube(4.6, T + 0.42, 3.62, 7.4, T + 0.92, 3.9, SOFA); cube(4.6, T + 0.42, 3.0, 4.8, T + 0.66, 3.65, SOFA); cube(7.2, T + 0.42, 3.0, 7.4, T + 0.66, 3.65, SOFA);
-    cube(5.0, T + 0.52, 3.45, 5.5, T + 0.82, 3.6, 0xd9b44a); cube(6.5, T + 0.52, 3.45, 7.0, T + 0.82, 3.6, 0xc8643a);
-    cube(5.3, T + 0.4, 1.8, 6.7, T + 0.45, 2.5, OAK);
-    for (const [x, z] of [[5.35, 1.85], [6.6, 1.85], [5.35, 2.4], [6.6, 2.4]]) cube(x, T, z, x + 0.05, T + 0.4, z + 0.05, shade(OAK, 0.8));
-    cube(5.6, T + 0.45, 2.0, 5.9, T + 0.48, 2.25, 0xe8e2d0); cube(6.2, T + 0.45, 2.05, 6.3, T + 0.58, 2.15, 0x3d6e8c);
-    const CHAIR = 0xd4a23a;
-    cube(7.5, T, 1.3, 8.4, T + 0.42, 2.2, shade(CHAIR, 0.85)); cube(8.15, T + 0.42, 1.3, 8.4, T + 0.95, 2.2, CHAIR);
-    cube(7.5, T + 0.42, 1.3, 8.15, T + 0.65, 1.42, CHAIR); cube(7.5, T + 0.42, 2.08, 8.15, T + 0.65, 2.2, CHAIR);
-    cube(8.25, T, 0.65, 8.31, T + 1.55, 0.71, 0x2d3236); block(glowB, 8.08, T + 1.45, 0.48, 8.48, T + 1.75, 0.88, 0xfff0cc);
-    cube(3.02, T, 2.2, 3.06, T + 2.0, 4.3, shade(OAK, 0.7)); cube(3.02, T, 2.2, 3.36, T + 2.0, 2.24, OAK); cube(3.02, T, 4.26, 3.36, T + 2.0, 4.3, OAK); cube(3.02, T + 1.97, 2.2, 3.36, T + 2.0, 4.3, OAK);
-    for (let y = 0.05; y < 2.0; y += 0.48) {
-      cube(3.02, T + y, 2.2, 3.36, T + y + 0.03, 4.3, shade(OAK, 0.85));
-      let z = 2.26;
-      while (z < 4.18) { const w = rr(0.03, 0.07), h = rr(0.24, 0.38); if (y + 0.03 + h < 2.0) cube(3.06, T + y + 0.03, z, 3.3, T + y + 0.03 + h, z + w, pick([0x8c2f2a, 0x2f4f6e, 0x3f6b45, 0xd9b44a, 0xe8e2d0, 0x5a3d6e, 0x222428, 0xc8643a])); z += w + 0.005; }
+    /* the lift: an iron cage up the middle of the stairwell, a wooden cab, sliding doors on every floor */
+    const liftB = new Builder(), CH = 2.25;
+    {
+      const bar = (x0, z0, x1, z1, y0, y1) => block(liftB, x0, y0, z0, x1, y1, z1, IRON);
+      const posts = [[ST.s0, ST.z1], [ST.s1, ST.z1], [ST.s0, ST.z2], [ST.s1, ST.z2]];
+      for (const [x, z] of posts) bar(x - 0.035, z - 0.035, x + 0.035, z + 0.035, 0, ROOF);
+      for (let z = ST.z1 + 0.1; z < ST.z2 - 0.05; z += 0.1) for (const x of [ST.s0, ST.s1]) bar(x - 0.009, z - 0.009, x + 0.009, z + 0.009, 0, ROOF);
+      for (let x = ST.s0 + 0.1; x < ST.s1 - 0.05; x += 0.1) {
+        bar(x - 0.009, ST.z2 - 0.009, x + 0.009, ST.z2 + 0.009, 0, ROOF);
+        // the front: full height beside the doors, above them only from the top of each door to the next floor
+        if (x < CAB.d0 || x > CAB.d1) bar(x - 0.009, ST.z1 - 0.009, x + 0.009, ST.z1 + 0.009, 0, ROOF);
+        else for (let k = 0; k < FLOORS; k++) bar(x - 0.009, ST.z1 - 0.009, x + 0.009, ST.z1 + 0.009, k * F + 2.25, Math.min(ROOF, (k + 1) * F));
+      }
+      // bands round the cage at every floor, half way up and at the top of the doors
+      for (let k = 0; k < FLOORS; k++) for (const y of [k * F, k * F + 1.1, k * F + 2.25]) {
+        bar(ST.s0 - 0.02, ST.z1 - 0.025, ST.s1 + 0.02, ST.z1 + 0.025, y, y + 0.05);
+        bar(ST.s0 - 0.02, ST.z2 - 0.025, ST.s1 + 0.02, ST.z2 + 0.025, y, y + 0.05);
+        for (const x of [ST.s0, ST.s1]) bar(x - 0.025, ST.z1, x + 0.025, ST.z2, y, y + 0.05);
+      }
+      // at every landing a frame round the doors, a call button and a lamp that says the lift is here
+      for (let k = 0; k < FLOORS; k++) {
+        const y = k * F;
+        cube(CAB.d0 - 0.08, y, ST.z1 - 0.12, CAB.d0, y + 2.3, ST.z1 - 0.07, 0x3a2a1c); cube(CAB.d1, y, ST.z1 - 0.12, CAB.d1 + 0.08, y + 2.3, ST.z1 - 0.07, 0x3a2a1c);
+        cube(CAB.d0 - 0.08, y + 2.22, ST.z1 - 0.12, CAB.d1 + 0.08, y + 2.32, ST.z1 - 0.07, 0x3a2a1c);
+        cube(CAB.d1 + 0.14, y + 1.0, ST.z1 - 0.12, CAB.d1 + 0.26, y + 1.22, ST.z1 - 0.08, 0xc9a24a);
+        cube(CAB.d1 + 0.18, y + 1.08, ST.z1 - 0.14, CAB.d1 + 0.22, y + 1.14, ST.z1 - 0.12, 0x7a1414);
+        // the floor's number in brass over the door
+        block(glowB, 2.8, y + 2.36, ST.z1 - 0.06, 2.9, y + 2.46, ST.z1 - 0.04, 0xffd27a);
+      }
+      // the bottom of the pit
+      cube(ST.s0, 0, ST.z1, ST.s1, 0.02, ST.z2, 0x2b2a28);
     }
-    const plant = (x, z, s) => {
-      cube(x - 0.16 * s, T, z - 0.16 * s, x + 0.16 * s, T + 0.32 * s, z + 0.16 * s, 0xb5603e);
-      block(inn, x - 0.32 * s, T + 0.32 * s, z - 0.32 * s, x + 0.32 * s, T + 0.95 * s, z + 0.32 * s, 0x3f6e36);
-      block(inn, x - 0.2 * s, T + 0.95 * s, z - 0.2 * s, x + 0.2 * s, T + 1.3 * s, z + 0.2 * s, 0x4f8040);
+    // the cab: wood panels, a mirror at the back, glass at the sides, a lamp in the ceiling, the buttons on the right
+    const cabB = new Builder(), cabGlow = new Builder(), cabGlass = new Builder();
+    {
+      const MAH = 0x6b3a22, x0 = CAB.x0, x1 = CAB.x1, z0 = CAB.z0, z1 = CAB.z1;
+      block(cabB, x0, -0.12, z0, x1, 0.02, z1, (n) => (n[1] > 0 ? 0x7a5536 : MAH));
+      block(cabB, x0, CH, z0, x1, CH + 0.1, z1, (n) => (n[1] < 0 ? 0xf3efe6 : MAH));
+      block(cabB, x0, 0.02, z1 - 0.05, x1, CH, z1, MAH);
+      block(cabB, x0 + 0.25, 1.0, z1 - 0.06, x1 - 0.25, 2.05, z1 - 0.05, 0xb9c6cd);
+      block(cabB, x0 + 0.1, 0.9, z1 - 0.12, x1 - 0.1, 0.95, z1 - 0.06, 0xc9a24a);
+      for (const [xa, xb] of [[x0, x0 + 0.04], [x1 - 0.04, x1]]) {
+        block(cabB, xa, 0.02, z0, xb, 1.0, z1, MAH);
+        block(cabB, xa, 1.0, z0, xb, 1.06, z1, 0xc9a24a);
+        block(cabB, xa, 2.1, z0, xb, CH, z1, MAH);
+        cabGlass.quad([(xa + xb) / 2, 1.06, z0], [(xa + xb) / 2, 1.06, z1], [(xa + xb) / 2, 2.1, z1], [(xa + xb) / 2, 2.1, z0], 0xffffff, null, [1, 0, 0]);
+      }
+      block(cabB, x0, 0.02, z0, CAB.d0, CH, z0 + 0.04, MAH); block(cabB, CAB.d1, 0.02, z0, x1, CH, z0 + 0.04, MAH);
+      block(cabB, x1 - 0.3, 1.0, z0 + 0.05, x1 - 0.04, 1.6, z0 + 0.35, 0xc9a24a);
+      for (let i = 0; i < FLOORS; i++) block(cabB, x1 - 0.06, 1.08 + i * 0.08, z0 + 0.14, x1 - 0.045, 1.13 + i * 0.08, z0 + 0.22, 0xf3efe6);
+      block(cabGlow, (x0 + x1) / 2 - 0.3, CH - 0.03, (z0 + z1) / 2 - 0.3, (x0 + x1) / 2 + 0.3, CH, (z0 + z1) / 2 + 0.3, 0xfff3d8);
+    }
+    // the sliding doors: two leaves on every landing and two on the cab; each leaf a wooden frame round a glass pane
+    const slideLeaf = (B, G, w, h) => {
+      block(B, 0, 0, 0, w, 0.1, 0.04, 0x3a2a1c); block(B, 0, h - 0.1, 0, w, h, 0.04, 0x3a2a1c);
+      block(B, 0, 0.1, 0, 0.06, h - 0.1, 0.04, 0x3a2a1c); block(B, w - 0.06, 0.1, 0, w, h - 0.1, 0.04, 0x3a2a1c);
+      block(B, 0.06, 0.1, 0, w - 0.06, 1.0, 0.04, 0x5a3c26);
+      G.quad([0.06, 1.0, 0.02], [w - 0.06, 1.0, 0.02], [w - 0.06, h - 0.1, 0.02], [0.06, h - 0.1, 0.02], 0xffffff, null, [0, 0, 1]);
     };
-    plant(4.6, 0.75, 1.1); plant(8.15, 3.1, 0.9);
-    for (const i of [1, 2]) { const [x0, x1] = cell(i, T); cube(x0 + 0.2, T + 0.7, 0.42, x0 + 0.38, T + 0.86, 0.6, 0xb5603e); block(inn, x0 + 0.17, T + 0.86, 0.43, x0 + 0.41, T + 1.06, 0.59, 0x5a8a3c); cube(x1 - 0.38, T + 0.7, 0.42, x1 - 0.2, T + 0.86, 0.6, 0xe8e2d0); block(inn, x1 - 0.41, T + 0.86, 0.43, x1 - 0.17, T + 1.08, 0.59, 0xc8343a); }
-    wl(4.6, 3.0, 7.4, 3.9, 0.9); wl(5.1, 0.4, 6.9, 0.9, 1.4); wl(5.3, 1.8, 6.7, 2.5, 0.45); wl(7.5, 1.3, 8.4, 2.2, 0.95); wl(3.0, 2.2, 3.36, 4.3, 2.0); wl(4.4, 0.55, 4.8, 0.95, 1.2);
-
-    // dining table under a pendant lamp, kitchen along the end wall
-    cube(4.4, T + 0.72, 4.6, 6.0, T + 0.76, 5.5, OAK);
-    for (const [x, z] of [[4.45, 4.65], [5.9, 4.65], [4.45, 5.4], [5.9, 5.4]]) cube(x, T, z, x + 0.06, T + 0.72, z + 0.06, shade(OAK, 0.8));
-    const chair = (x, z, bz) => {
-      cube(x - 0.21, T + 0.44, z - 0.21, x + 0.21, T + 0.48, z + 0.21, 0x2d3236);
-      for (const [dx, dz] of [[-0.18, -0.18], [0.15, -0.18], [-0.18, 0.15], [0.15, 0.15]]) cube(x + dx, T, z + dz, x + dx + 0.03, T + 0.44, z + dz + 0.03, 0x2d3236);
-      cube(x - 0.21, T + 0.48, z + bz * 0.18, x + 0.21, T + 0.92, z + bz * 0.21, 0x2d3236);
+    const lw = (CAB.d1 - CAB.d0) / 2, leafSolid = new Builder(), leafGlass = new Builder();
+    slideLeaf(leafSolid, leafGlass, lw, 2.2);
+    const leafGeo = leafSolid.build(), leafGlassGeo = leafGlass.build();
+    const inMat = std({ vertexColors: true, roughness: 0.82, envMapIntensity: 0.75 });
+    const glassMatH = std({ color: 0xcfe3ec, transparent: true, opacity: 0.16, roughness: 0.03, side: THREE.DoubleSide, depthWrite: false });
+    const glowMat = new THREE.MeshBasicMaterial({ vertexColors: true });
+    const makeLeaf = (parent, x, y, z) => {
+      const g = new THREE.Group(), m = new THREE.Mesh(leafGeo, doorMat), gm = new THREE.Mesh(leafGlassGeo, glassMatH);
+      m.castShadow = true; g.add(m, gm); g.position.set(x, y, z); parent.add(g);
+      return g;
     };
-    chair(4.85, 4.3, -1); chair(5.6, 4.3, -1); chair(4.85, 5.8, 1); chair(5.6, 5.8, 1);
-    cube(5.18, T + 1.9, 5.03, 5.22, T + F, 5.07, 0x222428);
-    block(inn, 4.98, T + 1.7, 4.85, 5.42, T + 1.9, 5.25, 0x2f5a3f); block(glowB, 5.03, T + 1.66, 4.9, 5.37, T + 1.7, 5.2, 0xfff0cc);
-    cube(8.0, T, 3.6, W - 0.4, T + 0.86, 6.75, 0xf4f2ee);
-    for (let z = 3.6; z < 6.7; z += 0.6) cube(7.985, T + 0.08, z + 0.02, 8.0, T + 0.84, z + 0.58, 0xe6e3dc);
-    cube(7.95, T + 0.86, 3.6, W - 0.4, T + 0.9, 6.75, 0x3a3836);
-    cube(8.1, T + 0.86, 4.6, 8.45, T + 0.905, 5.2, 0xb8bcc0); cube(8.45, T + 0.9, 4.85, 8.5, T + 1.2, 4.95, 0xb8bcc0);
-    cube(8.02, T + 0.9, 5.55, W - 0.42, T + 0.91, 6.25, 0x151618);
-    for (const [x, z] of [[8.2, 5.72], [8.42, 5.72], [8.2, 6.08], [8.42, 6.08]]) cube(x - 0.07, T + 0.91, z - 0.07, x + 0.07, T + 0.915, z + 0.07, 0x3a3c40);
-    cube(W - 0.42, T + 0.9, 3.6, W - 0.4, T + 1.45, 6.75, 0xf8f8f6);
-    cube(8.25, T + 1.45, 3.6, W - 0.4, T + 2.2, 6.75, 0xf4f2ee);
-    for (let z = 3.6; z < 6.7; z += 0.6) cube(8.235, T + 1.47, z + 0.02, 8.25, T + 2.18, z + 0.58, 0xe6e3dc);
-    cube(7.95, T, 6.78, W - 0.4, T + 1.95, 7.38, 0xdfe2e4); cube(7.94, T + 1.15, 6.82, 7.95, T + 1.17, 7.34, 0x9a9ea2);
-    cube(7.93, T + 0.6, 6.85, 7.95, T + 1.05, 6.88, 0x9a9ea2); cube(7.93, T + 1.3, 6.85, 7.95, T + 1.8, 6.88, 0x9a9ea2);
-    wl(4.1, 4.1, 6.3, 6.0, 0.95); wl(7.95, 3.6, W - 0.4, 7.4, 1.95);
+    const cab = new THREE.Group();
+    for (const [B, mat] of [[cabB, inMat], [cabGlow, glowMat], [cabGlass, glassMatH]]) { const m = new THREE.Mesh(B.build(), mat); m.castShadow = B === cabB; m.receiveShadow = B === cabB; cab.add(m); }
+    const cabLeaves = [makeLeaf(cab, CAB.d0, 0.02, CAB.z0 - 0.05), makeLeaf(cab, CAB.d0 + lw, 0.02, CAB.z0 - 0.05)];
+    root.add(cab);
+    const landLeaves = [];
+    for (let k = 0; k < FLOORS; k++) landLeaves.push([makeLeaf(root, CAB.d0, k * F, ST.z1 - 0.065), makeLeaf(root, CAB.d0 + lw, k * F, ST.z1 - 0.065)]);
+    // the counterweight goes down as the cab comes up, and the cables run from the cab up to the wheel at the top
+    const cw = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.1, 0.5), std({ color: 0x3a3d41, roughness: 0.6, metalness: 0.5 }));
+    const cable = new THREE.Mesh(new THREE.BoxGeometry(0.03, 1, 0.03), cw.material);
+    root.add(cw, cable);
+    {
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.12, 16), cw.material);
+      m.rotation.z = Math.PI / 2; m.position.set((ST.s0 + ST.s1) / 2, ROOF - 0.35, 3.5); root.add(m);
+    }
+    DRAKEN.liftParts = { cab, cabLeaves, landLeaves, cw, cable, lw };
 
-    // bedroom: double bed against the living room wall, bedside tables with lamps, wardrobe, desk under the window
-    cube(5.5, T, 7.6, 7.1, T + 0.35, 9.7, 0xe8e2d6); cube(5.52, T + 0.35, 7.62, 7.08, T + 0.55, 9.68, 0xf6f4ef);
-    cube(5.5, T + 0.55, 8.25, 7.1, T + 0.63, 9.72, 0x6f8fa8); cube(5.48, T + 0.4, 8.25, 5.5, T + 0.6, 9.72, 0x6f8fa8); cube(7.1, T + 0.4, 8.25, 7.12, T + 0.6, 9.72, 0x6f8fa8);
-    cube(5.65, T + 0.55, 7.7, 6.25, T + 0.7, 8.1, 0xffffff); cube(6.35, T + 0.55, 7.7, 6.95, T + 0.7, 8.1, 0xffffff);
-    cube(5.45, T, 7.56, 7.15, T + 1.05, 7.66, 0x6b4a30);
-    for (const x of [5.0, 7.2]) { cube(x, T, 7.6, x + 0.42, T + 0.5, 8.0, OAK); cube(x + 0.17, T + 0.5, 7.75, x + 0.25, T + 0.72, 7.83, 0x2d3236); block(glowB, x + 0.08, T + 0.72, 7.66, x + 0.34, T + 0.92, 7.92, 0xfff0cc); }
-    cube(4.6, T, 9.9, 7.9, T + 0.012, 11.2, 0xd8cfb8);
-    cube(3.15, T, 9.0, 3.75, T + 2.15, 11.0, 0xf2efe8); cube(3.75, T + 0.05, 9.99, 3.76, T + 2.1, 10.01, 0xcfcac0);
-    for (const z of [9.9, 10.1]) cube(3.75, T + 1.0, z - 0.01, 3.78, T + 1.3, z + 0.01, 0x9a9ea2);
-    cube(3.9, T + 0.72, 10.95, 5.2, T + 0.76, D - 0.42, OAK);
-    for (const [x, z] of [[3.92, 10.97], [5.13, 10.97], [3.92, 11.48], [5.13, 11.48]]) cube(x, T, z, x + 0.05, T + 0.72, z + 0.05, shade(OAK, 0.8));
-    cube(4.3, T + 0.76, 11.2, 4.85, T + 0.78, 11.5, 0x2d3236); cube(4.32, T + 0.78, 11.47, 4.83, T + 1.12, 11.49, 0x2d3236);
-    chair(4.55, 10.55, -1);
-    wl(5.0, 7.55, 7.62, 9.7, 0.65); wl(3.15, 9.0, 3.75, 11.0, 2.15); wl(3.9, 10.95, 5.2, D - 0.4, 0.78);
+    /* the flat */
+    // floors: oak boards, tiles in the bathrooms and the sauna, everywhere but the holes for the lift and the stair
+    const floorQuad = (B, x0, z0, x1, z1, y, k) => B.quad([x0, y, z1], [x1, y, z1], [x1, y, z0], [x0, y, z0], 0xffffff, [[x0 / k, -z1 / k], [x1 / k, -z1 / k], [x1 / k, -z0 / k], [x0 / k, -z0 / k]], [0, 1, 0]);
+    // a rectangle cut up round the holes, as a list of rectangles
+    const cutOut = (x0, z0, x1, z1, holes) => {
+      const xs = [...new Set([x0, x1, ...holes.flatMap((h) => [h[0], h[2]]).filter((v) => v > x0 && v < x1)])].sort((a, b) => a - b);
+      const zs = [...new Set([z0, z1, ...holes.flatMap((h) => [h[1], h[3]]).filter((v) => v > z0 && v < z1)])].sort((a, b) => a - b), out = [];
+      for (let i = 0; i < xs.length - 1; i++) for (let j = 0; j < zs.length - 1; j++) {
+        const mx = (xs[i] + xs[i + 1]) / 2, mz = (zs[j] + zs[j + 1]) / 2;
+        if (!holes.some((h) => mx > h[0] && mx < h[2] && mz > h[1] && mz < h[3])) out.push([xs[i], zs[j], xs[i + 1], zs[j + 1]]);
+      }
+      return out;
+    };
+    const SHAFT = [ST.s0, ST.z1, ST.s1, ST.z2], STAIRHOLE = [FS.x0, FS.z1, FS.x1, FS.z3];
+    const tiled = { 3: [[0.4, 6.2, ST.x1, D - 0.4]], 4: [[FS.x0, FS.z3 + 0.15, 8.9, D - 0.4]], 5: [[9.05, 7.5, W - 0.4, D - 0.4]] };
+    const floorAt = (k, x0, z0, x1, z1, holes) => { for (const r of cutOut(x0, z0, x1, z1, holes.concat(tiled[k] || []))) floorQuad(woodB, ...r, k * F + 0.005, 2.4); };
+    for (const k in tiled) for (const t of tiled[k]) floorQuad(tileB, ...t, k * F + 0.008, 1.2);
+    floorAt(FL, FS.x0, 0.4, W - 0.4, D - 0.4, []);
+    floorAt(FL, 0.4, 6.2, ST.x1, D - 0.4, []);
+    for (const k of [4, 5]) floorAt(k, 0.4, 0.4, W - 0.4, D - 0.4, [SHAFT, STAIRHOLE]);
+    // ceilings, facing down, and the edges of the slabs round the stair
+    const ceilAt = (y, holes) => { for (const [x0, z0, x1, z1] of cutOut(0.4, 0.4, W - 0.4, D - 0.4, holes)) inn.quad([x0, y, z0], [x1, y, z0], [x1, y, z1], [x0, y, z1], CEIL, null, [0, -1, 0]); };
+    ceilAt(Y4 - 0.3, [SHAFT, STAIRHOLE]); ceilAt(Y5 - 0.3, [SHAFT, STAIRHOLE]); ceilAt(ROOF, []);
+    for (const y of [Y4, Y5]) {
+      cube(FS.x0, y - 0.3, FS.z1 - 0.02, FS.x1, y, FS.z1, CEIL);
+      cube(FS.x0, y - 0.3, FS.z3, FS.x1, y, FS.z3 + 0.02, CEIL);
+    }
+    // the beams under the roof
+    for (let z = 1.2; z < D - 0.5; z += 1.5) cube(0.4, ROOF - 0.2, z - 0.08, W - 0.4, ROOF, z + 0.08, BEAM);
 
-    // bathroom: toilet, basin with a mirror, washing machine, bath under the window
-    cube(0.45, T, 7.35, 0.85, T + 0.42, 7.8, 0xfafafa); cube(0.42, T + 0.42, 7.3, 0.62, T + 0.85, 7.85, 0xfafafa); cube(0.62, T + 0.42, 7.35, 0.92, T + 0.45, 7.8, 0xf0f0f0);
-    cube(0.42, T + 0.78, 8.45, 0.92, T + 0.9, 9.1, 0xfafafa); cube(0.42, T, 8.65, 0.6, T + 0.78, 8.9, 0xf0f0f0);
-    cube(0.41, T + 1.1, 8.5, 0.43, T + 1.85, 9.05, 0x9fb4bf); cube(0.43, T + 0.9, 8.75, 0.55, T + 0.95, 8.8, 0xb8bcc0);
-    cube(2.35, T, 9.4, 2.95, T + 0.85, 10.0, 0xf4f4f2); block(inn, 2.34, T + 0.3, 9.55, 2.35, T + 0.62, 9.85, 0x7a8a96);
-    cube(0.4, T, 10.85, 2.95, T + 0.56, D - 0.4, 0xfafafa); cube(0.5, T + 0.4, 10.95, 2.85, T + 0.565, D - 0.5, 0x9fc4d4);
-    cube(1.6, T + 0.56, D - 0.48, 1.68, T + 0.95, D - 0.42, 0xb8bcc0);
-    cube(2.9, T + 1.0, 7.6, 2.98, T + 1.05, 8.6, 0xb8bcc0); cube(2.88, T + 0.55, 7.65, 2.95, T + 1.0, 8.55, 0xe8d8a8);
-    cube(1.0, T, 7.3, 1.8, T + 0.01, 8.1, 0x6f9fb4);
-    wl(0.4, 7.3, 0.92, 7.85, 0.85); wl(0.4, 8.45, 0.92, 9.1, 0.9); wl(2.35, 9.4, 3.0, 10.0, 0.85); wl(0.4, 10.85, 3.0, D - 0.4, 0.56);
+    // the flat's stair: oak treads on white risers, a wall up the middle, half landings at the back
+    const fsN = 9, fsT = (FS.z2 - FS.z1) / fsN, fsR = F / 2 / fsN;
+    const ftPaint = (n) => (n[1] > 0 ? OAK : n[1] < 0 ? CEIL : FLAT);
+    for (const k of [FL, FL + 1]) {
+      const y0 = k * F;
+      for (let i = 0; i < fsN; i++) {
+        const ya = y0 + (i + 0.5) * fsR, yb = y0 + F / 2 + (i + 0.5) * fsR;
+        block(inn, FS.x0, Math.max(y0, ya - 0.35), FS.z1 + i * fsT, FS.m - 0.05, ya, FS.z1 + (i + 1) * fsT, ftPaint);
+        block(inn, FS.m + 0.05, yb - 0.35, FS.z2 - (i + 1) * fsT, FS.x1, yb, FS.z2 - i * fsT, ftPaint);
+      }
+      block(inn, FS.x0, y0 + F / 2 - 0.25, FS.z2, FS.x1, y0 + F / 2, FS.z3, ftPaint);
+      // handrails on the walls either side
+      rail(FS.x0 + 0.02, FS.x0 + 0.07, FS.z1, y0 + 0.9, FS.z2, y0 + F / 2 + 0.9);
+      rail(FS.x1 - 0.07, FS.x1 - 0.02, FS.z2, y0 + F / 2 + 0.9, FS.z1, y0 + F + 0.9);
+    }
+    // the walls round it, from the third floor up under the roof
+    block(inn, FS.m - 0.05, Y3, FS.z1, FS.m + 0.05, ROOF, FS.z2, FLAT);
+    block(inn, FS.x1, Y3, FS.z1, FS.x1 + 0.15, ROOF, FS.z3 + 0.15, FLAT);
+    block(inn, FS.x0, Y3, FS.z3, FS.x1, ROOF, FS.z3 + 0.15, FLAT);
+    // under its first flight on the third floor a cupboard; at the top a glass railing with an oak rail
+    cube(FS.m + 0.05, Y3, FS.z1 - 0.03, FS.x1, Y3 + F / 2 + 0.6, FS.z1, 0xe9e4da);
+    cube(FS.m + 0.6, Y3 + 0.9, FS.z1 - 0.05, FS.m + 0.64, Y3 + 1.15, FS.z1 - 0.03, 0xc9a24a);
+    glassB.quad([FS.x0, Y5, FS.z1], [FS.m, Y5, FS.z1], [FS.m, Y5 + 1.0, FS.z1], [FS.x0, Y5 + 1.0, FS.z1], 0xffffff, null, [0, 0, -1]);
+    cube(FS.x0, Y5 + 1.0, FS.z1 - 0.04, FS.m, Y5 + 1.06, FS.z1 + 0.04, OAK);
+    for (const x of [FS.x0 + 0.05, FS.m - 0.08]) cube(x, Y5, FS.z1 - 0.03, x + 0.03, Y5 + 1.0, FS.z1 + 0.03, 0x9a9ea2);
 
-    // light: lamps on the ceiling of every room
-    for (const [x, z] of [[5.8, 2.4], [6.3, 9.6], [1.7, 8.6]]) { cube(x - 0.02, T + F - 0.45, z - 0.02, x + 0.02, T + F - 0.2, z + 0.02, 0x222428); block(glowB, x - 0.18, T + F - 0.62, z - 0.18, x + 0.18, T + F - 0.45, z + 0.18, 0xfff3d8); }
+    // the walls between the rooms (the same as the walls you bump into)
+    const part = (k, along, a0, a1, t0, t1, doors, paint) => wallRun(inn, along, a0, a1, t0, t1, k * F, (k + 1) * F - 0.3, doors.map(([p, q]) => [p, q, k * F, k * F + 2.1]), paint);
+    const sides = (neg, pos) => (n) => (n[0] + n[2] < 0 ? neg : pos);
+    part(3, 'z', 0.4, FS.z1, 8.9, 9.05, [[1.2, 2.6]], sides(FLAT, FLAT));
+    part(4, 'z', 0.4, 7.35, 8.9, 9.05, [[1.0, 2.6], [4.8, 6.6]], sides(FLAT, FLAT)); part(4, 'z', 7.35, D - 0.4, 8.9, 9.05, [], sides(BATH, FLAT));
+    part(5, 'z', 0.4, 7.35, 8.9, 9.05, [[4.3, 5.2]], sides(FLAT, BED_WALL)); part(5, 'z', 7.35, D - 0.4, 8.9, 9.05, [], sides(KID2, BATH));
+    part(5, 'x', 9.05, W - 0.4, 7.35, 7.5, [[9.4, 10.3]], sides(BED_WALL, BATH));
+    for (let k = FL; k < FLOORS; k++) part(k, 'z', 6.2, D - 0.4, ST.x1, ST.x1 + 0.2, k === FL ? [[9.0, 9.9]] : [], sides(backIn(k, 1), k === 4 ? BATH : k === 5 ? KID2 : FLAT));
+    // skirting boards round the main rooms
+    for (const k of [FL, 4, 5]) {
+      const y = k * F;
+      for (const [x0, z0, x1, z1] of [[9.05, 0.4, W - 0.4, 0.42], [W - 0.42, 0.4, W - 0.4, D - 0.4], [FS.x0, 0.4, 8.9, 0.42]]) cube(x0, y, z0, x1, y + 0.08, z1, 0xfbf9f4);
+    }
+
+    /* furniture: each piece in a frame of its own, u across it, v from its front (v = 0) to its back, centred on
+       (cx, cz) at floor height y; rot turns it so its front faces 0: -z, 1: -x, 2: +z, 3: +x */
+    const frame = (cx, cz, y, rot, w, d) => {
+      const P = rot === 0 ? (u, v) => [cx - w / 2 + u, cz - d / 2 + v] : rot === 1 ? (u, v) => [cx - d / 2 + v, cz + w / 2 - u]
+        : rot === 2 ? (u, v) => [cx + w / 2 - u, cz + d / 2 - v] : (u, v) => [cx + d / 2 - v, cz - w / 2 + u];
+      const b = (u0, h0, v0, u1, h1, v1, c, B = inn) => {
+        const [ax, az] = P(u0, v0), [bx, bz] = P(u1, v1);
+        block(B, Math.min(ax, bx), y + h0, Math.min(az, bz), Math.max(ax, bx), y + h1, Math.max(az, bz), c);
+      };
+      b.solid = (h) => {
+        const ex = rot % 2 ? d / 2 : w / 2, ez = rot % 2 ? w / 2 : d / 2;
+        DRAKEN.wall(cx - ex, cz - ez, cx + ex, cz + ez, y, y + h);
+      };
+      return b;
+    };
+    const wood = (c) => shade(c, 0.8);
+    function sofa(cx, cz, y, rot, w, c) {
+      const d = 0.95, b = frame(cx, cz, y, rot, w, d);
+      b(0, 0.06, 0, w, 0.42, d, shade(c, 0.85)); b(0.18, 0.42, 0.02, w - 0.18, 0.55, d - 0.22, c);
+      b(0, 0.42, d - 0.25, w, 0.95, d, c); b(0, 0.42, 0, 0.18, 0.68, d - 0.25, c); b(w - 0.18, 0.42, 0, w, 0.68, d - 0.25, c);
+      for (const u of [0.1, w - 0.1]) b(u - 0.03, 0, 0.1, u + 0.03, 0.06, 0.16, 0x2d3236);
+      b(0.35, 0.55, d - 0.4, 0.8, 0.86, d - 0.26, 0xd9b44a); b(w - 0.8, 0.55, d - 0.4, w - 0.35, 0.86, d - 0.26, 0xc8643a);
+      b.solid(0.95);
+    }
+    function armchair(cx, cz, y, rot, c) {
+      const w = 0.85, d = 0.85, b = frame(cx, cz, y, rot, w, d);
+      b(0, 0.06, 0, w, 0.42, d, shade(c, 0.85)); b(0.14, 0.42, 0.02, w - 0.14, 0.52, d - 0.2, c);
+      b(0, 0.42, d - 0.2, w, 0.95, d, c); b(0, 0.42, 0, 0.14, 0.66, d - 0.2, c); b(w - 0.14, 0.42, 0, w, 0.66, d - 0.2, c);
+      b.solid(0.95);
+    }
+    function table(cx, cz, y, rot, w, d, h, c) {
+      const b = frame(cx, cz, y, rot, w, d);
+      b(0, h - 0.04, 0, w, h, d, c);
+      for (const [u, v] of [[0.05, 0.05], [w - 0.1, 0.05], [0.05, d - 0.1], [w - 0.1, d - 0.1]]) b(u, 0, v, u + 0.05, h - 0.04, v + 0.05, wood(c));
+      b.solid(h);
+    }
+    function chair(cx, cz, y, rot, c) {
+      const w = 0.44, d = 0.44, b = frame(cx, cz, y, rot, w, d);
+      b(0.02, 0.44, 0.02, w - 0.02, 0.48, d - 0.02, c);
+      for (const [u, v] of [[0.03, 0.03], [w - 0.06, 0.03], [0.03, d - 0.06], [w - 0.06, d - 0.06]]) b(u, 0, v, u + 0.03, 0.44, v + 0.03, c);
+      b(0.02, 0.48, d - 0.05, w - 0.02, 0.92, d - 0.02, c);
+    }
+    function bookshelf(cx, cz, y, rot, w, h) {
+      const d = 0.34, b = frame(cx, cz, y, rot, w, d), sh = shade(OAK, 0.85);
+      b(0, 0, d - 0.03, w, h, d, shade(OAK, 0.7)); b(0, 0, 0, 0.04, h, d, OAK); b(w - 0.04, 0, 0, w, h, d, OAK); b(0, h - 0.04, 0, w, h, d, OAK);
+      for (let yy = 0.05; yy < h - 0.3; yy += 0.42) {
+        b(0, yy, 0, w, yy + 0.03, d, sh);
+        let u = 0.06;
+        while (u < w - 0.1) { const t = rr(0.03, 0.07), bh = rr(0.22, 0.34); if (yy + 0.03 + bh < h - 0.05) b(u, yy + 0.03, 0.04, u + t, yy + 0.03 + bh, d - 0.05, pick([0x8c2f2a, 0x2f4f6e, 0x3f6b45, 0xd9b44a, 0xe8e2d0, 0x5a3d6e, 0x222428, 0xc8643a])); u += t + 0.006; }
+      }
+      b.solid(h);
+    }
+    function tvUnit(cx, cz, y, rot, w) {
+      const d = 0.45, b = frame(cx, cz, y, rot, w, d);
+      b(0, 0.12, 0, w, 0.5, d, 0x2d3236); b(0.05, 0, 0.05, 0.1, 0.12, 0.1, 0x1c1d20); b(w - 0.1, 0, 0.05, w - 0.05, 0.12, 0.1, 0x1c1d20);
+      b(w / 2 - 0.12, 0.5, 0.15, w / 2 + 0.12, 0.6, 0.3, 0x1c1d20);
+      b(w / 2 - 0.72, 0.6, 0.22, w / 2 + 0.72, 1.45, 0.27, 0x111214);
+      b(w / 2 - 0.69, 0.63, 0.21, w / 2 + 0.69, 1.42, 0.22, 0x1b2a3c, glowB);
+      b.solid(0.6);
+    }
+    function plant(cx, cz, y, s) {
+      cube(cx - 0.16 * s, y, cz - 0.16 * s, cx + 0.16 * s, y + 0.32 * s, cz + 0.16 * s, 0xb5603e);
+      cube(cx - 0.32 * s, y + 0.32 * s, cz - 0.32 * s, cx + 0.32 * s, y + 0.95 * s, cz + 0.32 * s, 0x3f6e36);
+      cube(cx - 0.2 * s, y + 0.95 * s, cz - 0.2 * s, cx + 0.2 * s, y + 1.3 * s, cz + 0.2 * s, 0x4f8040);
+      DRAKEN.wall(cx - 0.3 * s, cz - 0.3 * s, cx + 0.3 * s, cz + 0.3 * s, y, y + 1.2 * s);
+    }
+    const rug = (x0, z0, x1, z1, y, c1, c2) => { cube(x0, y, z0, x1, y + 0.012, z1, c1); cube(x0 + 0.25, y, z0 + 0.25, x1 - 0.25, y + 0.016, z1 - 0.25, c2); };
+    const floorLamp = (x, z, y) => { cube(x - 0.12, y, z - 0.12, x + 0.12, y + 0.03, z + 0.12, 0x2d3236); cube(x - 0.02, y, z - 0.02, x + 0.02, y + 1.5, z + 0.02, 0x2d3236); block(glowB, x - 0.2, y + 1.42, z - 0.2, x + 0.2, y + 1.72, z + 0.2, 0xfff0cc); };
+    const pendant = (x, z, y, c) => { cube(x - 0.015, y - 0.75, z - 0.015, x + 0.015, y, z + 0.015, 0x222428); block(inn, x - 0.22, y - 0.95, z - 0.22, x + 0.22, y - 0.75, z + 0.22, c); block(glowB, x - 0.17, y - 0.99, z - 0.17, x + 0.17, y - 0.95, z + 0.17, 0xfff0cc); };
+    const ceilingLamp = (x, z, y) => { cube(x - 0.02, y - 0.25, z - 0.02, x + 0.02, y, z + 0.02, 0x222428); block(glowB, x - 0.2, y - 0.42, z - 0.2, x + 0.2, y - 0.25, z + 0.2, 0xfff3d8); };
+    function bed(cx, cz, y, rot, w, len, duvet, head) {
+      const b = frame(cx, cz, y, rot, w, len + 0.08);
+      b(0, 0.12, 0, w, 0.35, len, shade(head, 0.9)); for (const [u, v] of [[0.03, 0.03], [w - 0.09, 0.03]]) b(u, 0, v, u + 0.06, 0.12, v + 0.06, 0x2d3236);
+      b(0.03, 0.35, 0.03, w - 0.03, 0.56, len - 0.03, 0xf6f4ef);
+      b(-0.01, 0.5, -0.01, w + 0.01, 0.62, len * 0.7, duvet); b(-0.02, 0.32, -0.02, w + 0.02, 0.62, 0.01, duvet);
+      const pw = w > 1.2 ? (w - 0.3) / 2 : w - 0.2;
+      for (let i = 0; i < (w > 1.2 ? 2 : 1); i++) b(0.1 + i * (pw + 0.1), 0.56, len - 0.5, 0.1 + i * (pw + 0.1) + pw, 0.72, len - 0.1, 0xffffff);
+      b(-0.05, 0, len, w + 0.05, 1.15, len + 0.08, head);
+      b.solid(0.62);
+    }
+    const bedside = (x, z, y) => { cube(x - 0.22, y, z - 0.2, x + 0.22, y + 0.5, z + 0.2, OAK); cube(x - 0.04, y + 0.5, z - 0.04, x + 0.04, y + 0.72, z + 0.04, 0x2d3236); block(glowB, x - 0.13, y + 0.72, z - 0.13, x + 0.13, y + 0.92, z + 0.13, 0xfff0cc); };
+    function wardrobe(cx, cz, y, rot, w, c) {
+      const d = 0.6, b = frame(cx, cz, y, rot, w, d), n = Math.max(2, Math.round(w / 0.5));
+      b(0, 0, 0, w, 2.15, d, c);
+      for (let i = 1; i < n; i++) b(i * w / n - 0.005, 0.05, -0.005, i * w / n + 0.005, 2.1, 0, shade(c, 0.8));
+      for (let i = 0; i < n; i++) b((i + 0.5) * w / n - 0.01, 0.95, -0.03, (i + 0.5) * w / n + 0.01, 1.25, 0, 0x9a9ea2);
+      b.solid(2.15);
+    }
+    function desk(cx, cz, y, rot, w, c) {
+      const d = 0.7, b = frame(cx, cz, y, rot, w, d);
+      b(0, 0.72, 0, w, 0.76, d, c); b(0.03, 0, 0.05, 0.08, 0.72, d - 0.05, wood(c)); b(w - 0.08, 0, 0.05, w - 0.03, 0.72, d - 0.05, wood(c));
+      b(w / 2 - 0.3, 0.76, d - 0.25, w / 2 + 0.3, 1.12, d - 0.22, 0x2d3236); b(w / 2 - 0.28, 0.79, d - 0.255, w / 2 + 0.28, 1.1, d - 0.25, 0x1b2a3c, glowB);
+      b(w / 2 - 0.25, 0.76, 0.12, w / 2 + 0.2, 0.78, 0.28, 0x2d3236);
+      b.solid(0.78);
+    }
+    function toilet(cx, cz, y, rot) {
+      const b = frame(cx, cz, y, rot, 0.4, 0.65);
+      b(0.05, 0, 0.05, 0.35, 0.42, 0.5, 0xfafafa); b(0, 0.42, 0.0, 0.4, 0.45, 0.48, 0xf0f0f0); b(0.02, 0.42, 0.45, 0.38, 0.85, 0.65, 0xfafafa);
+      b.solid(0.85);
+    }
+    function basin(cx, cz, y, rot, w) {
+      const b = frame(cx, cz, y, rot, w, 0.5);
+      b(0, 0.2, 0, w, 0.82, 0.5, 0x6f5b49); b(0, 0.82, 0, w, 0.9, 0.5, 0xfafafa);
+      b(w / 2 - 0.03, 0.9, 0.38, w / 2 + 0.03, 1.12, 0.44, 0xb8bcc0); b(0.1, 1.15, 0.47, w - 0.1, 1.95, 0.5, 0xb9c6cd);
+      b.solid(0.9);
+    }
+    function bathtub(cx, cz, y, rot) {
+      const w = 1.75, d = 0.8, b = frame(cx, cz, y, rot, w, d);
+      b(0, 0.12, 0, w, 0.58, d, 0xfafafa); b(0.08, 0.45, 0.08, w - 0.08, 0.585, d - 0.08, 0x9fc4d4);
+      for (const [u, v] of [[0.1, 0.1], [w - 0.18, 0.1], [0.1, d - 0.18], [w - 0.18, d - 0.18]]) b(u, 0, v, u + 0.08, 0.12, v + 0.08, 0xc9a24a);
+      b(w - 0.14, 0.58, d / 2 - 0.03, w - 0.08, 0.95, d / 2 + 0.03, 0xc9a24a);
+      b.solid(0.6);
+    }
+    // a walk-in shower in a corner: a raised tray, a glass screen along [ax, az]-[bx, bz] and a rain head
+    function shower(x0, z0, x1, z1, y, [ax, az, bx, bz]) {
+      cube(x0, y, z0, x1, y + 0.05, z1, 0xd9dcde);
+      glassB.quad([ax, y, az], [bx, y, bz], [bx, y + 2.0, bz], [ax, y + 2.0, az], 0xffffff, null, ax === bx ? [-1, 0, 0] : [0, 0, -1]);
+      cube(Math.min(ax, bx) - 0.02, y, Math.min(az, bz) - 0.02, Math.max(ax, bx) + 0.02, y + 0.06, Math.max(az, bz) + 0.02, 0xb8bcc0);
+      cube((x0 + x1) / 2 - 0.12, y + 2.0, (z0 + z1) / 2 - 0.12, (x0 + x1) / 2 + 0.12, y + 2.03, (z0 + z1) / 2 + 0.12, 0xb8bcc0);
+      DRAKEN.wall(Math.min(ax, bx) - 0.02, Math.min(az, bz) - 0.02, Math.max(ax, bx) + 0.02, Math.max(az, bz) + 0.02, y, y + 2.0);
+    }
+    function kakelugn(cx, cz, y) {
+      // the tiled stove of the old Stockholm flats: round, white, a cornice and a crown, brass doors
+      inn.prism(cx, cz, 0.42, y, y + 0.35, 14, 0xd8d3c8); inn.prism(cx, cz, 0.36, y + 0.35, y + 2.25, 14, 0xf2efe6, 0.36, false);
+      inn.prism(cx, cz, 0.44, y + 2.25, y + 2.4, 14, 0xe8e2d4); inn.prism(cx, cz, 0.3, y + 2.4, y + 2.7, 14, 0xf2efe6, 0.12);
+      cube(cx - 0.16, y + 0.6, cz - 0.37, cx + 0.16, y + 0.9, cz - 0.33, 0xc9a24a); cube(cx - 0.12, y + 1.25, cz - 0.37, cx + 0.12, y + 1.45, cz - 0.33, 0xc9a24a);
+      DRAKEN.wall(cx - 0.42, cz - 0.42, cx + 0.42, cz + 0.42, y, y + 2.7);
+    }
+    function piano(cx, cz, y, rot) {
+      const w = 1.5, d = 1.7, b = frame(cx, cz, y, rot, w, d), K = 0x111214;
+      b(0, 0.62, 0, w, 0.98, d * 0.55, K); b(0.15, 0.62, d * 0.55, w - 0.1, 0.98, d * 0.8, K); b(0.4, 0.62, d * 0.8, w - 0.15, 0.98, d, K);
+      b(0.05, 0.86, -0.12, w - 0.05, 0.9, 0.0, 0xf6f4ef); b(0.05, 0.9, -0.12, w - 0.05, 0.92, -0.08, K);
+      for (const [u, v] of [[0.1, 0.1], [w - 0.18, 0.1], [w / 2, d - 0.3]]) b(u, 0, v, u + 0.08, 0.62, v + 0.08, K);
+      b(0.1, 0.98, 0.3, 0.14, 1.75, 0.34, K);
+      b(0.08, 1.5, 0.3, w - 0.1, 1.53, d * 0.75, K);
+      b.solid(1.0);
+      const s = frame(cx, cz, y, rot, w, d);
+      s(w / 2 - 0.35, 0, -0.75, w / 2 + 0.35, 0.48, -0.42, K);
+    }
+    function poolTable(cx, cz, y, rot) {
+      const w = 1.45, d = 2.6, b = frame(cx, cz, y, rot, w, d);
+      b(0, 0.6, 0, w, 0.82, d, 0x4a2c1a); b(0.12, 0.82, 0.12, w - 0.12, 0.84, d - 0.12, 0x1f6b44);
+      b(0, 0.82, 0, w, 0.88, 0.12, 0x4a2c1a); b(0, 0.82, d - 0.12, w, 0.88, d, 0x4a2c1a); b(0, 0.82, 0, 0.12, 0.88, d, 0x4a2c1a); b(w - 0.12, 0.82, 0, w, 0.88, d, 0x4a2c1a);
+      for (const [u, v] of [[0.1, 0.1], [w - 0.1, 0.1], [0.1, d / 2], [w - 0.1, d / 2], [0.1, d - 0.1], [w - 0.1, d - 0.1]]) b(u - 0.05, 0.835, v - 0.05, u + 0.05, 0.845, v + 0.05, 0x111214);
+      for (const [u, v] of [[0.15, 0.15], [w - 0.3, 0.15], [0.15, d - 0.3], [w - 0.3, d - 0.3]]) b(u, 0, v, u + 0.15, 0.6, v + 0.15, 0x3a2216);
+      // the balls racked at one end and the white at the other
+      const balls = [0xf2c200, 0x1f4fae, 0xc8102e, 0x5a2a7a, 0xe46f2a, 0x1f6b44, 0x7a1414, 0x111214, 0xf2c200, 0x1f4fae];
+      let i = 0;
+      for (let r = 0; r < 4; r++) for (let c2 = 0; c2 <= r; c2++) { const u = w / 2 + (c2 - r / 2) * 0.06, v = d * 0.28 - r * 0.052; b(u - 0.028, 0.84, v - 0.028, u + 0.028, 0.896, v + 0.028, balls[i++ % balls.length]); }
+      b(w / 2 - 0.028, 0.84, d * 0.75 - 0.028, w / 2 + 0.028, 0.896, d * 0.75 + 0.028, 0xf6f4ef);
+      b.solid(0.88);
+    }
+
+    // the third floor: hall, living room with a grand piano, open kitchen and dining room, laundry behind the stairwell
+    {
+      const y = Y3;
+      rug(6.0, 0.7, 8.4, 1.9, y, 0x7a3b2e, 0xa8573f);
+      table(7.5, 0.62, y, 2, 1.2, 0.38, 0.68, OAK);
+      cube(8.86, y + 1.0, 2.75, 8.89, y + 2.0, 3.3, 0xb9c6cd);
+      // coats on a row of hooks by the door
+      cube(5.5, y + 1.62, 2.25, 5.53, y + 1.74, 3.2, OAK);
+      for (const [zz, c2] of [[2.45, 0x2f4a5a], [2.75, 0x8c3b2e], [3.0, 0xc9b48f]]) cube(5.53, y + 0.85, zz - 0.11, 5.72, y + 1.62, zz + 0.11, c2);
+      plant(8.55, 1.05, y, 1.0);
+      ceilingLamp(7.1, 1.6, Y4 - 0.3);
+      // living room
+      rug(10.0, 1.8, 13.4, 5.4, y, 0x2f4a5a, 0x46708a);
+      sofa(10.1, 3.6, y, 3, 2.6, 0x4a5d6e);
+      tvUnit(14.3, 3.6, y, 1, 2.0);
+      table(11.9, 3.6, y, 0, 0.9, 1.3, 0.42, OAK);
+      cube(11.6, y + 0.42, 3.3, 11.9, y + 0.45, 3.6, 0xe8e2d0); cube(12.1, y + 0.42, 3.8, 12.2, y + 0.55, 3.9, 0x3d6e8c);
+      armchair(11.9, 1.4, y, 2, 0xd4a23a); armchair(11.0, 5.75, y, 0, 0xd4a23a);
+      bookshelf(12.0, 0.6, y, 2, 1.3, 2.2);
+      piano(13.5, 6.5, y, 1);
+      floorLamp(9.6, 1.0, y); floorLamp(14.1, 1.0, y);
+      plant(9.5, 6.6, y, 1.2); plant(14.2, 5.0, y, 0.9);
+      for (const [x, z] of [[11.9, 2.4], [11.9, 5.2]]) ceilingLamp(x, z, Y4 - 0.3);
+      // kitchen along the back wall, an island with stools, the fridge at the end
+      cube(9.3, y, D - 1.0, W - 0.42, y + 0.86, D - 0.4, 0xf4f2ee);
+      for (let x = 9.3; x < W - 0.5; x += 0.6) cube(x + 0.02, y + 0.08, D - 1.015, Math.min(x + 0.58, W - 0.44), y + 0.84, D - 1.0, 0xe6e3dc);
+      cube(9.25, y + 0.86, D - 1.05, W - 0.42, y + 0.9, D - 0.4, 0x3a3836);
+      cube(10.2, y + 0.86, D - 0.8, 10.8, y + 0.88, D - 0.45, 0xb8bcc0); cube(10.45, y + 0.9, D - 0.5, 10.5, y + 1.2, D - 0.45, 0xb8bcc0);
+      cube(12.1, y + 0.9, D - 0.95, 12.75, y + 0.91, D - 0.45, 0x151618);
+      cube(11.3, y + 1.5, D - 0.75, 12.7, y + 2.25, D - 0.4, 0xf4f2ee);
+      cube(12.15, y + 1.9, D - 0.95, 12.7, y + 2.25, D - 0.4, 0x9a9ea2);
+      cube(W - 1.05, y, 9.6, W - 0.42, y + 2.1, D - 1.05, 0xdfe2e4); cube(W - 1.06, y + 1.15, 9.7, W - 1.05, y + 1.17, D - 1.15, 0x9a9ea2);
+      DRAKEN.wall(9.3, D - 1.0, W - 0.4, D - 0.4, y, y + 0.9); DRAKEN.wall(W - 1.05, 9.6, W - 0.4, D - 1.0, y, y + 2.1);
+      cube(10.2, y, 8.6, 13.2, y + 0.88, 9.5, 0xf4f2ee); cube(10.15, y + 0.88, 8.55, 13.25, y + 0.92, 9.55, 0x3a3836);
+      DRAKEN.wall(10.2, 8.6, 13.2, 9.5, y, y + 0.92);
+      for (const x of [10.7, 11.7, 12.7]) { cube(x - 0.18, y + 0.72, 8.1, x + 0.18, y + 0.76, 8.4, 0x2d3236); cube(x - 0.02, y, 8.23, x + 0.02, y + 0.72, 8.27, 0x2d3236); }
+      for (const x of [10.9, 12.5]) pendant(x, 9.05, Y4 - 0.3, 0x2f5a3f);
+      // dining room behind the stair
+      table(7.2, 9.3, y, 0, 2.4, 1.0, 0.75, OAK);
+      for (const x of [6.4, 7.2, 8.0]) { chair(x, 8.5, y, 2, 0x2d3236); chair(x, 10.1, y, 0, 0x2d3236); }
+      pendant(7.2, 9.3, Y4 - 0.3, 0xd9b44a);
+      cube(5.6, y, FS.z3 + 0.17, 7.5, y + 0.8, FS.z3 + 0.6, wood(OAK)); cube(5.6, y + 0.8, FS.z3 + 0.15, 7.5, y + 0.84, FS.z3 + 0.62, OAK);
+      cube(6.2, y + 0.84, FS.z3 + 0.3, 6.4, y + 1.1, FS.z3 + 0.5, 0xe8e2d0);
+      DRAKEN.wall(5.6, FS.z3 + 0.15, 7.5, FS.z3 + 0.62, y, y + 0.85);
+      // laundry and guest toilet
+      cube(0.45, y, 9.6, 1.1, y + 0.85, 10.2, 0xf4f4f2); block(inn, 0.44, y + 0.3, 9.75, 0.45, y + 0.62, 10.05, 0x7a8a96);
+      cube(0.45, y + 0.85, 9.6, 1.1, y + 1.7, 10.2, 0xf4f4f2); block(inn, 0.44, y + 1.1, 9.75, 0.45, y + 1.45, 10.05, 0x7a8a96);
+      DRAKEN.wall(0.4, 9.6, 1.1, 10.2, y, y + 1.7);
+      toilet(3.0, D - 0.75, y, 0); basin(0.7, 7.2, y, 3, 0.8);
+      cube(0.45, y + 1.4, 8.0, 0.75, y + 1.43, 9.4, 0xd8d3ca); cube(0.45, y + 1.9, 8.0, 0.75, y + 1.93, 9.4, 0xd8d3ca);
+      for (let z = 8.1; z < 9.2; z += 0.35) cube(0.48, y + 1.43, z, 0.72, y + 1.43 + rr(0.15, 0.4), z + 0.25, pick([0xe8e2d0, 0x6f9fb4, 0xf2efe8, 0xd9b44a]));
+      cube(2.3, y, 7.0, 2.9, y + 0.5, 7.5, 0xc9b48f);
+      ceilingLamp(2.8, 9.0, Y4 - 0.3);
+    }
+    // the fourth floor: the library round the lift, a study by the hall window, the family room with the billiard table,
+    // the office and the sauna
+    {
+      const y = Y4;
+      rug(0.8, 0.6, 4.9, 1.75, y, 0x5a2a2a, 0x8c3b2e);
+      bookshelf(0.58, 3.85, y, 3, 3.6, 2.7);
+      bookshelf(3.6, 5.82, y, 0, 2.9, 2.7);
+      armchair(4.65, 2.4, y, 1, 0x7a2a2a); armchair(4.65, 3.9, y, 1, 0x7a2a2a);
+      cube(4.45, y, 3.0, 4.85, y + 0.55, 3.3, OAK); floorLamp(5.0, 4.7, y);
+      ceilingLamp(1.0, 1.0, Y5 - 0.3); ceilingLamp(4.6, 3.2, Y5 - 0.3);
+      desk(7.5, 0.8, y, 2, 1.3, OAK); chair(7.5, 1.45, y, 0, 0x2d3236);
+      plant(5.9, 0.85, y, 1.0); ceilingLamp(7.1, 1.6, Y5 - 0.3);
+      // family room: a big corner sofa facing the television, the billiard table at the back, a dartboard
+      rug(9.6, 1.0, 13.8, 6.4, y, 0x3f4a3a, 0x5a6b4f);
+      sofa(10.1, 3.4, y, 3, 3.0, 0x6b6f75); sofa(11.6, 6.1, y, 0, 2.4, 0x6b6f75);
+      tvUnit(14.3, 3.4, y, 1, 2.2);
+      table(12.0, 3.4, y, 0, 1.0, 1.4, 0.4, 0x2d3236);
+      plant(14.2, 0.8, y, 1.1); floorLamp(9.5, 0.8, y);
+      poolTable(11.8, 9.3, y, 1);
+      for (const x of [11.2, 12.4]) pendant(x, 9.3, Y5 - 0.3, 0x1f6b44);
+      cube(W - 0.45, y + 0.9, 9.2, W - 0.4, y + 1.7, 10.0, 0x4a2c1a);
+      for (let i = 0; i < 4; i++) cube(W - 0.5, y + 0.2, 9.3 + i * 0.2, W - 0.46, y + 1.6, 9.33 + i * 0.2, 0xd9b48a);
+      block(inn, 9.06, y + 1.5, 9.1, 9.09, y + 1.95, 9.55, 0x1c1d20); block(inn, 9.09, y + 1.6, 9.2, 9.1, y + 1.85, 9.45, 0xc8102e);
+      for (const [x, z] of [[11.9, 2.4], [11.9, 5.0]]) ceilingLamp(x, z, Y5 - 0.3);
+      // office behind the library
+      desk(2.85, D - 1.0, y, 2, 1.6, 0xe8e2d0); chair(2.85, D - 1.75, y, 0, 0x2d3236);
+      bookshelf(0.58, 8.9, y, 3, 2.0, 2.0);
+      cube(4.4, y, 6.5, 5.2, y + 0.7, 7.0, 0x9a9ea2);
+      plant(4.9, D - 0.8, y, 0.9); ceilingLamp(2.9, 9.0, Y5 - 0.3);
+      // sauna: a cabin of spruce with benches, a glass door; a shower and a toilet beside it
+      {
+        const x0 = FS.x0 + 0.02, x1 = 7.6, z0 = 9.4, z1 = D - 0.42;
+        block(inn, x0, y, z0, x1, y + 2.15, z0 + 0.06, (n) => (n[2] < 0 ? SAUNA : shade(SAUNA, 1.08)));
+        block(inn, x1 - 0.06, y, z0, x1, y + 2.15, z1, SAUNA);
+        cube(x0, y + 2.15, z0, x1, y + 2.2, z1, shade(SAUNA, 0.9));
+        cube(x0, y, z0 + 1.0, x1 - 0.06, y + 0.45, z1, shade(SAUNA, 1.05)); cube(x0, y + 0.45, z1 - 0.7, x1 - 0.06, y + 0.95, z1, shade(SAUNA, 1.1));
+        cube(x1 - 0.55, y, z0 + 0.12, x1 - 0.1, y + 0.6, z0 + 0.55, 0x3a3d41); cube(x1 - 0.5, y + 0.6, z0 + 0.15, x1 - 0.15, y + 0.75, z0 + 0.5, 0x6a6f75);
+        block(glowB, x0 + 0.1, y + 2.0, z1 - 0.15, x0 + 0.6, y + 2.1, z1 - 0.05, 0xffc27a);
+        glassB.quad([6.1, y, z0 - 0.01], [6.9, y, z0 - 0.01], [6.9, y + 2.0, z0 - 0.01], [6.1, y + 2.0, z0 - 0.01], 0xffffff, null, [0, 0, -1]);
+        DRAKEN.wall(x0, z0, 6.1, z0 + 0.06, y, y + 2.2); DRAKEN.wall(6.9, z0, x1, z0 + 0.06, y, y + 2.2); DRAKEN.wall(x1 - 0.06, z0, x1, z1, y, y + 2.2);
+        DRAKEN.wall(x0, z0 + 1.0, x1, z1, y, y + 0.45);
+      }
+      shower(7.75, D - 1.5, 8.88, D - 0.42, y, [7.75, D - 1.5, 8.3, D - 1.5]);
+      toilet(8.55, 9.4, y, 1); basin(8.62, 10.1, y, 1, 0.6);
+      cube(6.0, y + 1.4, FS.z3 + 0.15, 7.2, y + 1.45, FS.z3 + 0.2, 0xb8bcc0); cube(6.1, y + 0.6, FS.z3 + 0.17, 7.1, y + 1.4, FS.z3 + 0.22, 0xe8d8a8);
+      ceilingLamp(8.3, 9.0, Y5 - 0.3);
+    }
+    // the top floor: the bedrooms under the beams. The big one at the front with a tiled stove, its bathroom at the back,
+    // a guest room behind the stair, a child's room behind the lift; a dressing room round the lift
+    {
+      const y = Y5;
+      wardrobe(0.72, 3.9, y, 3, 3.6, 0xf2efe8);
+      cube(3.1, y, 5.4, 4.6, y + 0.45, 5.85, 0x8c6a4a); DRAKEN.wall(3.1, 5.4, 4.6, 5.85, y, y + 0.45);
+      cube(5.25, y + 0.3, 2.2, 5.29, y + 2.0, 3.2, 0xb9c6cd);
+      rug(0.8, 0.6, 4.9, 1.75, y, 0x8c7a5a, 0xb59e78);
+      ceilingLamp(1.0, 1.0, ROOF - 0.2); ceilingLamp(4.6, 3.2, ROOF - 0.2);
+      table(7.5, 0.62, y, 2, 1.2, 0.38, 0.85, OAK); plant(5.95, 0.85, y, 1.0); ceilingLamp(7.1, 1.6, ROOF - 0.2);
+      // the master bedroom
+      rug(11.3, 2.1, 14.5, 5.7, y, 0xd8cfb8, 0xe9e2cf);
+      bed(13.45, 3.9, y, 1, 1.8, 2.1, 0x6f8fa8, 0x4a5d6e);
+      bedside(14.3, 2.55, y); bedside(14.3, 5.25, y);
+      kakelugn(9.6, 6.75, y);
+      armchair(10.2, 1.2, y, 2, 0xc8643a); floorLamp(9.5, 0.75, y);
+      wardrobe(11.9, 6.95, y, 0, 2.4, 0xf2efe8);
+      cube(12.4, y, 0.45, 14.2, y + 0.68, 0.9, OAK); DRAKEN.wall(12.4, 0.45, 14.2, 0.9, y, y + 0.68);
+      ceilingLamp(12.2, 3.9, ROOF - 0.2);
+      // its bathroom: a free-standing bath under the window, two basins, a walk-in shower
+      bathtub(13.5, D - 0.85, y, 2);
+      basin(10.95, 7.85, y, 2, 0.8); basin(11.95, 7.85, y, 2, 0.8);
+      shower(13.3, 7.55, W - 0.42, 9.0, y, [13.3, 7.55, 13.3, 9.0]);
+      toilet(9.45, D - 0.75, y, 0);
+      cube(9.1, y + 1.0, 9.0, 9.14, y + 1.04, 10.2, 0xb8bcc0); cube(9.12, y + 0.4, 9.1, 9.17, y + 1.0, 10.1, 0xf2efe8);
+      ceilingLamp(11.8, 9.6, ROOF - 0.2);
+      // the guest room
+      bed(6.56, 9.9, y, 3, 1.4, 2.0, 0xc8a2a2, 0x8c6a4a);
+      bedside(5.85, 8.75, y);
+      wardrobe(8.55, 10.4, y, 1, 1.6, 0xe8e2d0);
+      ceilingLamp(7.2, 9.5, ROOF - 0.2);
+      // the child's room: a bed with a striped cover, a desk under the window, a toy chest and a rug with a road on it
+      bed(0.9, 8.6, y, 0, 0.9, 2.0, 0x2f6fdb, 0xd9b44a);
+      desk(4.4, D - 0.8, y, 2, 1.2, 0xe8e2d0); chair(4.4, D - 1.4, y, 0, 0xc8102e);
+      cube(2.3, y, 6.45, 3.3, y + 0.5, 6.95, 0xc8102e); cube(2.3, y + 0.5, 6.45, 3.3, y + 0.55, 6.95, 0xf2c200);
+      DRAKEN.wall(2.3, 6.45, 3.3, 6.95, y, y + 0.55);
+      rug(2.0, 8.0, 4.2, 10.2, y, 0x3f6b45, 0x5a8a5a);
+      cube(2.3, y, 9.0, 3.9, y + 0.018, 9.2, 0x4a4f54);
+      for (const [x, z, c2] of [[2.6, 8.6, 0xc8102e], [3.4, 9.6, 0x1f4fae]]) cube(x, y, z, x + 0.2, y + 0.1, z + 0.12, c2);
+      cube(0.42, y + 1.3, 6.8, 0.44, y + 2.0, 7.6, 0x2f6fdb);
+      ceilingLamp(2.8, 9.0, ROOF - 0.2);
+    }
 
     const woodTex = canvasTex(256, 256, (g, w, h) => {
       const n = 8, ph = h / n;
@@ -3339,17 +3810,102 @@ body.touch .tk-sign .key { display: none; }
       g.fillStyle = '#a7a6a0'; g.fillRect(0, 0, w, w);
       for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) { g.fillStyle = (x + y) % 2 ? '#ecebe6' : '#3d4146'; g.fillRect(x * 32 + 1, y * 32 + 1, 30, 30); }
     }, true);
-    const inMat = std({ vertexColors: true, roughness: 0.82, envMapIntensity: 0.75 });
-    for (const [B, mat, cast] of [[ext, facadeMat, true], [ext.solidB, solidMat, true], [inn, inMat, true], [woodB, std({ map: woodTex, roughness: 0.5, envMapIntensity: 0.75 }), false],
-      [tileB, std({ map: tileTex, roughness: 0.25, envMapIntensity: 0.75 }), false], [glowB, new THREE.MeshBasicMaterial({ vertexColors: true }), false],
-      [glassB, std({ color: 0xcfe3ec, transparent: true, opacity: 0.16, roughness: 0.03, side: THREE.DoubleSide, depthWrite: false }), false]]) {
+    const liftMat = std({ vertexColors: true, roughness: 0.45, metalness: 0.6 });
+    for (const [B, mat, cast] of [[ext, facadeMat, true], [ext.solidB, solidMat, true], [inn, inMat, true], [liftB, liftMat, true], [woodB, std({ map: woodTex, roughness: 0.5, envMapIntensity: 0.75 }), false],
+      [tileB, std({ map: tileTex, roughness: 0.25, envMapIntensity: 0.75 }), false], [glowB, glowMat, false], [glassB, glassMatH, false]]) {
       if (B.empty) continue;
       const m = new THREE.Mesh(B.build(), mat);
       m.castShadow = cast; m.receiveShadow = B !== glowB && B !== glassB;
       root.add(m);
     }
   }
-  // doors swing open as you come up to them and shut behind you; the first time you step into the flat, it says so
+  // doors swing open as you come up to them and shut behind you; the lift comes when called, takes you where you want and
+  // opens its doors; the first time you step into the flat, it says so
+  const LIFT_NAMES = ['Gatan', '1 tr', '2 tr', 'Lägenheten', 'Biblioteket', 'Sovrummen'];
+  function liftWhere() {
+    const L = DRAKEN.lift, { ST, CAB, F } = DRAKEN, [lx, lz] = DRAKEN.toLocal(player.x, player.z), free = !driving && !(stop && stop.locked);
+    const inCab = free && lx > CAB.x0 - 0.05 && lx < CAB.x1 + 0.05 && lz > CAB.z0 - 0.15 && lz < CAB.z1 + 0.05 && Math.abs(player.y - L.y) < 1;
+    const k = Math.round(player.y / F), onFloor = Math.abs(player.y - k * F) < 0.35;
+    const atDoor = free && !inCab && onFloor && k >= 0 && k < DRAKEN.FLOORS && lx > CAB.d0 - 0.8 && lx < CAB.d1 + 0.8 && lz > ST.z0 && lz < ST.z1 + 0.05;
+    const inDoorway = free && lx > CAB.d0 - 0.05 && lx < CAB.d1 + 0.05 && lz > ST.z1 - 0.4 && lz < CAB.z0 + 0.35 && Math.abs(player.y - L.y) < 1;
+    return { inCab, atDoor: atDoor ? k : -1, inDoorway };
+  }
+  const LIFT = {
+    where: null,
+    // send the lift to a floor (pressed in the cab or called from a landing)
+    go(k) {
+      const L = DRAKEN.lift;
+      if (k < 0 || k >= DRAKEN.FLOORS) return false;
+      if (L.phase === 'moving') { if (k !== L.want) toast('Hissen är på väg till ' + LIFT_NAMES[L.want].toLowerCase() + '.'); return true; }
+      L.want = k;
+      if (k === L.floor && (L.phase === 'idle' || L.phase === 'closing')) L.phase = 'opening';
+      if (k !== L.floor && L.phase === 'open') L.phase = 'closing';
+      return true;
+    },
+    // E: in the cab up to the flat (or down to the street from it); on a landing, call it
+    use() {
+      const w = LIFT.where;
+      if (!w) return false;
+      const L = DRAKEN.lift;
+      if (w.inCab) { LIFT.go(L.floor < DRAKEN.FL ? DRAKEN.FL : 0); return true; }
+      if (w.atDoor >= 0 && !(L.floor === w.atDoor && L.phase !== 'moving' && L.doors > 0.5)) { LIFT.go(w.atDoor); toast(L.floor === w.atDoor ? 'Hissen öppnar.' : 'Hissen är på väg.'); return true; }
+      return false;
+    },
+    digit(n) { if (!LIFT.where || !LIFT.where.inCab) return false; return LIFT.go(n); },
+    prompt() {
+      const w = LIFT.where, L = DRAKEN.lift;
+      if (!w) return null;
+      if (w.inCab) return L.phase === 'moving' ? null : 'Hissen: ' + (L.floor < DRAKEN.FL ? 'upp till lägenheten' : 'ner till gatan') + ' (0–5 väljer våning)';
+      if (w.atDoor >= 0 && !(L.floor === w.atDoor && L.phase !== 'moving' && L.doors > 0.5)) return L.phase === 'moving' || L.want === w.atDoor ? null : 'Ring på hissen';
+      return null;
+    }
+  };
+  function updateLift(dt) {
+    const L = DRAKEN.lift, { F, FLOORS, liftParts: P, liftDoors } = DRAKEN, w = LIFT.where = liftWhere();
+    switch (L.phase) {
+      case 'idle':
+        if (L.want !== null && L.want !== L.floor) { L.phase = 'moving'; liftSound('start'); }
+        else if (L.want === L.floor || w.atDoor === L.floor || w.inCab) { L.want = null; L.phase = 'opening'; }
+        break;
+      case 'opening':
+        L.doors = Math.min(1, L.doors + dt * 1.3);
+        if (L.doors >= 1) { L.phase = 'open'; L.t = 0; }
+        break;
+      case 'open':
+        L.t += dt;
+        if (w.inDoorway) L.t = 0;
+        if ((L.want !== null && L.want !== L.floor && !w.inDoorway) || (L.t > 5 && w.atDoor !== L.floor && !w.inCab)) L.phase = 'closing';
+        break;
+      case 'closing':
+        if (w.inDoorway) { L.phase = 'opening'; break; }
+        L.doors = Math.max(0, L.doors - dt * 1.1);
+        if (L.doors <= 0) L.phase = 'idle';
+        break;
+      case 'moving': {
+        const target = L.want * F, d = target - L.y;
+        L.v = Math.sign(d) * Math.min(Math.abs(L.v) + dt * 1.2, 1.9, Math.sqrt(2 * 1.0 * Math.abs(d)) + 0.05);
+        if (Math.abs(d) <= Math.abs(L.v) * dt + 1e-3) { L.y = target; L.v = 0; L.floor = L.want; L.want = null; L.phase = 'opening'; liftSound('ding'); }
+        else L.y += L.v * dt;
+        break;
+      }
+    }
+    for (let k = 0; k < FLOORS; k++) liftDoors[k].off = L.phase !== 'moving' && k === L.floor && L.doors > 0.8;
+    // the parts that move
+    const o = L.doors * (P.lw - 0.04);
+    P.cab.position.y = L.y;
+    P.cabLeaves[0].position.x = DRAKEN.CAB.d0 - o; P.cabLeaves[1].position.x = DRAKEN.CAB.d0 + P.lw + o;
+    P.landLeaves.forEach((pair, k) => { const ok = k === L.floor && L.phase !== 'moving' ? o : 0; pair[0].position.x = DRAKEN.CAB.d0 - ok; pair[1].position.x = DRAKEN.CAB.d0 + P.lw + ok; });
+    const cx = (DRAKEN.ST.s0 + DRAKEN.ST.s1) / 2, top = 6 * F - 0.65, cwY = top - 1.2 - L.y * 0.92;
+    P.cw.position.set(cx, cwY, 4.0);
+    P.cable.position.set(cx, (L.y + 2.35 + top) / 2, 2.7); P.cable.scale.y = Math.max(0.1, top - L.y - 2.35);
+  }
+  function liftSound(kind) {
+    if (!audio || muted) return;
+    const s = placeSound(...DRAKEN.toWorld((DRAKEN.ST.s0 + DRAKEN.ST.s1) / 2, 2.7), 30), t = audio.ctx.currentTime;
+    if (s.level < 0.02) return;
+    if (kind === 'ding') { tone(t, 'sine', 1318, 1318, 0.9, 0.07 * s.level, s.pan); tone(t + 0.32, 'sine', 1047, 1047, 1.2, 0.07 * s.level, s.pan); }
+    else noiseBurst(t, 0.25, 0.08 * s.level, 'lowpass', 260, 1, s.pan);
+  }
   function updateDraken(dt) {
     const near = !driving, [lx, lz] = DRAKEN.toLocal(player.x, player.z);
     for (const d of DRAKEN.doors) {
@@ -3357,9 +3913,22 @@ body.touch .tk-sign .key { display: none; }
       d.open += clamp(want - d.open, -dt * 1.6, dt * 2.2);
       d.pivot.rotation.y = d.rot0 + d.swing * (1 - (1 - d.open) * (1 - d.open));
     }
-    if (near && !DRAKEN.home && player.y > DRAKEN.TOP - 0.3 && lx > 3.0 && lx < DRAKEN.W && lz > 0 && lz < DRAKEN.D) {
+    updateLift(dt);
+    const { F, FL, ST, W, D } = DRAKEN;
+    const inFlat = near && !(LIFT.where && LIFT.where.inCab) && lx > 0 && lx < W && lz > 0 && lz < D && player.y > FL * F - 0.3 && (player.y > 4 * F - 0.3 || lx > ST.x1 + 0.1 || lz > ST.z3 + 0.1);
+    if (inFlat && !DRAKEN.home) {
       DRAKEN.home = true;
-      toast('Lägenheten högst upp i det gula huset på Drakens gränd.');
+      toast('Din takvåning i tre plan högst upp i det gula huset på Drakens gränd. Sovrummen ligger högst upp.');
+    }
+    // the lift's buttons on the screen while you ride it
+    const show = !!(LIFT.where && LIFT.where.inCab);
+    if (show !== !el.liftPanel.hidden) el.liftPanel.hidden = !show;
+    if (show) {
+      const L = DRAKEN.lift, at = Math.round(L.y / F), key = at + ':' + L.want;
+      if (key !== el.liftPanel.dataset.k) {
+        el.liftPanel.dataset.k = key;
+        for (const b of el.liftPanel.querySelectorAll('button')) { const k = Number(b.dataset.floor); b.classList.toggle('at', k === at); b.classList.toggle('want', k === L.want); }
+      }
     }
   }
   function groundMesh(B, mat, offset) {
@@ -3666,7 +4235,7 @@ body.touch .tk-sign .key { display: none; }
   //   crown: [boot, bonnet, roof] camber; glass: where the side windows run; pillars: [z, width] of the B/C pillars
   //   head/tail/grille/intake: lamp and opening bands; y < 0 means below the waist line, y > 0 is height above the road
   const MODELS = [
-    { id: 'halvkombi', name: 'VW Golf', kind: 'Halvkombi', def: 'Golfen', W: 1.79, L: 4.28, R: 0.32, wb: 2.63, max: 41, accel: 9, brake: 24, rev: 9, mass: 1.0, grip: 1.0,
+    { id: 'halvkombi', name: 'VW Golf', kind: 'Halvkombi', def: 'Golfen', W: 1.79, L: 4.28, R: 0.32, wb: 2.63, max: 41, zero: [100, 8.5], brake: 24, rev: 9, mass: 1.0, grip: 1.0,
       colors: [0xc8102e, 0x1f4f8f, 0xeeeeea, 0x5b6066, 0x111316], gears: 5, idle: 850, red: 6300, eng: 'i4', rim: 'alloy',
       shape: {
         sill: [[-2.14, 0.44], [-1.92, 0.33], [-1.6, 0.29], [1.6, 0.29], [1.9, 0.31], [2.14, 0.4]],
@@ -3676,7 +4245,7 @@ body.touch .tk-sign .key { display: none; }
         doors: [1.12, -0.12, -1.25], head: { y: [-0.15, -0.05], x: 0.32, d: 0.32 }, grille: { y: [-0.13, -0.07], x: 0.32, d: 0.2 },
         intake: { y: [0.36, 0.5], x: 0.55, d: 0.15 }, tail: { y: [-0.14, -0.02], x: 0.45, d: 0.28, rev: [0.45, 0.53] }, plate: [0.47, 0.6]
       } },
-    { id: 'sedan', name: 'Tesla Model 3', kind: 'Elbil', def: 'Teslan', ev: true, W: 1.85, L: 4.69, R: 0.34, wb: 2.875, max: 47, accel: 11.5, brake: 26, rev: 9, mass: 1.3, grip: 1.0,
+    { id: 'sedan', name: 'Tesla Model 3', kind: 'Elbil', def: 'Teslan', ev: true, W: 1.85, L: 4.69, R: 0.34, wb: 2.875, max: 47, zero: [100, 6.1], brake: 26, rev: 9, mass: 1.3, grip: 1.0,
       colors: [0xf2f2f0, 0x0e0f11, 0x4a4f55, 0x1c3f7a, 0xa3121c], gears: 1, idle: 0, red: 16000, eng: 'ev', rim: 'aero',
       shape: {
         sill: [[-2.345, 0.46], [-2.1, 0.33], [-1.8, 0.28], [1.8, 0.28], [2.1, 0.3], [2.345, 0.38]],
@@ -3687,7 +4256,7 @@ body.touch .tk-sign .key { display: none; }
         head: { y: [-0.09, -0.035], x: 0.5, d: 0.3 }, intake: { y: [0.36, 0.45], x: 0.42, d: 0.12 },
         tail: { y: [-0.12, -0.03], x: 0.38, d: 0.32, rev: [0.38, 0.46] }, plate: [0.45, 0.66]
       } },
-    { id: 'kombi', name: 'Volvo V60', kind: 'Kombi', def: 'Volvon', W: 1.85, L: 4.76, R: 0.35, wb: 2.87, max: 44, accel: 9.5, brake: 24, rev: 9, mass: 1.45, grip: 1.0,
+    { id: 'kombi', name: 'Volvo V60', kind: 'Kombi', def: 'Volvon', W: 1.85, L: 4.76, R: 0.35, wb: 2.87, max: 44, zero: [100, 7.6], brake: 24, rev: 9, mass: 1.45, grip: 1.0,
       colors: [0x3d5a80, 0xeeeeea, 0x111316, 0x5d6266, 0x8e1b22], gears: 5, idle: 800, red: 6100, eng: 'i5', rim: 'alloy',
       shape: {
         sill: [[-2.38, 0.46], [-2.15, 0.33], [-1.85, 0.3], [1.8, 0.3], [2.1, 0.32], [2.38, 0.4]],
@@ -3698,7 +4267,7 @@ body.touch .tk-sign .key { display: none; }
         intake: { y: [0.38, 0.47], x: 0.6, d: 0.15 }, tail: { y: [-0.2, -0.02], x: 0.55, d: 0.2, up: 0.3, rev: [0.55, 0.63] },
         rails: true, iron: true, plate: [0.45, 0.66]
       } },
-    { id: 'taxi', name: 'Taxi', kind: 'Toyota Prius', def: 'taxin', W: 1.76, L: 4.54, R: 0.33, wb: 2.7, max: 47, accel: 10.5, brake: 26, rev: 9, mass: 1.35, grip: 1.0,
+    { id: 'taxi', name: 'Taxi', kind: 'Toyota Prius', def: 'taxin', W: 1.76, L: 4.54, R: 0.33, wb: 2.7, max: 47, zero: [100, 10.6], brake: 26, rev: 9, mass: 1.35, grip: 1.0,
       colors: [0x111316, 0xeeeeea, 0xb9bec4, 0x2f3338], gears: 6, idle: 750, red: 5800, eng: 'i4', rim: 'aero',
       shape: {
         sill: [[-2.27, 0.46], [-2.05, 0.33], [-1.75, 0.29], [1.7, 0.29], [2.0, 0.31], [2.27, 0.37]],
@@ -3708,7 +4277,7 @@ body.touch .tk-sign .key { display: none; }
         doors: [1.22, -0.35, -1.48], head: { y: [-0.1, -0.03], x: 0.45, d: 0.42 }, intake: { y: [0.34, 0.5], x: 0.5, d: 0.14 },
         tail: { y: [-0.12, -0.02], x: 0.3, d: 0.3, rev: [0.3, 0.38] }, plate: [0.43, 0.62], taxi: true
       } },
-    { id: 'suv', name: 'Volvo XC90', kind: 'SUV', def: 'XC90:n', W: 2.0, L: 4.95, R: 0.4, wb: 2.98, max: 45, accel: 9.5, brake: 24, rev: 9, mass: 2.0, grip: 0.95,
+    { id: 'suv', name: 'Volvo XC90', kind: 'SUV', def: 'XC90:n', W: 2.0, L: 4.95, R: 0.4, wb: 2.98, max: 45, zero: [100, 7.8], brake: 24, rev: 9, mass: 2.0, grip: 0.95,
       colors: [0x111316, 0xeeeeea, 0x4d5a52, 0x3d5a80, 0xb7b8b4], gears: 6, idle: 750, red: 4600, eng: 'diesel', rim: 'alloy',
       shape: {
         sill: [[-2.475, 0.62], [-2.25, 0.47], [-1.95, 0.43], [1.9, 0.43], [2.2, 0.47], [2.475, 0.56]],
@@ -3719,7 +4288,7 @@ body.touch .tk-sign .key { display: none; }
         intake: { y: [0.5, 0.6], x: 0.65, d: 0.15 }, tail: { y: [-0.22, -0.02], x: 0.62, d: 0.2, up: 0.4, rev: [0.62, 0.7] },
         cladding: 0.56, rails: true, iron: true, plate: [0.68, 0.8]
       } },
-    { id: 'skapbil', name: 'Mercedes Sprinter', kind: 'Skåpbil', def: 'Sprintern', W: 2.02, L: 5.9, R: 0.38, wb: 3.66, max: 36, accel: 7, brake: 20, rev: 7, mass: 2.3, grip: 0.9,
+    { id: 'skapbil', name: 'Mercedes Sprinter', kind: 'Skåpbil', def: 'Sprintern', W: 2.02, L: 5.9, R: 0.38, wb: 3.66, max: 36, zero: [100, 13.5], brake: 20, rev: 7, mass: 2.3, grip: 0.9,
       colors: [0xf1f1ef, 0xd9dde0, 0x2b4f86], gears: 6, idle: 750, red: 4200, eng: 'diesel', rim: 'steel',
       shape: {
         sill: [[-2.95, 0.55], [-2.8, 0.42], [-2.4, 0.4], [2.3, 0.4], [2.7, 0.43], [2.95, 0.5]],
@@ -3730,7 +4299,7 @@ body.touch .tk-sign .key { display: none; }
         intake: { y: [0.44, 0.56], x: 1.0, d: 0.2 }, tail: { y: [0.62, -0.04], x: 0.8, d: 0.1, up: 0.32, rev: [0.8, 0.86] },
         rearWin: { d: 0.1, y: [1.5, 2.05], x: [0.08, 0.86] }, glassLevels: [1.5, 2.05], cladding: 0.6, plate: [0.5, 0.62]
       } },
-    { id: 'buss', name: 'SL-buss', kind: 'Stadsbuss', def: 'bussen', W: 2.55, L: 12, R: 0.5, wb: 6.2, max: 25, accel: 4, brake: 14, rev: 5, mass: 6, grip: 0.85,
+    { id: 'buss', name: 'SL-buss', kind: 'Stadsbuss', def: 'bussen', W: 2.55, L: 12, R: 0.5, wb: 6.2, max: 25, zero: [50, 12], brake: 14, rev: 5, mass: 6, grip: 0.85,
       colors: [0xc8102e, 0x1f5fae], bus: true, gears: 4, idle: 600, red: 2300, eng: 'bus', rim: 'steel',
       shape: {
         sill: [[-6, 0.5], [-5.85, 0.36], [5.8, 0.33], [6, 0.42]], belt: [[-6, 1.1], [-5.9, 1.16], [5.6, 1.15], [5.95, 1.0], [6, 0.92]],
@@ -3741,7 +4310,7 @@ body.touch .tk-sign .key { display: none; }
         glassLevels: [2.0, 2.56], head: { y: [0.62, 0.8], x: 0.75, d: 0.25 }, tail: { y: [0.72, -0.04], x: 0.95, d: 0.2, up: 0.6, rev: [0.95, 1.05] },
         plate: [0.55, 0.62], roofPack: true
       } },
-    { id: 'sport', name: 'Porsche 911', kind: 'Sportbil', def: 'Porschen', sport: true, rearEngine: true, W: 1.85, L: 4.52, R: 0.35, wb: 2.45, max: 70, accel: 18, brake: 32, rev: 10, mass: 1.25, grip: 1.15,
+    { id: 'sport', name: 'Porsche 911', kind: 'Sportbil', def: 'Porschen', sport: true, rearEngine: true, W: 1.85, L: 4.52, R: 0.35, wb: 2.45, max: 70, zero: [100, 4.2], brake: 32, rev: 10, mass: 1.25, grip: 1.15,
       colors: [0xf2c80f, 0xd0121b, 0xb5b8bb, 0x1f3d8f, 0xf06a14], gears: 6, idle: 950, red: 8000, eng: 'flat6', rim: 'sport',
       shape: {
         sill: [[-2.26, 0.42], [-2.05, 0.28], [-1.65, 0.24], [1.55, 0.24], [1.95, 0.26], [2.26, 0.32]],
@@ -3751,7 +4320,7 @@ body.touch .tk-sign .key { display: none; }
         doors: [0.9, -0.55], intake: { y: [0.28, 0.42], x: 0.85, d: 0.12 }, tail: { y: [-0.1, -0.045], x: 0, d: 0.36, rev: [0.22, 0.3] },
         louvre: { z: [-2.0, -1.82], x: 0.42 }, diffuser: 0.4, lamps: [{ type: 'round', x: 0.6, z: 1.93, r: 0.115, tilt: 0.8 }], plate: [0.42, 0.55]
       } },
-    { id: 'superbil', name: 'Lamborghini Huracán', kind: 'Superbil', def: 'Lamborghinin', sport: true, rearEngine: true, W: 1.93, L: 4.52, R: 0.35, wb: 2.62, max: 86, accel: 24, brake: 36, rev: 10, mass: 1.3, grip: 1.25,
+    { id: 'superbil', name: 'Lamborghini Huracán', kind: 'Superbil', def: 'Lamborghinin', sport: true, rearEngine: true, W: 1.93, L: 4.52, R: 0.35, wb: 2.62, max: 86, zero: [100, 3.2], brake: 36, rev: 10, mass: 1.3, grip: 1.25,
       colors: [0x7bd23a, 0xe8e8e8, 0xf06a14, 0xf2c80f, 0x6b2bd2], gears: 7, idle: 1050, red: 8800, eng: 'v10', rim: 'black',
       shape: {
         sill: [[-2.26, 0.4], [-2.05, 0.25], [-1.7, 0.2], [1.7, 0.2], [2.0, 0.21], [2.26, 0.25]],
@@ -3762,7 +4331,7 @@ body.touch .tk-sign .key { display: none; }
         sideIntake: { z: [-1.05, -0.5], y: [0.46, 0.78] }, tail: { y: [-0.12, -0.05], x: 0.3, d: 0.25, rev: [0.3, 0.38] },
         diffuser: 0.5, wing: true, plate: [0.33, 0.55]
       } },
-    { id: 'muskel', name: 'Ford Mustang', kind: 'Muskelbil', def: 'Mustangen', sport: true, W: 1.92, L: 4.79, R: 0.36, wb: 2.72, max: 66, accel: 19, brake: 28, rev: 9, mass: 1.55, grip: 1.0,
+    { id: 'muskel', name: 'Ford Mustang', kind: 'Muskelbil', def: 'Mustangen', sport: true, W: 1.92, L: 4.79, R: 0.36, wb: 2.72, max: 66, zero: [100, 4.6], brake: 28, rev: 9, mass: 1.55, grip: 1.0,
       colors: [0x1b3f8f, 0x111316, 0xa31919, 0xeeeeea, 0xf2c80f], gears: 6, idle: 700, red: 6600, eng: 'v8', rim: 'black',
       shape: {
         sill: [[-2.395, 0.46], [-2.15, 0.31], [-1.8, 0.28], [1.8, 0.28], [2.1, 0.31], [2.395, 0.37]],
@@ -3774,7 +4343,7 @@ body.touch .tk-sign .key { display: none; }
         lamps: [{ type: 'bars', xs: [0.48, 0.6, 0.72], w: 0.075, y: [-0.15, -0.04] }], stripes: [0.1, 0.25], plate: [0.42, 0.6]
       } },
     // the Swedish classics: the boxy Volvo 240 estate (1974–93) and the Saab 900 Turbo with its wrap-round windscreen
-    { id: 'v240', name: 'Volvo 240', kind: 'Klassisk kombi', def: 'Volvo 240:n', W: 1.71, L: 4.79, R: 0.31, wb: 2.64, max: 47, accel: 7.5, brake: 21, rev: 8, mass: 1.35, grip: 0.92,
+    { id: 'v240', name: 'Volvo 240', kind: 'Klassisk kombi', def: 'Volvo 240:n', W: 1.71, L: 4.79, R: 0.31, wb: 2.64, max: 47, zero: [100, 13.5], brake: 21, rev: 8, mass: 1.35, grip: 0.92,
       colors: [0x7a1f22, 0x2f4a6b, 0xd9d4c6, 0x1d1f22, 0x5f6a4e], gears: 4, idle: 800, red: 5800, eng: 'i4', rim: 'alloy', classic: true,
       shape: {
         sill: [[-2.395, 0.48], [-2.25, 0.34], [-1.95, 0.31], [1.95, 0.31], [2.25, 0.33], [2.395, 0.44]],
@@ -3785,7 +4354,7 @@ body.touch .tk-sign .key { display: none; }
         intake: { y: [0.33, 0.45], x: 0.8, d: 0.1 }, tail: { y: [-0.42, -0.03], x: 0.6, d: 0.12, up: 0.4, rev: [0.6, 0.625] },
         cladding: 0.44, rails: true, iron: true, plate: [0.45, 0.62]
       } },
-    { id: 'saab', name: 'Saab 900 Turbo', kind: 'Klassisk halvkombi', def: 'Saaben', W: 1.69, L: 4.74, R: 0.31, wb: 2.52, max: 55, accel: 11, brake: 23, rev: 9, mass: 1.25, grip: 1.0,
+    { id: 'saab', name: 'Saab 900 Turbo', kind: 'Klassisk halvkombi', def: 'Saaben', W: 1.69, L: 4.74, R: 0.31, wb: 2.52, max: 55, zero: [100, 8.5], brake: 23, rev: 9, mass: 1.25, grip: 1.0,
       colors: [0x9b1b1b, 0x141517, 0xa8adb2, 0xe9e6dc, 0x274a3a], gears: 5, idle: 850, red: 6000, eng: 'i4t', rim: 'aero', classic: true,
       shape: {
         sill: [[-2.37, 0.45], [-2.15, 0.33], [-1.85, 0.29], [1.8, 0.29], [2.1, 0.31], [2.37, 0.38]],
@@ -3796,7 +4365,7 @@ body.touch .tk-sign .key { display: none; }
         intake: { y: [0.33, 0.45], x: 0.6, d: 0.15 }, tail: { y: [-0.16, -0.03], x: 0.4, d: 0.25, rev: [0.4, 0.48] }, plate: [0.42, 0.6]
       } },
     // Polestar 2, the electric fastback from Göteborg, with its light bar across the tail
-    { id: 'polestar', name: 'Polestar 2', kind: 'Elbil', def: 'Polestaren', ev: true, W: 1.86, L: 4.61, R: 0.35, wb: 2.735, max: 57, accel: 13.5, brake: 28, rev: 9, mass: 1.6, grip: 1.05,
+    { id: 'polestar', name: 'Polestar 2', kind: 'Elbil', def: 'Polestaren', ev: true, W: 1.86, L: 4.61, R: 0.35, wb: 2.735, max: 57, zero: [100, 4.7], brake: 28, rev: 9, mass: 1.6, grip: 1.05,
       colors: [0xe9ecec, 0x5a5f63, 0x101113, 0x1c2a44, 0xb4b6b3], gears: 1, idle: 0, red: 16000, eng: 'ev', rim: 'aero',
       shape: {
         sill: [[-2.305, 0.5], [-2.05, 0.37], [-1.75, 0.33], [1.7, 0.33], [2.0, 0.35], [2.305, 0.44]],
@@ -3808,7 +4377,7 @@ body.touch .tk-sign .key { display: none; }
         tail: { y: [-0.1, -0.04], x: 0, d: 0.32, rev: [0.26, 0.33] }, cladding: 0.47, plate: [0.47, 0.68]
       } },
     // Koenigsegg Jesko, the hypercar from Ängelholm: the fastest car in town by far
-    { id: 'jesko', name: 'Koenigsegg Jesko', kind: 'Hyperbil', def: 'Koenigseggen', sport: true, rearEngine: true, W: 2.03, L: 4.61, R: 0.36, wb: 2.7, max: 105, accel: 27, brake: 40, rev: 10, mass: 1.4, grip: 1.32,
+    { id: 'jesko', name: 'Koenigsegg Jesko', kind: 'Hyperbil', def: 'Koenigseggen', sport: true, rearEngine: true, W: 2.03, L: 4.61, R: 0.36, wb: 2.7, max: 105, zero: [100, 2.5], brake: 40, rev: 10, mass: 1.4, grip: 1.32,
       colors: [0xf2f2f0, 0xff6a13, 0x1d4fd8, 0x111316, 0x8a1b1b], gears: 9, idle: 1000, red: 8500, eng: 'v8', rim: 'black',
       shape: {
         sill: [[-2.305, 0.38], [-2.1, 0.24], [-1.75, 0.19], [1.75, 0.19], [2.05, 0.2], [2.305, 0.24]],
@@ -3819,7 +4388,7 @@ body.touch .tk-sign .key { display: none; }
         sideIntake: { z: [-1.2, -0.55], y: [0.42, 0.78] }, tail: { y: [-0.1, -0.04], x: 0.25, d: 0.25, rev: [0.25, 0.32] },
         diffuser: 0.55, wing: true, plate: [0.32, 0.55]
       } },
-    { id: 'polis', name: 'Polisbil', kind: 'Volvo V90', def: 'polisbilen', police: true, W: 1.88, L: 4.94, R: 0.36, wb: 2.94, max: 64, accel: 14, brake: 30, rev: 9, mass: 1.9, grip: 1.08,
+    { id: 'polis', name: 'Polisbil', kind: 'Volvo V90', def: 'polisbilen', police: true, W: 1.88, L: 4.94, R: 0.36, wb: 2.94, max: 64, zero: [100, 6.0], brake: 30, rev: 9, mass: 1.9, grip: 1.08,
       colors: [0xf4f5f2], gears: 6, idle: 800, red: 6500, eng: 'i4t', rim: 'alloy',
       shape: {
         sill: [[-2.47, 0.46], [-2.22, 0.33], [-1.9, 0.3], [1.85, 0.3], [2.15, 0.32], [2.47, 0.4]],
@@ -3836,11 +4405,12 @@ body.touch .tk-sign .key { display: none; }
   const REGULARS = MODELS.filter((m) => !m.sport && !m.bus && !m.police), SPORTS = MODELS.filter((m) => m.sport);
 
   /* ---------- gearbox and engine ---------- */
-  // Each gear tops out on the rev limiter at gearTop[i]; the last gear reaches the model's top speed.
-  // Low gears multiply the engine's torque, so they pull harder but run out of revs sooner.
+  // Each gear tops out on the rev limiter at gearTop[i]; the last gear reaches the model's top speed. The gears are
+  // spread like real ones, first gear good for 50–60 km/h in an ordinary car, so the engine takes its time climbing
+  // through the revs in each gear. Low gears multiply the engine's torque, so they pull harder but run out of revs sooner.
   for (const M of MODELS) {
     M.gearTop = [];
-    for (let i = 1; i <= M.gears; i++) M.gearTop.push(M.max * Math.pow(i / M.gears, 0.72));
+    for (let i = 1; i <= M.gears; i++) M.gearTop.push(M.max * Math.pow(i / M.gears, 0.62));
   }
   // share of peak torque at a fraction of the rev range: soft off idle, strongest in the middle, fading towards the limiter
   const torqueAt = (r) => 0.62 + 0.38 * Math.sin(Math.PI * clamp(r, 0, 1) * 0.92);
@@ -3849,22 +4419,33 @@ body.touch .tk-sign .key { display: none; }
     if (r >= 1) return -1.5; // fuel cut on the rev limiter
     // an electric motor pulls with full torque from a standstill and then runs out of power, all in one gear
     if (M.ev) return M.accel * 0.72 * Math.min(1, 0.4 / Math.max(r, 1e-3)) * (1 - 0.25 * v / M.max) * power;
+    // a scooter's variator keeps the engine at its best revs and changes the ratio instead
+    if (M.cvt) return M.accel * 0.72 * (1 - 0.55 * Math.pow(v / M.max, 2)) * power;
     // first gear slips the clutch from a standstill; a gear that is too high makes the engine lug
     let k = torqueAt(gear === 0 ? Math.max(r, 0.38) : r);
     if (gear > 0 && r < 0.3) k *= 0.3 + (r / 0.3) * 0.7;
-    return M.accel * 0.72 * k * Math.pow(M.max / top, 0.45) * (1 - 0.25 * v / M.max) * power;
+    return M.accel * 0.72 * k * Math.pow(M.max / top, 0.3) * (1 - 0.25 * v / M.max) * power;
   }
-  const SHIFT_TIME = 0.24;
-  for (const M of MODELS) {
-    // 0–100 km/h (0–50 for the bus, which never reaches 100) with ideal automatic shifting
-    const target = M.max * 3.6 < 110 ? 50 / 3.6 : 100 / 3.6;
+  // the automatic changes up at these shares of the rev range: flat out, and when you drive gently
+  const SHIFT_TIME = 0.24, UP_HARD = 0.8, UP_SOFT = 0.5;
+  const sprintOf = (M, kmh) => {
     let v = 0, t = 0, g = 0, sh = 0;
-    while (v < target && t < 40) {
+    while (v < kmh / 3.6 && t < 60) {
       if (sh > 0) sh -= 0.01;
-      else if (g < M.gears - 1 && v / M.gearTop[g] > 0.93) { g++; sh = SHIFT_TIME; }
+      else if (g < M.gears - 1 && v / M.gearTop[g] > UP_HARD) { g++; sh = SHIFT_TIME; }
       else v += driveAccel(M, v, g, 1) * 0.01;
       t += 0.01;
     }
+    return t;
+  };
+  // Every model accelerates like the real car: its pull is set so that 0–100 km/h (0–50 for the bus, 0–30 for the
+  // moped) takes the real time, a touch quicker for the game (ZIP)
+  const ZIP = 0.85;
+  for (const M of MODELS) {
+    const [kmh, real] = M.zero;
+    let lo = 0.5, hi = 80;
+    for (let i = 0; i < 26; i++) { M.accel = (lo + hi) / 2; if (sprintOf(M, kmh) > real * ZIP) lo = M.accel; else hi = M.accel; }
+    const t = sprintOf(M, kmh), target = kmh / 3.6;
     M.sprint = { kmh: Math.round(target * 3.6), t };
   }
 
@@ -4545,8 +5126,8 @@ body.touch .tk-sign .key { display: none; }
     if (c.shiftT > 0) return;
     if (vf < 0.6) { c.gear = 0; return; }
     const hard = thr > 0.6, r = vf / M.gearTop[c.gear];
-    if (c.gear < M.gears - 1 && r > (hard ? 0.93 : 0.7)) shiftTo(c, c.gear + 1);
-    else if (c.gear > 0 && vf < M.gearTop[c.gear - 1] * (hard ? 0.62 : 0.36)) shiftTo(c, c.gear - 1);
+    if (c.gear < M.gears - 1 && r > (hard ? UP_HARD : UP_SOFT)) shiftTo(c, c.gear + 1);
+    else if (c.gear > 0 && vf < M.gearTop[c.gear - 1] * (hard ? 0.6 : 0.34)) shiftTo(c, c.gear - 1);
   }
   function updateCar(c, dt, inp) {
     const M = c.M;
@@ -4606,7 +5187,7 @@ body.touch .tk-sign .key { display: none; }
     c.steer += (steerIn * maxSteer + c.align - c.steer) * Math.min(1, 6 * dt);
     vl *= Math.exp(-(hand ? 1.4 : 9) * M.grip * dt);
     c.slip = Math.abs(vl) + (hand && Math.abs(vf) > 3 ? Math.abs(vf) * 0.35 : 0)
-      + (throttle > 0.9 && c.gear === 0 && vf < 7 && M.accel > 14 && !c.dead ? 4 : 0);
+      + (throttle > 0.9 && c.gear === 0 && vf < 7 && M.zero[1] < 5 && !c.dead ? 4 : 0);
     let yaw = (vf / M.wb) * Math.tan(c.steer);
     const cap = ((hand ? 1.8 : 1) * 14 * M.grip) / Math.max(Math.abs(vf), 5);
     yaw = clamp(yaw, -cap, cap);
@@ -5406,20 +5987,49 @@ body.touch .tk-sign .key { display: none; }
   }
   function startChase(kind, over) {
     if (!wanted) {
-      wanted = { kinds: new Set(), over: 0, lostT: 0, searchT: 0, stopT: 0, t: 0, fleeT: 0, seen: playerTarget(), inSight: true };
+      wanted = { kinds: new Set(), counts: {}, bonus: 0, stars: 1, starT: 0, over: 0, lostT: 0, searchT: 0, stopT: 0, t: 0, fleeT: 0, seen: playerTarget(), inSight: true };
       toast(kind === 'fart' ? 'Polisen såg dig köra för fort. Stanna bilen!' : 'Polisen är efter dig!');
     }
     wanted.kinds.add(kind);
     wanted.over = Math.max(wanted.over, over || 0);
-    for (const c of cars) if (c.police && !c.dead && (c.police.state === 'patrol' || c.police.state === 'call') && Math.hypot(c.x - player.x, c.z - player.z) < 400) setChase(c, true);
+    // the same thing again (another police car rammed, someone else run over, another car stolen) is one more star
+    // (one crash can come in as a few hits in a row: a repeat counts once it is a few seconds after the last)
+    const last = wanted.counts[kind];
+    if (last === undefined || wanted.t - last > 3) {
+      if (last !== undefined && kind !== 'fart' && kind !== 'smitning') wanted.bonus++;
+      wanted.counts[kind] = wanted.t;
+    }
+    updateStars(wanted);
+    for (const c of cars) if (c.police && !c.dead && (c.police.state === 'patrol' || c.police.state === 'call') && Math.hypot(c.x - player.x, c.z - player.z) < chaseRadius()) setChase(c, true);
   }
+  // Efterlyst: one to five stars. A chase starts at one star. Driving 30 over the limit, ramming a police car, stealing a
+  // car in front of them or running someone over makes it two; 50 over or running from a stop three. Every time it
+  // happens again, and every STAR_FLEE seconds on the run, adds one more. Stars never go down while the chase lasts.
+  // From three stars the police helicopter comes, and every star brings more and faster patrols (the piket van from four).
+  const STAR_FLEE = 15;
+  function updateStars(w) {
+    let s = w.over >= 30 || w.kinds.has('krock') || w.kinds.has('stöld') || w.kinds.has('påkörning') ? 2 : 1;
+    if (w.over >= ARREST_OVER || w.kinds.has('smitning')) s = 3;
+    s = clamp(s + w.bonus + Math.floor((w.fleeT || 0) / STAR_FLEE), 1, 5);
+    if (s <= w.stars) return;
+    const was = w.stars;
+    w.stars = s; w.starT = 0;
+    if (s >= 3 && was < 3) toast(s === 3 ? 'Tre stjärnor! Polishelikoptern är på väg.' : 'Polishelikoptern är på väg, och fler polisbilar kallas in.');
+    else if (s === 4) toast('Fyra stjärnor! Piketen och fler polisbilar kallas in.');
+    else if (s === 5) toast('Fem stjärnor! Hela Stockholmspolisen letar efter dig.');
+  }
+  const stars = () => (wanted ? wanted.stars : 0);
+  // with more stars the police drive faster, come from further away, are more of them and search longer
+  const chaseSpeed = () => CHASE_SPEED + Math.max(0, stars() - 1) * 2;
+  const chaseRadius = () => 400 + Math.max(0, stars() - 1) * 120;
+  const policeTarget = () => POLICE_TARGET + (wanted && !stop ? [0, 0, 1, 3, 5, 7][wanted.stars] : 0);
   function setChase(c, on) {
     const P = c.police, b = c.bot;
     // a car whose crew is out on foot, or which is busy with a stop or a prisoner, stays as it is
     if (!P || !b || P.out || P.state === 'wait' || P.state === 'stop' || P.state === 'transport') return;
     P.state = on ? 'chase' : 'patrol';
     c.siren = on; c.yelp = false;
-    b.cruise = on ? CHASE_SPEED : PATROL_SPEED; b.turnV = on ? 8.5 : 5.5; b.goal = null; b.passT = 0; P.goalNode = -1;
+    b.cruise = on ? chaseSpeed() : PATROL_SPEED; b.turnV = on ? 8.5 : 5.5; b.goal = null; b.passT = 0; P.goalNode = -1;
     if (P.direct) { P.direct = false; resyncBot(c); }
     if (!on) b.next = chooseNext(b.from, b.to, null);
   }
@@ -5490,7 +6100,7 @@ body.touch .tk-sign .key { display: none; }
     if (d < 80 && P.banT <= 0 && clearView(c.x, c.z, T.x, T.z) && drivableLine(c.x, c.z, T.x, T.z, c, driving)) { P.direct = true; return policeDirect(c, dt, T, d); }
     if (P.direct) { P.direct = false; resyncBot(c); }
     // along the streets: full speed while far away, easing off to pull up a few metres from you
-    c.bot.cruise = d < 45 ? clamp((d - 10) * 0.9, 0, CHASE_SPEED) : CHASE_SPEED;
+    c.bot.cruise = d < 45 ? clamp((d - 10) * 0.9, 0, chaseSpeed()) : chaseSpeed();
     // out of sight they head for where you were last seen; while any of them can see you, the radio keeps them updated
     const G = wanted && !wanted.inSight ? wanted.seen : T, gn = nearestNode(G.x, G.z);
     c.bot.goal = { node: gn, x: G.x, z: G.z };
@@ -5502,7 +6112,7 @@ body.touch .tk-sign .key { display: none; }
     const M = c.M, b = c.bot, fx = Math.sin(c.h), fz = Math.cos(c.h), lxv = Math.cos(c.h), lzv = -Math.sin(c.h);
     const vf = c.vx * fx + c.vz * fz, tsp = Math.hypot(T.vx, T.vz), lead = Math.min(1.2, d / 20);
     const tx = T.x + T.vx * lead, tz = T.z + T.vz * lead;
-    let vT = clamp((d - 8) * 1.1 + tsp * 1.1, 0, CHASE_SPEED);
+    let vT = clamp((d - 8) * 1.1 + tsp * 1.1, 0, chaseSpeed());
     if (d < 11 && tsp < 2) vT = 0;
     const dx = tx - c.x, dz = tz - c.z, lz = dx * fx + dz * fz, lx = dx * lxv + dz * lzv;
     const maxSteer = 0.6 / (1 + Math.abs(vf) * 0.03);
@@ -5538,7 +6148,7 @@ body.touch .tk-sign .key { display: none; }
       if (!c.police || c.dead) continue;
       const st = c.police.state, d = Math.hypot(T.x - c.x, T.z - c.z);
       if (st === 'wait' || st === 'transport' || st === 'stop') continue;
-      if (st !== 'chase') { if (d < 400) setChase(c, true); else continue; }
+      if (st !== 'chase') { if (d < chaseRadius()) setChase(c, true); else continue; }
       chasers++;
       if (d < nearest) { nearest = d; nearCop = c; }
       if (!inSight && d < 130 && clearView(c.x, c.z, T.x, T.z)) inSight = true;
@@ -5551,6 +6161,8 @@ body.touch .tk-sign .key { display: none; }
       chasers++;
       if (!inSight && d < 90 && clearView(fc.p.x, fc.p.z, T.x, T.z)) inSight = true;
     }
+    // the helicopter sees you from above, where nothing on the ground is in the way (but not indoors or deep in a lane)
+    if (heli && heli.state !== 'leave') { chasers++; if (heli.sees) inSight = true; }
     // speeding in front of them during the chase goes on the ticket too
     if (driving && inSight) {
       const lim = limitAt(driving.x, driving.z), over = Math.hypot(driving.vx, driving.vz) * 3.6 - lim;
@@ -5560,13 +6172,18 @@ body.touch .tk-sign .key { display: none; }
     wanted.inSight = inSight;
     // running from them: on the move, fast, with the police on your tail
     const sp = driving ? Math.hypot(driving.vx, driving.vz) : Math.hypot(player.vx, player.vz);
-    if ((driving ? sp > 6 : sp > 5.5) && (nearest < 130 || footCops.some((fc) => fc.mode === 'chase' && Math.hypot(fc.p.x - T.x, fc.p.z - T.z) < 60))) wanted.fleeT += dt;
+    if ((driving ? sp > 6 : sp > 5.5) && (nearest < 130 || (heli && heli.sees) || footCops.some((fc) => fc.mode === 'chase' && Math.hypot(fc.p.x - T.x, fc.p.z - T.z) < 60))) wanted.fleeT += dt;
+    updateStars(wanted);
+    wanted.starT += dt;
     if (inSight) { wanted.seen = { x: T.x, z: T.z, vx: 0, vz: 0 }; wanted.lostT = 0; wanted.searchT = 0; }
     else {
       // they give up after searching where they last saw you without finding you, or after a long while without a trace
       wanted.lostT += dt;
-      if (cars.some((c) => c.police && c.police.state === 'chase' && Math.hypot(c.x - wanted.seen.x, c.z - wanted.seen.z) < 40) || footCops.some((fc) => Math.hypot(fc.p.x - wanted.seen.x, fc.p.z - wanted.seen.z) < 12)) wanted.searchT += dt;
-      if (wanted.searchT > 8 || wanted.lostT > 45 || (!chasers && wanted.lostT > 6)) { endChase(false); return; }
+      if (cars.some((c) => c.police && c.police.state === 'chase' && Math.hypot(c.x - wanted.seen.x, c.z - wanted.seen.z) < 40) || footCops.some((fc) => Math.hypot(fc.p.x - wanted.seen.x, fc.p.z - wanted.seen.z) < 12)
+        || (heli && heli.state !== 'leave' && Math.hypot(heli.x - wanted.seen.x, heli.z - wanted.seen.z) < 60)) wanted.searchT += dt;
+      // (with more stars they search for longer)
+      const more = wanted.stars - 1;
+      if (wanted.searchT > 8 + more * 4 || wanted.lostT > 45 + more * 15 || (!chasers && wanted.lostT > 6)) { endChase(false); return; }
     }
     // pull over (stop, ideally by the kerb) with a patrol close behind and in sight, and they pull in by you
     if (driving && nearCop && nearest < 70 && inSight && sp < 2) {
@@ -5599,6 +6216,203 @@ body.touch .tk-sign .key { display: none; }
     toast(driving.siren ? 'Blåljus och siren på. Trafiken väjer för dig.' : 'Blåljus av.');
   }
 
+  /* ---------- the police helicopter ---------- */
+  // From three stars Polisflyget's helicopter joins the chase: a Bell 429, blue on top and white underneath, with the
+  // blue and yellow checks along the cabin and POLIS on the tail boom and the belly. It flies in, then circles over you
+  // with its searchlight on you. While it sees you the patrols always know where you are. It can't see you indoors, nor
+  // deep in a narrow lane of Gamla stan unless it is right overhead, and it can't keep up with the fastest cars on a
+  // straight. Lose it and it searches where it saw you last; when the chase is over it climbs away.
+  const HELI = { speed: 46, alt: 36, radius: 52, eye: 120 };
+  let heli = null, heliModel = null;
+  function buildHeli() {
+    const BLUE = 0x163d8c, WHITE = 0xf1f2ef, YEL = 0xf2c200, DARK = 0x24272b, ROTOR = 0x2b2e33;
+    const m = new Merger(), gl = new Merger(), lamp = new Merger();
+    // one triangle at a time, coloured by where its middle is (so the checks stay sharp) or sent to the glass
+    const put = (geo, colOf, glassOf) => {
+      const g = geo.index ? geo.toNonIndexed() : geo, P = g.attributes.position.array, N = g.attributes.normal.array;
+      for (let i = 0; i < P.length; i += 9) {
+        const cx = (P[i] + P[i + 3] + P[i + 6]) / 3, cy = (P[i + 1] + P[i + 4] + P[i + 7]) / 3, cz = (P[i + 2] + P[i + 5] + P[i + 8]) / 3;
+        const toGlass = glassOf && glassOf(cx, cy, cz), tgt = toGlass ? gl : m;
+        _c.set(toGlass ? 0xffffff : colOf(cx, cy, cz));
+        for (let k = 0; k < 9; k += 3) { tgt.p.push(P[i + k], P[i + k + 1], P[i + k + 2]); tgt.n.push(N[i + k], N[i + k + 1], N[i + k + 2]); tgt.c.push(_c.r, _c.g, _c.b); }
+      }
+      g.dispose(); geo.dispose();
+    };
+    // a tube from a to b
+    const tube = (M, a, b, r, col, n = 8) => {
+      const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), len = d.length(), g = new THREE.CylinderGeometry(r, r, len, n);
+      g.applyMatrix4(_m4.makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize())));
+      g.translate((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
+      M.add(g, col);
+    };
+    // the cabin: turned from a profile along the length, oval in section, nose forwards (+z), skids at y = 0
+    const prof = [[0.0, -1.75], [0.3, -1.68], [0.58, -1.42], [0.78, -0.85], [0.86, -0.2], [0.87, 0.7], [0.84, 1.5], [0.76, 2.15], [0.6, 2.65], [0.4, 2.98], [0.18, 3.18], [0.0, 3.24]];
+    const cab = new THREE.LatheGeometry(prof.map(([r, y]) => new THREE.Vector2(r, y)), 28);
+    cab.rotateX(Math.PI / 2); cab.scale(0.92, 1.12, 1); cab.translate(0, 1.42, 0);
+    const checks = (y, z) => (Math.floor((z + 20) / 0.42) + (y > 1.06 ? 1 : 0)) % 2 ? BLUE : YEL;
+    put(cab, (x, y, z) => (y > 1.5 ? BLUE : y > 0.86 && y < 1.26 && z < 2.55 && z > -1.45 ? checks(y, z) : WHITE), (x, y, z) =>
+      // windscreen over the nose, and the side windows of the cockpit and the cabin with a pillar between the doors
+      (z > 1.55 && y > 1.38 && Math.abs(x) < 0.82 && !(Math.abs(x) < 0.04 && z > 2.2)) || (Math.abs(x) > 0.55 && y > 1.38 && y < 2.12 && z > -1.05 && z < 1.55 && Math.abs(z - 0.32) > 0.07));
+    // the engine fairing on the roof and the two exhausts at its back
+    const fair = new THREE.SphereGeometry(1, 18, 10); fair.scale(0.6, 0.36, 1.55); fair.translate(0, 2.26, -0.35);
+    put(fair, () => BLUE);
+    for (const s of [1, -1]) tube(m, [s * 0.28, 2.38, -1.55], [s * 0.36, 2.48, -1.95], 0.11, DARK);
+    // tail boom, the fin with the tail rotor on its left, the stabiliser with end plates, a skid under the tail
+    const boom = new THREE.CylinderGeometry(0.2, 0.42, 5.2, 14); boom.rotateX(-Math.PI / 2 + 0.035); boom.translate(0, 1.82, -4.05);
+    put(boom, (x, y) => (y > 2.02 ? BLUE : WHITE));
+    m.hexa([[-0.06, 1.55, -6.95], [0.06, 1.55, -6.95], [0.06, 1.62, -6.3], [-0.06, 1.62, -6.3], [-0.05, 3.15, -7.35], [0.05, 3.15, -7.35], [0.05, 3.1, -6.95], [-0.05, 3.1, -6.95]], BLUE);
+    m.hexa([[-1.35, 1.78, -5.25], [1.35, 1.78, -5.25], [1.35, 1.8, -4.75], [-1.35, 1.8, -4.75], [-1.35, 1.84, -5.25], [1.35, 1.84, -5.25], [1.35, 1.86, -4.75], [-1.35, 1.86, -4.75]], WHITE);
+    for (const s of [1, -1]) m.box(0.04, 0.55, 0.5, BLUE, s * 1.37, 1.85, -5.0);
+    tube(m, [0, 1.6, -6.6], [0, 1.25, -6.9], 0.03, DARK);
+    tube(m, [0.12, 2.45, -6.9], [0.0, 2.45, -6.9], 0.09, DARK);
+    // skids on their cross tubes
+    for (const s of [1, -1]) {
+      tube(m, [s * 1.12, 0.07, -1.25], [s * 1.12, 0.07, 1.7], 0.05, DARK);
+      tube(m, [s * 1.12, 0.07, 1.7], [s * 1.12, 0.26, 2.05], 0.05, DARK);
+      for (const z of [1.15, -0.75]) tube(m, [s * 1.12, 0.07, z], [s * 0.55, 0.78, z], 0.045, DARK);
+    }
+    // mast and hub; under the nose the searchlight and the camera ball
+    tube(m, [0, 2.5, 0.15], [0, 3.05, 0.15], 0.11, 0x6a6f75);
+    m.add(new THREE.CylinderGeometry(0.24, 0.24, 0.16, 12), 0x6a6f75, 0, 3.08, 0.15);
+    tube(m, [0.42, 0.62, 2.35], [0.42, 0.62, 2.7], 0.13, DARK, 12);
+    m.add(new THREE.SphereGeometry(0.19, 12, 8), 0x3a3e44, -0.38, 0.62, 2.55);
+    lamp.add(new THREE.CylinderGeometry(0.11, 0.11, 0.02, 12), 0xfff6dc, 0.42, 0.62, 2.71, Math.PI / 2, 0, 0);
+    // navigation lights: red to the left (+x, the nose being +z), green to the right, white at the tail
+    lamp.box(0.07, 0.07, 0.1, 0xff2a2a, 1.4, 1.95, -5.0); lamp.box(0.07, 0.07, 0.1, 0x2aff6a, -1.4, 1.95, -5.0); lamp.box(0.06, 0.06, 0.06, 0xffffff, 0, 3.18, -7.36);
+    // POLIS along both sides of the tail boom and big on the belly, the word from the police cars' decal
+    const db = new Builder(), POL = [[0, 0.5], [1, 0.5], [1, 1], [0, 1]];
+    for (const s of [1, -1]) {
+      const x = s * 0.4, z0 = -2.0, z1 = -3.7, y0 = 1.66, y1 = 2.0;
+      if (s > 0) db.quad([x, y0, z0], [x - 0.07, y0, z1], [x - 0.07, y1, z1], [x, y1, z0], 0xffffff, POL, [1, 0, 0]);
+      else db.quad([x + 0.07, y0, z1], [x, y0, z0], [x, y1, z0], [x + 0.07, y1, z1], 0xffffff, POL, [-1, 0, 0]);
+    }
+    db.quad([0.55, 0.37, 1.6], [0.55, 0.37, -0.9], [-0.55, 0.37, -0.9], [-0.55, 0.37, 1.6], 0xffffff, [[0, 0.5], [0, 1], [1, 1], [1, 0.5]], [0, -1, 0]);
+    const group = new THREE.Group(), body = new THREE.Group();
+    group.add(body);
+    body.rotation.order = 'YXZ';
+    // (plain standard materials like the rest of the city's, so nothing new has to be compiled when it turns up)
+    const mat = std({ vertexColors: true, roughness: 0.3, metalness: 0.15, envMapIntensity: 1.2 });
+    const shell = new THREE.Mesh(m.build(), mat); shell.castShadow = true;
+    body.add(shell, new THREE.Mesh(gl.build(), glassMat), new THREE.Mesh(lamp.build(), new THREE.MeshBasicMaterial({ vertexColors: true })), new THREE.Mesh(db.build(), decalMat));
+    // the rotors spin in their own groups; a faint disc stands for the blur of the blades
+    const blades = new Merger();
+    for (let k = 0; k < 4; k++) {
+      const a = (k / 4) * TAU, g = new THREE.BoxGeometry(0.3, 0.035, 5.3);
+      g.translate(0, 0, 2.85); g.rotateY(a); blades.add(g, ROTOR);
+      const t = new THREE.BoxGeometry(0.31, 0.04, 0.35); t.translate(0, 0, 5.35); t.rotateY(a); blades.add(t, YEL);
+    }
+    const rotor = new THREE.Mesh(blades.build(), mat);
+    rotor.position.set(0, 3.13, 0.15); rotor.castShadow = true;
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(5.6, 40), new THREE.MeshBasicMaterial({ color: 0x3a3f46, transparent: true, opacity: 0.085, depthWrite: false, side: THREE.DoubleSide }));
+    disc.rotation.x = -Math.PI / 2; disc.position.set(0, 3.12, 0.15);
+    const tb = new Merger();
+    for (let k = 0; k < 4; k++) { const g = new THREE.BoxGeometry(0.02, 0.86, 0.13); g.translate(0, 0.43, 0); g.rotateX((k / 4) * TAU + (k % 2) * 0.35); tb.add(g, ROTOR); }
+    const tail = new THREE.Mesh(tb.build(), rotor.material);
+    tail.position.set(0.16, 2.45, -6.9);
+    // the red beacon on top flashes
+    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff2020 }));
+    beacon.position.set(0, 2.66, -0.9);
+    body.add(rotor, disc, tail, beacon);
+    // the searchlight: a faint beam down to a bright patch on the ground
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 3.2, 1, 24, 1, true), new THREE.MeshBasicMaterial({ color: 0xfff3d2, transparent: true, opacity: 0.03, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    beam.geometry.translate(0, -0.5, 0);
+    const patch = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: glowTex, color: 0xfff1cc, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false }));
+    patch.rotation.x = -Math.PI / 2; patch.scale.setScalar(9); patch.renderOrder = 2;
+    group.visible = beam.visible = patch.visible = false;
+    scene.add(group, beam, patch);
+    return { group, body, rotor, tail, beacon, beam, patch };
+  }
+  // can it see you: close enough, not indoors, and not hidden between the houses of a narrow lane unless right overhead
+  function heliSees(H, T) {
+    const hd = Math.hypot(T.x - H.x, T.z - H.z);
+    if (hd > HELI.eye) return false;
+    if (!driving && (indoorSpan(player.x, player.z, player.y) || STATION.inside(player.x, player.z))) return false;
+    const ne = nearestEdge(T.x, T.z);
+    if (hd > 22 && ne.e && ne.e.kind === 'lane' && ne.e.hw < 2.3 && ne.d < ne.e.hw + 1.2) return false;
+    return true;
+  }
+  // the tallest thing under a point, so the helicopter keeps clear of towers and spires
+  function roofAt(x, z, r) {
+    let top = 0;
+    forNear(x - r, z - r, x + r, z + r, (o) => { if (o.h < 300 && o.h > top) top = o.h; });
+    return top;
+  }
+  function spawnHeli() {
+    if (!heliModel) heliModel = buildHeli();
+    const T = playerTarget(), a = Math.random() * TAU, d = 480;
+    const x = T.x + Math.cos(a) * d, z = T.z + Math.sin(a) * d;
+    heli = { x, y: 95, z, vx: 0, vy: 0, vz: 0, h: Math.atan2(T.x - x, T.z - z), pitch: 0, roll: 0, spin: 0, state: 'in', sees: false, seen: { x: T.x, z: T.z }, orbit: a, spot: { x: T.x, z: T.z }, lostT: 0, t: 0, ax: 0, az: 0 };
+    heliModel.group.visible = true;
+  }
+  function updateHeli(dt) {
+    const want = !!wanted && wanted.stars >= 3 && !(stop && stop.locked);
+    if (!heli) { if (want) spawnHeli(); else return; }
+    const H = heli, T = playerTarget();
+    H.t += dt;
+    if (!want && H.state !== 'leave') { H.state = 'leave'; H.sees = false; const a = Math.atan2(H.x - T.x, H.z - T.z); H.away = [Math.sin(a), Math.cos(a)]; }
+    let gx, gz, gy, tvx = 0, tvz = 0;
+    if (H.state === 'leave') {
+      gx = H.x + H.away[0] * 300; gz = H.z + H.away[1] * 300; gy = 140;
+      if (Math.hypot(H.x - T.x, H.z - T.z) > 900) { heli = null; heliModel.group.visible = heliModel.beam.visible = heliModel.patch.visible = false; return; }
+    } else {
+      H.sees = heliSees(H, T);
+      if (H.sees) { H.seen = { x: T.x, z: T.z }; H.lostT = 0; if (H.state === 'in' && Math.hypot(T.x - H.x, T.z - H.z) < 140) { H.state = 'track'; toast('Polishelikoptern har dig i strålkastaren!'); } }
+      else H.lostT += dt;
+      // circle over you a little ahead of where you are going; lost, circle tighter over where you were last seen
+      const focus = H.sees ? T : wanted && !wanted.inSight ? wanted.seen : H.seen, lead = H.sees ? 1.2 : 0;
+      const fx = focus.x + (T.vx || 0) * lead * (H.sees ? 1 : 0), fz = focus.z + (T.vz || 0) * lead * (H.sees ? 1 : 0);
+      const R = H.sees ? HELI.radius : 26 + 10 * Math.sin(H.t * 0.3);
+      H.orbit += dt * (H.sees ? 0.22 : 0.4);
+      const far = Math.hypot(fx - H.x, fz - H.z) > R + 90;
+      gx = far ? fx : fx + Math.cos(H.orbit) * R; gz = far ? fz : fz + Math.sin(H.orbit) * R;
+      if (H.sees && !far) { tvx = T.vx || 0; tvz = T.vz || 0; }
+      gy = far ? 70 : HELI.alt;
+    }
+    // keep well above whatever is underneath and just ahead
+    const ahead = 1.5;
+    gy = Math.max(gy, roofAt(H.x, H.z, 14) + 16, roofAt(H.x + H.vx * ahead, H.z + H.vz * ahead, 18) + 16);
+    // fly: a speed towards the goal (plus the target's own speed when circling it), reached with a limited push
+    const dx = gx - H.x, dz = gz - H.z, d = Math.hypot(dx, dz) || 1, v = Math.min(HELI.speed, d * 0.7);
+    let wx = (dx / d) * v + tvx, wz = (dz / d) * v + tvz;
+    const wl = Math.hypot(wx, wz);
+    if (wl > HELI.speed) { wx *= HELI.speed / wl; wz *= HELI.speed / wl; }
+    const acc = 9, ax = clamp((wx - H.vx) * 1.6, -acc, acc), az = clamp((wz - H.vz) * 1.6, -acc, acc);
+    H.vx += ax * dt; H.vz += az * dt;
+    H.vy += (clamp((gy - H.y) * 0.7, -6, 9) - H.vy) * Math.min(1, 2 * dt);
+    H.x += H.vx * dt; H.y += H.vy * dt; H.z += H.vz * dt;
+    H.ax += (ax - H.ax) * Math.min(1, 3 * dt); H.az += (az - H.az) * Math.min(1, 3 * dt);
+    // nose: towards you while it circles (the camera and the light are in front), along its way when it travels
+    const sp = Math.hypot(H.vx, H.vz), faceYou = H.state !== 'leave' && Math.hypot(T.x - H.x, T.z - H.z) < 160;
+    const hw = faceYou ? Math.atan2(T.x - H.x, T.z - H.z) : sp > 3 ? Math.atan2(H.vx, H.vz) : H.h;
+    H.h += clamp(wrapAngle(hw - H.h), -1.2 * dt, 1.2 * dt);
+    // tilted into the push: nose down to speed up or to fly forwards, a bank to the side it pushes towards
+    const fwx = Math.sin(H.h), fwz = Math.cos(H.h), rgx = Math.cos(H.h), rgz = -Math.sin(H.h);
+    const vf = H.vx * fwx + H.vz * fwz, af = H.ax * fwx + H.az * fwz, al = H.ax * rgx + H.az * rgz;
+    H.pitch += (clamp(vf * 0.005 + af * 0.025, -0.22, 0.3) - H.pitch) * Math.min(1, 3 * dt);
+    H.roll += (clamp(-al * 0.03 - (H.vx * rgx + H.vz * rgz) * 0.004, -0.4, 0.4) - H.roll) * Math.min(1, 3 * dt);
+    // the patch of light follows you (where it last saw you, sweeping, when it has lost you)
+    const st = H.sees ? T : { x: H.seen.x + Math.sin(H.t * 0.9) * 9, z: H.seen.z + Math.cos(H.t * 0.7) * 9 };
+    H.spot.x += (st.x - H.spot.x) * Math.min(1, (H.sees ? 4 : 1) * dt); H.spot.z += (st.z - H.spot.z) * Math.min(1, (H.sees ? 4 : 1) * dt);
+    // the model
+    const G = heliModel;
+    G.group.position.set(H.x, H.y, H.z);
+    G.body.rotation.set(H.pitch, H.h, H.roll);
+    H.spin += dt * 41;
+    G.rotor.rotation.y = H.spin; G.tail.rotation.x = H.spin * 5.3;
+    G.beacon.visible = H.t % 1.2 < 0.12;
+    const on = H.state !== 'leave' && Math.hypot(H.spot.x - H.x, H.spot.z - H.z) < 140;
+    G.beam.visible = G.patch.visible = on;
+    if (on) {
+      const lx = H.x + Math.sin(H.h) * 2.5, ly = H.y + 0.6, lz = H.z + Math.cos(H.h) * 2.5, gy0 = 0.08;
+      const bx = H.spot.x - lx, by = gy0 - ly, bz = H.spot.z - lz, bl = Math.hypot(bx, by, bz);
+      G.beam.position.set(lx, ly, lz);
+      G.beam.scale.set(1, bl, 1);
+      G.beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), new THREE.Vector3(bx / bl, by / bl, bz / bl));
+      G.patch.position.set(H.spot.x, gy0, H.spot.z);
+      G.patch.material.opacity = H.sees ? 0.42 : 0.28;
+    }
+  }
+
   /* ---------- police on the ground: stops, constables on foot, arrests and the cells ---------- */
   // Pull over and the nearest patrol turns its siren off (blue lights stay on) and parks right behind you, or in front
   // of you facing you if it is already ahead, lined up with your car and just as far out from the kerb. A constable
@@ -5611,7 +6425,7 @@ body.touch .tk-sign .key { display: none; }
   const footCops = [];
   const CONSTABLES = ['Andersson', 'Lindqvist', 'Nyström', 'Berg', 'Holm', 'Karlsson', 'Ek', 'Sandberg', 'Öberg', 'Lundin'];
   const COP_RUN = 9.7, ARREST_OVER = 50, FLEE_ARREST = 20, IDLE = () => ({ mx: 0, mz: 0, speed: 0, jump: false });
-  const arrestable = (w) => w.over >= ARREST_OVER || w.kinds.has('smitning') || (w.fleeT || 0) > FLEE_ARREST;
+  const arrestable = (w) => w.over >= ARREST_OVER || w.kinds.has('smitning') || (w.fleeT || 0) > FLEE_ARREST || w.stars >= 3;
   const stopTarget = () => (driving ? { x: driving.x, z: driving.z, h: driving.h, L: driving.M.L } : { x: player.x, z: player.z, h: player.rot, L: 1 });
   // the phases in which you have no say in where you go
   const inCustody = () => !!(stop && stop.locked && stop.phase !== 'jail');
@@ -7611,7 +8425,8 @@ body.touch .tk-sign .key { display: none; }
     let tmin = 1;
     const dx = cx - tx, dz = cz - tz;
     forNear(Math.min(tx, cx) - 1, Math.min(tz, cz) - 1, Math.max(tx, cx) + 1, Math.max(tz, cz) + 1, (o) => {
-      if (o.t === 1 || o.h < ty + 0.5 || (o.y0 !== undefined && o.y0 > ty + 0.3)) return;
+      // (the camera sees through the iron cage of the lift in the yellow house)
+      if (o.t === 1 || o.see || o.h < ty + 0.5 || (o.y0 !== undefined && o.y0 > ty + 0.3)) return;
       tmin = Math.min(tmin, rayBox(o, tx, tz, dx, dz, 0.3));
     });
     return Math.max(0.1, tmin);
@@ -7663,9 +8478,21 @@ body.touch .tk-sign .key { display: none; }
     engineRow: $('engineRow'), hpbar: $('hpbar'), hpText: $('hpText'), limit: $('limit'), limitNum: $('limitNum'), wanted: $('wanted'), wantedHint: $('wantedHint'), wantedTitle: $('wantedTitle'),
     fineTag: $('fineTag'), fines: $('fines'), horses: $('horses'), btnUp: $('btnUp'), btnDown: $('btnDown'),
     carName: $('carName'), help: $('help'), sound: $('soundLabel'), btnUse: $('btnUse'), btnJump: $('btnJump'), touch: $('touch'),
-    start: $('start'), locStreet: $('locStreet'), locDistrict: $('locDistrict'), toast: $('toast')
+    start: $('start'), locStreet: $('locStreet'), locDistrict: $('locDistrict'), toast: $('toast'), liftPanel: $('liftPanel')
   };
-  let lastPrompt = null, lastDriving, locT = 0, toastT = 0, lastUse = '', lastFines = -1, lastHint = '', lastHorses = -1;
+  for (const b of el.liftPanel.querySelectorAll('button')) b.addEventListener('click', (e) => { e.preventDefault(); LIFT.go(Number(b.dataset.floor)); requestLock(); });
+  let lastPrompt = null, lastDriving, locT = 0, toastT = 0, lastUse = '', lastFines = -1, lastHint = '', lastHorses = -1, lastStars = '';
+  // the five wanted stars
+  const starEls = [];
+  {
+    const NS = 'http://www.w3.org/2000/svg', box = $('stars'), heliTag = box.querySelector('.heli');
+    for (let i = 0; i < 5; i++) {
+      const svg = document.createElementNS(NS, 'svg'), path = document.createElementNS(NS, 'path');
+      svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true');
+      path.setAttribute('d', 'M12 2.4l2.95 6.2 6.75.85-4.98 4.65 1.3 6.7L12 17.5l-6.02 3.3 1.3-6.7L2.3 9.45l6.75-.85z');
+      svg.append(path); box.insertBefore(svg, heliTag); starEls.push(svg);
+    }
+  }
   function toast(msg) { el.toast.textContent = msg; el.toast.hidden = false; toastT = Math.min(6.5, 2.2 + msg.length * 0.035); }
   function gearOf(c, vf) {
     if (c.reversing || c.inR) return 'R';
@@ -7675,15 +8502,30 @@ body.touch .tk-sign .key { display: none; }
   }
   function updateHUD(dt) {
     // at a kiosk or a balloon seller E buys, otherwise it is for the car you stand by
-    const shop = started && !driving ? VENDORS.prompt() : null;
-    const prompt = shop || (started && !driving && nearCar ? (nearCar.bot ? 'Ta ' + nearCar.M.def : 'Kliv in i ' + nearCar.M.def) : null);
+    const liftP = started && !driving ? LIFT.prompt() : null, shop = !liftP && started && !driving ? VENDORS.prompt() : null;
+    const prompt = liftP || shop || (started && !driving && nearCar ? (nearCar.bot ? 'Ta ' + nearCar.M.def : 'Kliv in i ' + nearCar.M.def) : null);
     if (prompt !== lastPrompt) {
       lastPrompt = prompt;
       el.prompt.hidden = !prompt || isTouch;
-      if (prompt) { el.promptText.textContent = prompt; el.prompt.classList.toggle('steal', !shop && !!nearCar.bot); el.prompt.classList.toggle('shop', !!shop); }
+      if (prompt) { el.promptText.textContent = prompt; el.prompt.classList.toggle('steal', !shop && !liftP && !!nearCar && !!nearCar.bot); el.prompt.classList.toggle('shop', !!shop); }
+    }
+    // the stars: as many lit as the police want you, flashing while they search for you; the helicopter beside them
+    const ns = stars(), searching = !!wanted && !wanted.inSight && !stop, hl = !!heli && heli.state !== 'leave';
+    const sk = ns + ':' + searching + ':' + hl;
+    if (sk !== lastStars) {
+      const was = lastStars ? Number(lastStars.split(':')[0]) : 0;
+      lastStars = sk;
+      starEls.forEach((sv, i) => {
+        sv.classList.toggle('on', i < ns);
+        if (i < ns && i >= was) { sv.classList.remove('new'); void sv.getBoundingClientRect(); sv.classList.add('new'); }
+      });
+      const box = $('stars');
+      box.classList.toggle('search', searching); box.classList.toggle('heli-on', hl);
+      box.setAttribute('aria-label', ns ? 'Efterlyst: ' + ns + ' av 5 stjärnor' + (hl ? ', helikoptern är ute' : '') : 'Polisen letar inte efter dig');
     }
     if (driving !== lastDriving) {
       lastDriving = driving;
+      document.body.classList.toggle('driving', !!driving);
       el.dash.hidden = !driving;
       el.limit.hidden = !driving;
       if (driving) el.carName.textContent = driving.M.name;
@@ -7692,9 +8534,9 @@ body.touch .tk-sign .key { display: none; }
     }
     const ph = stop && stop.phase;
     const vendor = !driving && VENDORS.near;
-    const use = ph === 'talk' ? 'Skriv under' : ph === 'transport' || ph === 'park' ? 'Hoppa fram' : ph === 'jail' ? 'Sov' : driving ? 'Kliv ur' : vendor ? (vendor.seller ? 'Köp glass' : 'Köp ballong') : nearCar && nearCar.bot ? 'Ta bilen' : 'Kliv in';
+    const use = ph === 'talk' ? 'Skriv under' : ph === 'transport' || ph === 'park' ? 'Hoppa fram' : ph === 'jail' ? 'Sov' : driving ? 'Kliv ur' : liftP ? 'Hissen' : vendor ? (vendor.seller ? 'Köp glass' : 'Köp ballong') : nearCar && nearCar.bot ? 'Ta bilen' : 'Kliv in';
     if (use !== lastUse) { el.btnUse.textContent = use; lastUse = use; }
-    el.btnUse.classList.toggle('off', !driving && !nearCar && !vendor && !['talk', 'transport', 'park', 'jail'].includes(ph));
+    el.btnUse.classList.toggle('off', !driving && !nearCar && !vendor && !liftP && !['talk', 'transport', 'park', 'jail'].includes(ph));
     if (driving) {
       const c = driving, vf = c.vx * Math.sin(c.h) + c.vz * Math.cos(c.h);
       const kmh = Math.round(Math.abs(vf) * 3.6), rf = clamp(c.rpm / (c.M.red * 1.04), 0, 1);
@@ -7803,11 +8645,29 @@ body.touch .tk-sign .key { display: none; }
       g.fillRect(-w / 2, -l / 2, w, l); g.strokeRect(-w / 2, -l / 2, w, l);
       g.restore();
     }
+    if (heli) drawHeliIcon(g, heli.x, heli.z, heli.h, 1 / s, true);
     const rot = driving ? driving.h : player.rot, u = 1 / s;
     g.translate(px, pz); g.rotate(-rot);
     g.beginPath(); g.moveTo(0, 9 * u); g.lineTo(6.5 * u, -6 * u); g.lineTo(0, -2.5 * u); g.lineTo(-6.5 * u, -6 * u); g.closePath();
     g.fillStyle = driving ? hex(driving.color) : '#ffffff'; g.strokeStyle = '#0a5ba8'; g.lineWidth = 2 * u; g.lineJoin = 'round';
     g.fill(); g.stroke();
+    g.restore();
+  }
+
+  // the helicopter on the maps: the light on the ground, then a blue body under a turning rotor (u: metres per pixel)
+  function drawHeliIcon(g, x, z, h, u, spot) {
+    if (spot && heliModel && heliModel.patch.visible) {
+      g.fillStyle = 'rgba(255,214,90,.45)'; g.beginPath(); g.arc(heli.spot.x, heli.spot.z, Math.max(4.5, 5 * u), 0, TAU); g.fill();
+    }
+    g.save(); g.translate(x, z); g.rotate(-h);
+    const k = Math.max(1, u * 1.15);
+    g.fillStyle = 'rgba(255,255,255,.55)'; g.beginPath(); g.arc(0, 0.8 * k, 6 * k, 0, TAU); g.fill();
+    g.fillStyle = '#163d8c'; g.strokeStyle = '#fff'; g.lineWidth = 1.2 * u;
+    g.beginPath(); g.ellipse(0, 1.2 * k, 1.9 * k, 3 * k, 0, 0, TAU); g.fill(); g.stroke();
+    g.fillRect(-0.45 * k, -6 * k, 0.9 * k, 5 * k);
+    g.strokeStyle = '#11161b'; g.lineWidth = 1.4 * u;
+    const a = clock * 9;
+    for (const d of [0, Math.PI / 2]) { g.beginPath(); g.moveTo(Math.cos(a + d) * 6 * k, 0.8 * k + Math.sin(a + d) * 6 * k); g.lineTo(-Math.cos(a + d) * 6 * k, 0.8 * k - Math.sin(a + d) * 6 * k); g.stroke(); }
     g.restore();
   }
 
@@ -7928,6 +8788,7 @@ body.touch .tk-sign .key { display: none; }
       g.beginPath(); g.arc(toX(c.x), toY(c.z), 4.5, 0, TAU); g.fill();
       g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.stroke();
     }
+    if (heli) { g.save(); g.translate(toX(heli.x), toY(heli.z)); g.scale(2.2, 2.2); drawHeliIcon(g, 0, 0, heli.h, 0.5, false); g.restore(); }
     if (spawnedCar && spawnedCar !== driving) {
       g.fillStyle = hex(spawnedCar.color); g.strokeStyle = '#fff'; g.lineWidth = 2;
       g.fillRect(toX(spawnedCar.x) - 4, toY(spawnedCar.z) - 4, 8, 8); g.strokeRect(toX(spawnedCar.x) - 4, toY(spawnedCar.z) - 4, 8, 8);
@@ -8119,6 +8980,23 @@ body.touch .tk-sign .key { display: none; }
         if (p) { g.connect(p); p.connect(master); } else g.connect(master);
         audio.siren = { o, o2, g, p, phase: 0 };
       }
+      // the helicopter: the thud of the blades (low noise chopped at the blade rate) over the whine of the turbines
+      {
+        const src = ctx.createBufferSource(); src.buffer = noise; src.loop = true; src.start();
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 520; lp.Q.value = 0.8;
+        const chop = ctx.createGain(); chop.gain.value = 0.35;
+        const lfo = ctx.createOscillator(); lfo.type = 'sawtooth'; lfo.frequency.value = 21; lfo.start();
+        const lg = ctx.createGain(); lg.gain.value = -0.35; lfo.connect(lg); lg.connect(chop.gain);
+        const thump = ctx.createOscillator(); thump.type = 'sine'; thump.frequency.value = 42; thump.start();
+        const tg = ctx.createGain(); tg.gain.value = 0.25; thump.connect(tg); tg.connect(chop);
+        const whine = ctx.createOscillator(); whine.type = 'sine'; whine.frequency.value = 3150; whine.start();
+        const wg = ctx.createGain(); wg.gain.value = 0;
+        const g = ctx.createGain(); g.gain.value = 0;
+        const p = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+        src.connect(lp); lp.connect(chop); chop.connect(g); whine.connect(wg); wg.connect(g);
+        if (p) { g.connect(p); p.connect(master); } else g.connect(master);
+        audio.rotor = { g, wg, p };
+      }
     } catch { audio = null; }
   }
   function updateAudio(dt) {
@@ -8171,6 +9049,13 @@ body.touch .tk-sign .key { display: none; }
       S.g.gain.setTargetAtTime(0.045 * sl + (siren === driving ? 0.02 : 0), t, 0.05);
       if (S.p) S.p.pan.setTargetAtTime(sp, t, 0.05);
     } else S.g.gain.setTargetAtTime(0, t, 0.08);
+    // the helicopter overhead, heard from far off
+    const R = audio.rotor;
+    if (heli && !quiet) {
+      const s = placeSound(heli.x, heli.z, 700), d3 = Math.hypot(s.d, heli.y - camera.position.y), lv = Math.pow(clamp(1 - d3 / 700, 0, 1), 2);
+      R.g.gain.setTargetAtTime(0.9 * lv, t, 0.1); R.wg.gain.setTargetAtTime(0.012 * lv, t, 0.1);
+      if (R.p) R.p.pan.setTargetAtTime(s.pan * 0.7, t, 0.1);
+    } else R.g.gain.setTargetAtTime(0, t, 0.2);
   }
   // buses hiss when the air brakes hold them at a stop
   function airBrake(c, pan, level) {
@@ -8235,7 +9120,7 @@ body.touch .tk-sign .key { display: none; }
   }
   function look(dx, dy) {
     camYaw -= dx * 0.0032;
-    camPitch = clamp(camPitch + dy * 0.0028, -0.12, 1.2);
+    camPitch = clamp(camPitch + dy * 0.0028, -0.4, 1.2);
     lastLook = performance.now();
   }
   function setTouchMode(on) {
@@ -8275,7 +9160,8 @@ body.touch .tk-sign .key { display: none; }
     if (repeat) return;
     // under arrest most keys do nothing: you can still look at the map, the help and the sound, and E moves things on
     if (stop && stop.locked && !['KeyE', 'Enter', 'KeyH', 'KeyT', 'KeyK', 'KeyQ'].includes(code) && !(stop.phase === 'jail' && code === 'Space')) return;
-    if (code === 'KeyE' || code === 'Enter') { if (!useKey() && !VENDORS.use()) toggleCar(); }
+    if (code === 'KeyE' || code === 'Enter') { if (!useKey() && !LIFT.use() && !VENDORS.use()) toggleCar(); }
+    else if (/^(Digit|Numpad)[0-5]$/.test(code)) LIFT.digit(Number(code.slice(-1)));
     else if (code === 'Space') jumpQueued = true;
     else if (code === 'KeyH') el.help.hidden = !el.help.hidden;
     else if (code === 'KeyT') toggleMute();
@@ -8348,7 +9234,7 @@ body.touch .tk-sign .key { display: none; }
   stick.addEventListener('pointercancel', endStick);
   el.btnJump.addEventListener('pointerdown', (e) => { e.preventDefault(); touchBrake = true; jumpQueued = true; });
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.btnJump.addEventListener(ev, () => { touchBrake = false; });
-  el.btnUse.addEventListener('pointerdown', (e) => { e.preventDefault(); if (!useKey() && !VENDORS.use()) toggleCar(); });
+  el.btnUse.addEventListener('pointerdown', (e) => { e.preventDefault(); if (!useKey() && !LIFT.use() && !VENDORS.use()) toggleCar(); });
   $('btnCars').addEventListener('pointerdown', (e) => { e.preventDefault(); openPicker(); });
   $('btnJob').addEventListener('pointerdown', (e) => { e.preventDefault(); JOBS.key(); });
   el.btnUp.addEventListener('pointerdown', (e) => { e.preventDefault(); playerShift(1); });
@@ -8661,6 +9547,7 @@ body.touch .tk-sign .key { display: none; }
       jumpQueued = false;
       manageTraffic(dt);
       policeUpdate(dt);
+      updateHeli(dt);
       updateSurprises(dt);
       JOBS.update(dt);
       STATION.update(dt, player.x, player.z);
@@ -8706,7 +9593,7 @@ body.touch .tk-sign .key { display: none; }
     press(code) { keys[code] = true; onKey(code, false); keys[code] = false; },
     start() { startGame(); },
     teleport(x, z, y = 0) { player.x = x; player.z = z; player.y = y; camTarget.set(x, y + 1.6, z); },
-    draken: DRAKEN, indoorSpan,
+    draken: DRAKEN, indoorSpan, lift: LIFT,
     // park one car of each model in a row (facing +x) and photograph them with a fixed camera
     showroom(ids, x, z, gap) {
       return ids.map((id, i) => {
@@ -8724,7 +9611,7 @@ body.touch .tk-sign .key { display: none; }
     openPicker, closePicker, crash, limitAt, startChase, endChase, openBigmap, closeBigmap, drawBigmap, bigmap, carShape, MODELS,
     info() {
       const r = renderer.info;
-      return { calls: POST.level ? POST.stats.calls : r.render.calls, triangles: POST.level ? POST.stats.triangles : r.render.triangles, mirror: POST.stats.mirror, geometries: r.memory.geometries, chunks: chunks.size, buildings: mapPolys.length, lamps: lamps.length, trees: lindens.length + cherries.length, loadMs: Math.round(loadMs) };
+      return { calls: POST.level ? POST.stats.calls : r.render.calls, triangles: POST.level ? POST.stats.triangles : r.render.triangles, mirror: POST.stats.mirror, geometries: r.memory.geometries, programs: r.programs ? r.programs.length : 0, chunks: chunks.size, buildings: mapPolys.length, lamps: lamps.length, trees: lindens.length + cherries.length, loadMs: Math.round(loadMs) };
     },
     // landmarks that stand on a street or its pavement
     mapProblems() {
@@ -8761,7 +9648,7 @@ body.touch .tk-sign .key { display: none; }
       });
     },
     get cars() { return cars; }, blockedAt: (x, z, r) => blockedAt(x, z, r), obstaclesNear(x, z, r) { const out = []; forNear(x - r, z - r, x + r, z + r, (o) => out.push({ ...o })); return out; }, distTo, get persons() { return persons; }, get player() { return player; }, get driving() { return driving; },
-    get wanted() { return wanted; }, get fines() { return fines; }, get audio() { return audio; }, get stop() { return stop; }, footCops, STATION, useKey, walkWaypoint, walkLine, landmarkList, mapSquares, mapGreens, signTicket, beginStop, setCall, resyncBot, get horses() { return horses; }, fireworks(s) { fireworksT = s; },
+    get wanted() { return wanted; }, get heli() { return heli; }, updateStars, get fines() { return fines; }, get audio() { return audio; }, get stop() { return stop; }, footCops, STATION, useKey, walkWaypoint, walkLine, landmarkList, mapSquares, mapGreens, signTicket, beginStop, setCall, resyncBot, get horses() { return horses; }, fireworks(s) { fireworksT = s; },
     nodes, edges, walkable, fitsM, MODEL, driveAccel, limitAt, bridgeTrims, nearestEdgeAt(x, z) { const ne = nearestEdge(x, z); return ne.e && ne.d < ne.e.hw + ne.e.walk + 2 ? ne.e : null; },
     state() {
       const bad = [];
