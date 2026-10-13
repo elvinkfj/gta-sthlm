@@ -66,7 +66,7 @@ body.playing #hud { opacity: 1; }
 #liftPanel button.want b { background: radial-gradient(circle at 40% 35%, #fff6d0, #ffb84a); box-shadow: 0 0 10px 2px rgba(255, 190, 80, 0.8), 0 0 0 2px #7a5a2a; }
 #liftPanel button.at { color: var(--sign-yellow); }
 #liftPanel button.at::after { content: '◀'; font-size: 0.7rem; }
-body.touch #liftPanel { bottom: auto; top: calc(150px + env(safe-area-inset-top, 0px)); }
+body.touch #liftPanel { bottom: auto; top: calc(190px + env(safe-area-inset-top, 0px)); }
 @keyframes starPop { from { transform: scale(1.9); } to { transform: none; } }
 @keyframes starBlink { 50% { fill: rgba(255, 255, 255, 0.12); stroke: rgba(255, 255, 255, 0.55); } }
 .tag { display: flex; align-items: center; gap: 8px; padding: 5px 11px 5px 5px; border-radius: 9px; background: var(--glass); font-weight: 700; font-size: 0.82rem; letter-spacing: 0.02em; }
@@ -321,12 +321,17 @@ body.touch .tk-sign .key { display: none; }
   .tags { max-width: 46vw; }
   #wanted { top: calc(210px + env(safe-area-inset-top, 0px)); }
   body.touch #wanted { top: calc(198px + env(safe-area-inset-top, 0px)); }
+  /* driving, the stars sit under the dashboard on the left, so the street sign moves down out of their way */
+  body.touch.driving #loc { top: calc(176px + env(safe-area-inset-top, 0px)); }
+  body.touch.driving #wanted { top: calc(214px + env(safe-area-inset-top, 0px)); }
 }
 /* on a narrow screen the job panel goes under the street sign on the right, and the police panel under that */
 @media (max-width: 760px) {
   #job { top: calc(210px + env(safe-area-inset-top, 0px)); left: auto; right: calc(16px + env(safe-area-inset-right, 0px)); transform: none; max-width: calc(100vw - 32px); }
   #job small { white-space: normal; }
   body.job #wanted, body.job.touch #wanted { top: calc(276px + env(safe-area-inset-top, 0px)); }
+  body.touch.driving #job { top: calc(226px + env(safe-area-inset-top, 0px)); }
+  body.job.touch.driving #wanted { top: calc(292px + env(safe-area-inset-top, 0px)); }
 }
 @media (prefers-reduced-motion: reduce) { .sign { animation: none; } #hud { transition: none; } #limit.over, #wanted, .beacon, #ticket { animation: none; } #limit.over { box-shadow: inset 0 0 0 7px var(--sign-red), 0 0 0 4px var(--sign-red); } }
 </style>
