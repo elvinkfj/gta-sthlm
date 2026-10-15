@@ -198,6 +198,12 @@ body.job #wanted { top: calc(112px + env(safe-area-inset-top, 0px)); }
 .dala-tag { padding: 5px 11px 5px 7px; }
 .dala-tag b { color: var(--sign-yellow); font-variant-numeric: tabular-nums; }
 .dala { width: 18px; height: 18px; display: block; }
+/* the indicator tell-tales over the dash: green arrows that blink with the lamps (tap them on a touch screen) */
+.blinkers { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); display: flex; gap: 2px; padding: 3px 6px; border-radius: 999px; background: var(--glass); }
+.blink { pointer-events: auto; width: 28px; height: 20px; padding: 0; border: 0; background: none; color: rgba(255, 255, 255, 0.24); cursor: pointer; display: grid; place-items: center; touch-action: manipulation; }
+.blink svg { width: 18px; height: 14px; fill: currentColor; }
+.blink.r svg { transform: scaleX(-1); }
+.blink.on { color: #3fe060; filter: drop-shadow(0 0 4px rgba(63, 224, 96, 0.85)); }
 .dash-foot { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 0.74rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
 .dash-foot span:first-child { opacity: 0.75; }
 .dash-foot .hint { display: flex; align-items: center; gap: 6px; letter-spacing: 0.04em; text-transform: none; font-size: 0.8rem; white-space: nowrap; }
@@ -312,6 +318,9 @@ body.touch #stars svg { width: 22px; height: 22px; }
 body.touch.driving #stars { top: calc(132px + env(safe-area-inset-top, 0px)); }
 body.touch #map { width: 118px; height: 118px; }
 body.touch #dash { right: auto; bottom: auto; width: 160px; padding: 10px 12px; left: calc(14px + env(safe-area-inset-left, 0px)); top: calc(14px + env(safe-area-inset-top, 0px)); }
+body.touch .blinkers { top: auto; bottom: 0; left: calc(100% + 8px); transform: none; gap: 8px; padding: 4px 8px; }
+body.touch .blink { width: 40px; height: 28px; }
+body.touch .blink svg { width: 22px; height: 17px; }
 body.touch .speed { font-size: 2.3rem; }
 body.touch .dash-foot .hint { display: none; }
 body.touch #limit { right: auto; bottom: auto; left: calc(186px + env(safe-area-inset-left, 0px)); top: calc(16px + env(safe-area-inset-top, 0px)); width: 46px; height: 46px; font-size: 1.15rem; box-shadow: inset 0 0 0 5px var(--sign-red), 0 0 0 2px var(--snow), 0 4px 12px rgba(0, 0, 0, 0.3); }
@@ -382,6 +391,7 @@ body.touch .tk-sign .key { display: none; }
   <div id="prompt" hidden><span class="key">E</span><span id="promptText">Kliv in</span></div>
   <div id="limit" hidden aria-label="Hastighetsgräns"><span id="limitNum">40</span></div>
   <div id="dash" hidden>
+    <div class="blinkers"><button type="button" class="blink" id="blinkL" aria-label="Vänster blinkers (Z)"><svg viewBox="0 0 20 16" aria-hidden="true"><path d="M0 8 9 0v5h11v6H9v5z"/></svg></button><button type="button" class="blink r" id="blinkR" aria-label="Höger blinkers (X)"><svg viewBox="0 0 20 16" aria-hidden="true"><path d="M0 8 9 0v5h11v6H9v5z"/></svg></button></div>
     <div class="speed"><span id="kmh">0</span><small>km/h</small></div>
     <div class="gear-box"><div class="gear" id="gear">N</div><span class="mode" id="gearMode">Auto</span></div>
     <div class="rev"><div class="bar"><i id="revbar"></i></div><span class="rpm" id="rpm">800</span></div>
@@ -395,6 +405,8 @@ body.touch .tk-sign .key { display: none; }
     <span class="key">Mellanslag</span><span>Hoppa, eller handbroms i bilen</span>
     <span class="key">M / N</span><span>Växla upp / ner</span>
     <span class="key">G</span><span>Automat eller manuell växellåda</span>
+    <span class="key">Z / X</span><span>Blinkers vänster / höger. Den slår av sig själv efter svängen</span>
+    <span class="key">C</span><span>Varningsblinkers</span>
     <span class="key">E</span><span>Kliv in, ta en bil i trafiken, kliv ur</span>
     <span class="key">B</span><span>Välj bilmodell, eller en båt när du står vid en kaj</span>
     <span class="key">K</span><span>Stor karta (eller klicka på kartan)</span>
@@ -442,6 +454,7 @@ body.touch .tk-sign .key { display: none; }
         <li><span class="k"><span class="key">Shift</span></span><span>Spring</span></li>
         <li><span class="k"><span class="key">Mellanslag</span></span><span>Hoppa, eller handbroms i bilen</span></li>
         <li><span class="k"><span class="key">M</span><span class="key">N</span></span><span>Växla upp och ner</span></li>
+        <li><span class="k"><span class="key">Z</span><span class="key">X</span></span><span>Blinkers vänster och höger</span></li>
         <li><span class="k"><span class="key">E</span></span><span>Kliv in, eller ta en bil som kör förbi</span></li>
         <li><span class="k"><span class="key">B</span></span><span>Välj bil, eller båt vid en kaj</span></li>
         <li><span class="k"><span class="key">J</span></span><span>Jobb (taxi, paket, buss) och gatlopp</span></li>
@@ -5131,12 +5144,15 @@ body.touch .tk-sign .key { display: none; }
   const SURF = {
     paint: [0.32, 0.1, 0.8, 0], trim: [0.62, 0.1, 0, 0], gloss: [0.12, 0.2, 1, 0], chrome: [0.14, 1, 0, 0], plate: [0.4, 0, 0, 0], tyre: [0.92, 0, 0, 0],
     alloy: [0.3, 0.85, 0.3, 0], under: [0.85, 0, 0, 0],
-    head: [0.08, 0, 1, 1], tail: [0.12, 0, 1, 2], blueL: [0.08, 0, 1, 3], blueR: [0.08, 0, 1, 4], rev: [0.08, 0, 1, 5]
+    head: [0.08, 0, 1, 1], tail: [0.12, 0, 1, 2], blueL: [0.08, 0, 1, 3], blueR: [0.08, 0, 1, 4], rev: [0.08, 0, 1, 5],
+    indL: [0.1, 0, 1, 6], indR: [0.1, 0, 1, 7]
   };
   const COL = {
     head: 0xfff4d0, tail: 0xb3121b, rev: 0xf6f6f6, blueL: 0x2a5cff, blueR: 0x2a5cfe, plate: 0xf4f4f4, euBlue: 0x1f4fae,
     hub: 0x3a3d41, chrome: 0xc6cbd1, tyre: 0x17191c, busSign: 0xffa21a, doors: 0x2a3540, polBlue: 0x163d8c, polYellow: 0xd4e01c,
-    rim: 0xb9bec4, rimDark: 0x2b2e33, aero: 0x8d9399, disc: 0x8b8f94, caliper: 0xb3131c, caliperGrey: 0x55595e, amber: 0xe8901c, rimLight: 0xdcdfe2
+    rim: 0xb9bec4, rimDark: 0x2b2e33, aero: 0x8d9399, disc: 0x8b8f94, caliper: 0xb3131c, caliperGrey: 0x55595e, amber: 0xe8901c, rimLight: 0xdcdfe2,
+    // the indicators, left (+x, the driver's side) and right: the same amber, told apart so that each side blinks on its own
+    indL: 0xff7400, indR: 0xff7401
   };
   // LEXAN: the F40's smoked engine cover
   const CAR_GLASS = -2, UNDER = 0x0e0f11, CLAD = 0x26282b, GLOSS = 0x111215, CHROME = COL.chrome, STRIPE = 0xf2f2ef, LEXAN = 0x4c535a;
@@ -5146,29 +5162,32 @@ body.touch .tk-sign .key { display: none; }
       : col === GLOSS || col === 0xf2c200 || col === COL.caliper || col === LEXAN || col === COL.amber ? SURF.gloss
         : col === COL.rim || col === COL.rimDark || col === COL.aero || col === COL.disc || col === COL.rimLight ? SURF.alloy : col === UNDER || col === CLAD ? SURF.under
       : col === COL.head || col === COL.busSign ? SURF.head : col === COL.tail ? SURF.tail : col === COL.rev ? SURF.rev
-        : col === COL.blueL ? SURF.blueL : col === COL.blueR ? SURF.blueR : col === COL.chrome ? SURF.chrome
+        : col === COL.blueL ? SURF.blueL : col === COL.blueR ? SURF.blueR : col === COL.indL ? SURF.indL : col === COL.indR ? SURF.indR : col === COL.chrome ? SURF.chrome
           : col === COL.plate || col === COL.euBlue ? SURF.plate : col === COL.tyre ? SURF.tyre : col === COL.doors ? SURF.gloss : SURF.trim);
   }
   function carShader(shader) {
     shader.uniforms.uGlow = { value: this.userData.glow };
     shader.uniforms.uRev = this.userData.rev;
+    shader.uniforms.uInd = { value: this.userData.ind };
     shader.vertexShader = 'attribute vec4 surf;\nvarying vec4 vSurf;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvSurf = surf;');
-    shader.fragmentShader = 'varying vec4 vSurf;\nuniform vec4 uGlow;\nuniform float uRev;\n' + shader.fragmentShader
+    shader.fragmentShader = 'varying vec4 vSurf;\nuniform vec4 uGlow;\nuniform float uRev;\nuniform vec2 uInd;\n' + shader.fragmentShader
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n\troughnessFactor = vSurf.x;')
       .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\n\tmetalnessFactor = vSurf.y;')
       .replace('#include <lights_physical_fragment>', THREE.ShaderChunk.lights_physical_fragment.replace('material.clearcoat = clearcoat;', 'material.clearcoat = clearcoat * vSurf.z;'))
       .replace('#include <emissivemap_fragment>', [
         '#include <emissivemap_fragment>',
         '\tfloat lightCh = vSurf.w;',
-        '\tfloat glow = lightCh < 0.5 ? 0.0 : lightCh < 1.5 ? uGlow.x : lightCh < 2.5 ? uGlow.y : lightCh < 3.5 ? uGlow.z : lightCh < 4.5 ? uGlow.w : uRev;',
+        '\tfloat glow = lightCh < 0.5 ? 0.0 : lightCh < 1.5 ? uGlow.x : lightCh < 2.5 ? uGlow.y : lightCh < 3.5 ? uGlow.z : lightCh < 4.5 ? uGlow.w : lightCh < 5.5 ? uRev : lightCh < 6.5 ? uInd.x : uInd.y;',
         '\ttotalEmissiveRadiance += diffuseColor.rgb * glow;'
       ].join('\n'));
   }
-  const HEAD_GLOW = 0.6, TAIL_GLOW = 0.3, BRAKE_GLOW = 2.6;
+  const HEAD_GLOW = 0.6, TAIL_GLOW = 0.3, BRAKE_GLOW = 2.6, IND_GLOW = 2.6;
+  const IND = (s) => (s > 0 ? COL.indL : COL.indR);
   function carMaterial() {
     const m = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.3, clearcoat: 1, clearcoatRoughness: 0.04, envMapIntensity: 0.65 });
     m.userData.glow = new THREE.Vector4(HEAD_GLOW, TAIL_GLOW, 0, 0);
     m.userData.rev = { value: 0 };
+    m.userData.ind = new THREE.Vector2(0, 0);
     m.onBeforeCompile = carShader;
     return m;
   }
@@ -5213,7 +5232,7 @@ body.touch .tk-sign .key { display: none; }
   function carShape(M) {
     if (M._shape) return M._shape;
     const S = M.shape, hl = M.L / 2, hw = M.W / 2;
-    const sill = curve(S.sill), belt = curve(S.belt), roof = curve(S.roof);
+    const sill = curve(S.sill), beltRaw = curve(S.belt), roof = curve(S.roof);
     const [r0, r1, r2, r3] = S.cab, [rcR, rcF] = S.rc, [pR, pF] = S.p || [3, 3], bulge = S.bulge ?? 0.06;
     const halfW = (z) => {
       let d, p;
@@ -5227,18 +5246,20 @@ body.touch .tk-sign .key { display: none; }
     };
     const wz = M.wb / 2, rA = M.R + 0.1, cA = M.R * 0.85;
     const archTop = cA + rA;
-    // the wing over each wheel: where the waist line is too low to clear the tyre (the Lamborghini's nose, the
-    // Porsche's front), the body swells into a rounded fender a few centimetres above the wheel arch
-    const fenderAt = (z) => {
-      let y = 0;
-      for (const az of [wz, -wz]) { const dz = z - az, rr = rA + 0.2; if (Math.abs(dz) < rr) y = Math.max(y, cA - 0.12 + Math.sqrt(rr * rr - dz * dz)); }
-      return y;
-    };
-    const beltF = (z) => Math.max(belt(z), fenderAt(z));
+    // The waist line has to clear the wheel arch with a few centimetres of metal to spare. Where the drawn line is too
+    // low for that (the low noses of the Lamborghini, the Ferraris and the Porsches) it is lifted across the whole
+    // bonnet: a broad, even rise over the wheel that fades out towards the nose and the windscreen, never a hump
+    const FADE = 0.8, fade = (d) => (d <= rA ? 1 : d >= rA + FADE ? 0 : 0.5 + 0.5 * Math.cos(((d - rA) / FADE) * Math.PI));
+    const lifts = [wz, -wz].map((az) => {
+      let L = 0;
+      for (let i = -12; i <= 12; i++) { const dz = (rA * i) / 12; L = Math.max(L, cA + Math.sqrt(Math.max(0, rA * rA - dz * dz)) + 0.08 - beltRaw(az + dz)); }
+      return L;
+    });
+    const belt = (z) => beltRaw(z) + lifts[0] * fade(Math.abs(z - wz)) + lifts[1] * fade(Math.abs(z + wz));
     const sillAt = (z) => {
       let y = sill(z);
       for (const az of [wz, -wz]) { const dz = z - az; if (Math.abs(dz) < rA) y = Math.max(y, cA + Math.sqrt(rA * rA - dz * dz)); }
-      return Math.min(y, beltF(z) - 0.075);
+      return Math.min(y, belt(z) - 0.075);
     };
     const topAt = (z) => {
       if (z < r0 - 1e-6 || z > r3 + 1e-6) return belt(z);
@@ -5285,9 +5306,7 @@ body.touch .tk-sign .key { display: none; }
     const Z = [...new Set(zs.filter((z) => z >= -hl - 1e-6 && z <= hl + 1e-6).map((z) => Math.round(clamp(z, -hl, hl) * 1000) / 1000))].sort((a, b) => a - b);
 
     function ring(z) {
-      const yb = sillAt(z), y0 = Math.max(belt(z), yb + 0.15), yt = Math.max(beltF(z), y0), w = halfW(z), top = Math.max(topAt(z), yt), h = top - yt;
-      // a fender raised over the wheel ahead of or behind the glasshouse keeps the bonnet low in the middle
-      const dip = z < r0 || z > r3 ? yt - y0 : 0;
+      const yb = sillAt(z), yt = Math.max(belt(z), yb + 0.15), w = halfW(z), top = Math.max(topAt(z), yt), h = top - yt;
       const k = clamp(h / 0.25, 0, 1);
       const gB = Math.max(0, w - S.shoulder), gT = Math.max(0, gB - S.tumble * clamp(h / 0.45, 0, 1));
       const xs = (y) => w * prof((y - yb) / (yt - yb));
@@ -5301,11 +5320,12 @@ body.touch .tk-sign .key { display: none; }
       pts.push([gB, yt, 'glass']);
       for (const y of glassLv) { const yy = clamp(y, yt, yg); pts.push([lerp(gB, gT, (yy - yt) / Math.max(1e-6, yg - yt)), yy, 'glass']); }
       pts.push([gT, yg, 'rail']);
-      const crown = lerp(z > 0 ? S.crown[1] : S.crown[0], S.crown[2], k) - dip;
+      const crown = lerp(z > 0 ? S.crown[1] : S.crown[0], S.crown[2], k);
       const xe = Math.max(0, gT - 0.1 * k - gB * 0.18 * (1 - k));
       const cy = (x) => top + crown * (1 - (xe > 0 ? (x / xe) * (x / xe) : 0));
-      pts.push([xe, cy(xe), 'roof']);
-      for (const x of topXs) { const xx = Math.min(x, xe); pts.push([xx, cy(xx), 'roof']); }
+      // (the crown of the bonnet, roof and boot sampled across, so it is a smooth curve and not a ridge down the middle)
+      const tx = [xe, xe * 0.75, xe * 0.5, xe * 0.25, ...topXs.map((x) => Math.min(x, xe))].sort((a, b) => b - a);
+      for (const x of tx) pts.push([x, cy(x), 'roof']);
       pts.push([0, top + crown, 'end']);
       return { pts, yb, yt, top, h, w, gB, gT, crown, xe };
     }
@@ -5322,7 +5342,7 @@ body.touch .tk-sign .key { display: none; }
       if (ax <= r.gB) return r.yt + ((yg - r.yt) * (r.gB - ax)) / Math.max(1e-3, r.gB - r.gT);
       return r.yt;
     };
-    M._shape = { S, hl, hw, Z, ring, sill, belt, beltF, roof, sillAt, topAt, halfW, endZ, sideX, surfY, shellY, zone, lv, rA, cA, archTop, r0, r1, r2, r3 };
+    M._shape = { S, hl, hw, Z, ring, sill, belt, roof, sillAt, topAt, halfW, endZ, sideX, surfY, shellY, zone, lv, rA, cA, archTop, r0, r1, r2, r3 };
     return M._shape;
   }
 
@@ -5479,7 +5499,7 @@ body.touch .tk-sign .key { display: none; }
     for (const s of [1, -1]) tubePath(mg, [[s * 0.15, 0.8, -0.44], [s * 0.13, 0.84, -0.66], [s * 0.08, 0.85, -0.84]], 0.012, ALU);
     tubeTo(mg, [0.08, 0.85, -0.84], [-0.08, 0.85, -0.84], 0.012, ALU);
     mg.box(0.11, 0.045, 0.04, COL.tail, 0, 0.78, -0.885);
-    for (const s of [1, -1]) mg.box(0.05, 0.035, 0.05, 0xe08a1c, s * 0.1, 0.74, -0.85);
+    for (const s of [1, -1]) mg.box(0.05, 0.035, 0.05, IND(s), s * 0.1, 0.74, -0.85);
     mg.hexa([[-0.1, 0.46, -0.93], [0.1, 0.46, -0.93], [0.1, 0.46, -0.9], [-0.1, 0.46, -0.9], [-0.06, 0.68, -0.86], [0.06, 0.68, -0.86], [0.06, 0.68, -0.83], [-0.06, 0.68, -0.83]], BLACK);
     mg.box(0.21, 0.11, 0.012, GLOSS, 0, 0.53, -0.928);
     plateB.quad([0.095, 0.48, -0.936], [-0.095, 0.48, -0.936], [-0.095, 0.58, -0.936], [0.095, 0.58, -0.936], 0xffffff, [[0, 0], [1, 0], [1, 1], [0, 1]], [0, 0, -1]);
@@ -5535,7 +5555,7 @@ body.touch .tk-sign .key { display: none; }
     for (const s of [1, -1]) {
       front.add(new THREE.CylinderGeometry(0.058, 0.058, 0.04, 18), GLOSS, s * 0.068, mk[1], mk[2] + 0.04, Math.PI / 2 - 0.12, 0, 0);
       front.add(new THREE.CylinderGeometry(0.048, 0.044, 0.045, 18), COL.head, s * 0.068, mk[1], mk[2] + 0.05, Math.PI / 2 - 0.12, 0, 0);
-      front.box(0.04, 0.03, 0.05, 0xe08a1c, s * 0.16, mk[1] - 0.02, mk[2] - 0.04);
+      front.box(0.04, 0.03, 0.05, IND(s), s * 0.16, mk[1] - 0.02, mk[2] - 0.04);
     }
     front.box(0.16, 0.06, 0.05, BLACK, 0, mk[1] + 0.09, mk[2] - 0.1);
     gl.hexa([[-0.13, mk[1] + 0.06, mk[2] - 0.12], [0.13, mk[1] + 0.06, mk[2] - 0.12], [0.13, mk[1] + 0.065, mk[2] - 0.1], [-0.13, mk[1] + 0.065, mk[2] - 0.1], [-0.1, mk[1] + 0.2, mk[2] - 0.2], [0.1, mk[1] + 0.2, mk[2] - 0.2], [0.1, mk[1] + 0.205, mk[2] - 0.18], [-0.1, mk[1] + 0.205, mk[2] - 0.18]], 0xffffff);
@@ -5681,7 +5701,7 @@ body.touch .tk-sign .key { display: none; }
     }
   }
   function militaryGeometry(M, paint) {
-    const surf = (col) => (col === COL.head ? SURF.head : col === COL.tail ? SURF.tail : col === COL.rev ? SURF.rev : col === GLOSS ? SURF.gloss : [0.82, 0.05, 0, 0]);
+    const surf = (col) => (col === COL.head ? SURF.head : col === COL.tail ? SURF.tail : col === COL.rev ? SURF.rev : col === COL.indL ? SURF.indL : col === COL.indR ? SURF.indR : col === GLOSS ? SURF.gloss : [0.82, 0.05, 0, 0]);
     const mg = new Merger(surf), gl = new Merger(), front = new Merger(surf);
     // a box cut into pieces about half a metre across, so the camouflage has room for its patches
     const cbox = (m, w, h, d, col, x, y, z) => m.add(new THREE.BoxGeometry(w, h, d, Math.max(1, Math.round(w / 0.55)), Math.max(1, Math.round(h / 0.55)), Math.max(1, Math.round(d / 0.55))), col, x, y, z);
@@ -5707,6 +5727,7 @@ body.touch .tk-sign .key { display: none; }
       for (const s of [1, -1]) {
         mg.box(0.22, 0.12, 0.06, COL.head, s * 1.35, 1.02, 3.66);
         mg.box(0.2, 0.1, 0.05, COL.tail, s * 1.5, 1.15, -3.72);
+        mg.box(0.1, 0.06, 0.06, IND(s), s * 1.35, 1.12, 3.66); mg.box(0.1, 0.06, 0.05, IND(s), s * 1.5, 1.24, -3.72);
       }
       // the driver's hatch at the front left, the driver's head out of it
       mg.add(new THREE.CylinderGeometry(0.34, 0.34, 0.08, 14), DARK, 0.75, 1.38, 2.35);
@@ -5744,6 +5765,7 @@ body.touch .tk-sign .key { display: none; }
       for (const s of [1, -1]) {
         mg.box(0.24, 0.13, 0.05, COL.head, s * (hw - 0.35), mid + 0.12, hl + 0.01);
         mg.box(0.2, 0.12, 0.05, COL.tail, s * (hw - 0.3), mid + 0.4, -hl - 0.01);
+        mg.box(0.12, 0.06, 0.05, IND(s), s * (hw - 0.35), mid + 0.23, hl + 0.01); mg.box(0.12, 0.06, 0.05, IND(s), s * (hw - 0.3), mid + 0.51, -hl - 0.01);
         // the wheel stations, dark behind the tyres
         for (const az of M.axles) mg.box(0.08, 0.85, 1.3, DARK, s * (hw - 0.2), 0.95, az);
         tubeTo(mg, [s * (hw - 0.4), top, -hl + 0.4], [s * (hw - 0.45), top + 2.2, -hl + 0.35], 0.012, DARK);
@@ -5771,6 +5793,7 @@ body.touch .tk-sign .key { display: none; }
         gl.box(0.03, 0.5, 0.75, 0xffffff, s * (hw + 0.005), 2.38, cab1 - 0.55);
         mg.box(0.26, 0.16, 0.05, COL.head, s * (hw - 0.3), 1.08, cab1 + 0.12);
         mg.box(0.18, 0.12, 0.05, COL.tail, s * (hw - 0.25), 1.05, -hl - 0.02);
+        mg.box(0.12, 0.07, 0.05, IND(s), s * (hw - 0.3), 1.21, cab1 + 0.12); mg.box(0.12, 0.07, 0.05, IND(s), s * (hw - 0.25), 1.16, -hl - 0.02);
         tubeTo(mg, [s * hw, 2.6, cab1 - 0.3], [s * (hw + 0.35), 2.5, cab1 - 0.2], 0.025, DARK);
         mg.box(0.06, 0.38, 0.22, GLOSS, s * (hw + 0.38), 2.35, cab1 - 0.2);
         for (const az of M.axles) mg.box(0.5, 0.06, 1.35, DARK, s * (hw - 0.3), 1.32, az);
@@ -5890,6 +5913,8 @@ body.touch .tk-sign .key { display: none; }
       mg.box(0.07, 0.04, 0.07, GLOSS, s * (x + 0.035), y - 0.03, z);
       mg.add(new THREE.BoxGeometry(0.16, 0.09, 0.07), paint, s * (x + 0.13), y, z, 0, s * 0.15, 0);
       mg.box(0.13, 0.07, 0.01, GLOSS, s * (x + 0.13), y, z - 0.04);
+      // (the indicator repeater in the outer end of the mirror)
+      mg.add(new THREE.BoxGeometry(0.014, 0.024, 0.062), IND(s), s * (x + 0.211), y - 0.022, z - 0.012, 0, s * 0.15, 0);
     } else for (const s of [1, -1]) {
       mg.box(0.06, 0.06, 0.5, GLOSS, s * (hw + 0.03), 2.55, hl - 0.25);
       mg.box(0.06, 0.4, 0.2, GLOSS, s * (hw + 0.06), 2.3, hl + 0.05);
@@ -5925,8 +5950,8 @@ body.touch .tk-sign .key { display: none; }
         const z = sh.endZ(Math.min(L.x + L.r, hw - 0.02), 1) - 0.012;
         mg.add(new THREE.CylinderGeometry(L.r + 0.024, L.r + 0.024, 0.05, 24), L.ring === 'paint' ? paint : L.ring === 'gloss' ? GLOSS : CHROME, s * L.x, L.y, z, Math.PI / 2, 0, 0);
         mg.add(new THREE.CylinderGeometry(L.r, L.r * 0.92, 0.06, 24), COL.head, s * L.x, L.y, z + 0.012, Math.PI / 2, 0, 0);
-        if (L.ind) mg.box(0.07, 0.05, 0.03, COL.busSign, s * (L.x + L.r + 0.08), L.y - L.r * 0.5, sh.endZ(L.x + L.r + 0.08, 1) - 0.005);
-      } else if (L.type === 'pod') for (const s of [1, -1]) mg.box(0.08, 0.055, 0.13, COL.busSign, s * L.x, sh.belt(L.z) + 0.026, L.z);
+        if (L.ind || !S.lamps.some((K) => K.type === 'pod')) mg.box(0.07, 0.05, 0.03, IND(s), s * (L.x + L.r + 0.08), L.y - L.r * 0.5, sh.endZ(L.x + L.r + 0.08, 1) - 0.005);
+      } else if (L.type === 'pod') for (const s of [1, -1]) mg.box(0.08, 0.055, 0.13, IND(s), s * L.x, sh.belt(L.z) + 0.026, L.z);
       else if (L.type === 'pixel') for (const [end, R, col] of [[1, L.front, COL.head], [-1, L.rear, COL.tail]]) {
         // square "pixels" in a grid, as on the Hyundai Ioniq 5
         if (!R) continue;
@@ -5946,6 +5971,39 @@ body.touch .tk-sign .key { display: none; }
         mg.add(new THREE.CylinderGeometry(L.r + 0.02, L.r + 0.02, 0.05, 20), GLOSS, s * x, L.y, z, Math.PI / 2, 0, 0);
         mg.add(new THREE.CylinderGeometry(L.r, L.r, 0.06, 20), COL.tail, s * x, L.y, z - 0.012, Math.PI / 2, 0, 0);
       }
+    }
+    // Indicators, amber: on the outer corners of the nose and the tail, and a repeater in each door mirror. Each lamp
+    // lies flat on the curve of the corner it sits on (the cars with their own lamps keep theirs: the Mini's and the
+    // Fiat's round ones, the G-Class's on the wings, the F40's)
+    {
+      // where the rounded end (1 the nose, -1 the tail) is at lateral offset x and height y
+      const endAt = (x, y, end) => {
+        let a = end * (hl - (end > 0 ? S.rc[1] : S.rc[0])), b = end * hl;
+        for (let i = 0; i < 20; i++) { const m = (a + b) / 2; if (sh.sideX(m, y) >= x) a = m; else b = m; }
+        return a;
+      };
+      const cornerLamp = (x, y, w, h, end) => {
+        const zIn = endAt(Math.max(0, x - w / 2), y, end), zOut = endAt(x + w / 2, y, end), L = Math.hypot(w, zOut - zIn);
+        const nx = (end * (zIn - zOut)) / L, nz = (end * w) / L, ang = Math.atan2(zOut - zIn, w), d = 0.022, o = d / 2 - 0.004;
+        for (const s of [1, -1]) mg.add(new THREE.BoxGeometry(w, h, d), IND(s), s * (x + nx * o), y, (zIn + zOut) / 2 + nz * o, 0, -s * ang, 0);
+      };
+      const lamps = S.lamps || [];
+      if (!S.f40 && !lamps.some((L) => L.type === 'face')) {
+        // under the outer end of the headlamp (or, with the lamps up on the wings, beside the plate)
+        const zh = hl - (S.head ? S.head.d / 2 : 0.15), yt = sh.ring(zh).yt;
+        const y = S.head ? sh.lv(S.head.y[0], yt) - 0.037 : S.plate[0] + 0.02;
+        cornerLamp(Math.max(S.head ? S.head.x + 0.09 : 0, hw - 0.18), y, 0.14, 0.05, 1);
+      }
+      const tr = lamps.find((L) => L.type === 'tailRound');
+      if (S.f40) { /* its outer round tail lamps are the indicators */ }
+      else if (tr) cornerLamp(Math.max(...tr.xs), tr.y - tr.r - 0.05, 0.12, 0.045, -1);
+      else if (S.tail) {
+        // in the bottom outer corner of the tail lamp
+        const zt = -hl + S.tail.d / 2, yt = sh.ring(zt).yt;
+        cornerLamp(Math.max(S.tail.x + 0.07, hw - 0.17), sh.lv(S.tail.y[0], yt) + 0.035, 0.12, 0.055, -1);
+      }
+      // the bus has its repeaters on the sides, just behind the front corners
+      if (M.bus) for (const s of [1, -1]) mg.box(0.012, 0.05, 0.14, IND(s), s * (hw + 0.004), 1.2, hl - 0.5);
     }
     // BMW's kidney grille: two tall openings with chrome surrounds and slats, either side of the middle of the nose
     if (S.kidney) {
@@ -6060,18 +6118,25 @@ body.touch .tk-sign .key { display: none; }
         mg.triN(q[0], q[1], q[2], up, up, up, col); mg.triN(q[0], q[2], q[3], up, up, up, col);
       };
       const onTop = (x, z, lift = 0.006) => [x, sh.surfY(z, Math.abs(x)) + lift, z];
+      // (in short pieces, so that it follows the curve of the body instead of cutting under it)
       const line = (xa, za, xb, zb, w, col) => {
-        const l = Math.hypot(xb - xa, zb - za), nx = (-(zb - za) / l) * w, nz = ((xb - xa) / l) * w;
-        patch([onTop(xa + nx, za + nz, 0.004), onTop(xb + nx, zb + nz, 0.004), onTop(xb - nx, zb - nz, 0.004), onTop(xa - nx, za - nz, 0.004)], col);
+        const l = Math.hypot(xb - xa, zb - za), nx = (-(zb - za) / l) * w, nz = ((xb - xa) / l) * w, n = Math.max(1, Math.ceil(l / 0.06));
+        for (let i = 0; i < n; i++) {
+          const x0 = lerp(xa, xb, i / n), z0 = lerp(za, zb, i / n), x1 = lerp(xa, xb, (i + 1) / n), z1 = lerp(za, zb, (i + 1) / n);
+          patch([onTop(x0 + nx, z0 + nz, 0.005), onTop(x1 + nx, z1 + nz, 0.005), onTop(x1 - nx, z1 - nz, 0.005), onTop(x0 - nx, z0 - nz, 0.005)], col);
+        }
       };
       for (const s of [1, -1]) {
         // the two NACA ducts in the bonnet, narrow at the front and opening out towards the windscreen
-        patch([onTop(s * 0.175, 1.72), onTop(s * 0.225, 1.72), onTop(s * 0.31, 1.12), onTop(s * 0.09, 1.12)], UNDER);
+        for (let i = 0; i < 10; i++) {
+          const t0 = i / 10, t1 = (i + 1) / 10, za = lerp(1.72, 1.12, t0), zb = lerp(1.72, 1.12, t1);
+          patch([onTop(s * lerp(0.175, 0.09, t0), za), onTop(s * lerp(0.225, 0.31, t0), za), onTop(s * lerp(0.225, 0.31, t1), zb), onTop(s * lerp(0.175, 0.09, t1), zb)], UNDER);
+        }
         // the lids of the pop-up headlamps at the front corners, shut, seen by their panel gaps
         const xa = s * 0.47, xb = s * 0.83, za = 1.5, zb = 1.86;
         line(xa, za, xb, za, 0.005, UNDER); line(xa, zb, xb, zb, 0.005, UNDER); line(xa, za, xa, zb, 0.005, UNDER);
         // the amber indicator at the outer end of each lamp, behind the clear cover
-        mg.box(0.12, 0.05, 0.02, COL.amber, s * 0.79, 0.455, sh.endZ(0.86, 1) - 0.006);
+        mg.box(0.12, 0.05, 0.02, IND(s), s * 0.79, 0.455, sh.endZ(0.86, 1) - 0.006);
         // the yellow Ferrari shield on each front wing, behind the wheel
         const zs = M.wb / 2 - sh.rA - 0.13, ys = 0.62, xs = sh.sideX(zs, ys);
         mg.box(0.008, 0.08, 0.06, 0xf2c200, s * (xs + 0.002), ys, zs);
@@ -6081,7 +6146,7 @@ body.touch .tk-sign .key { display: none; }
         for (const [x, kind] of F.tail) {
           const z = sh.endZ(Math.min(x + F.lampR, hw - 0.02), -1) - 0.004;
           mg.add(new THREE.CylinderGeometry(F.lampR + 0.016, F.lampR + 0.016, 0.03, 22), GLOSS, s * x, F.lampY, z, Math.PI / 2, 0, 0);
-          mg.add(new THREE.CylinderGeometry(F.lampR, F.lampR * 0.94, 0.04, 22), kind === 'red' ? COL.tail : COL.amber, s * x, F.lampY, z - 0.012, Math.PI / 2, 0, 0);
+          mg.add(new THREE.CylinderGeometry(F.lampR, F.lampR * 0.94, 0.04, 22), kind === 'red' ? COL.tail : IND(s), s * x, F.lampY, z - 0.012, Math.PI / 2, 0, 0);
         }
       }
       // the Lexan engine cover: a window behind the roof, then rows of slots either side of a spine down the middle
@@ -6998,6 +7063,9 @@ body.touch .tk-sign .key { display: none; }
     else if (dot < -0.9) b.P1 = [B.x + e1.ux * 6, B.z + e1.uz * 6];
     else { const t = (b.P2[0] - b.P0[0]) * e1.ux + (b.P2[1] - b.P0[1]) * e1.uz; b.P1 = [b.P0[0] + e1.ux * t, b.P0[1] + e1.uz * t]; }
     b.turnType = dot > 0.9 ? 0 : dot < -0.9 ? 2 : 1;
+    // which way to signal: left or right off into a side street, left for a U-turn; nothing where the street just bends
+    const side = e2.ux * e1.uz - e2.uz * e1.ux;
+    b.turnDir = b.turnType && nodes[b.to].nb.length > 2 ? (b.turnType === 2 || side > 0 ? 1 : 2) : 0;
     b.curveLen = Math.hypot(b.P1[0] - b.P0[0], b.P1[1] - b.P0[1]) + Math.hypot(b.P2[0] - b.P1[0], b.P2[1] - b.P1[1]);
     b.t = 0; b.turnAge = 0; b.phase = 'turn';
   }
@@ -7052,12 +7120,17 @@ body.touch .tk-sign .key { display: none; }
       const B = nodes[b.to], n = nodes[b.next];
       const dot = ((n.x - B.x) * e.ux + (n.z - B.z) * e.uz) / (Math.hypot(n.x - B.x, n.z - B.z) || 1);
       if (dot < 0.9 && remain < 24) vT = Math.min(vT, (b.turnV || 5.5) + Math.max(0, remain) * 0.3);
+      // the indicator goes on some 35 m before a turn at a junction
+      b.sig = remain < 35 && dot < 0.9 && B.nb.length > 2 ? (dot < -0.9 || (n.x - B.x) * e.uz - (n.z - B.z) * e.ux > 0 ? 1 : 2) : 0;
     } else {
       const tt = b.t + look / Math.max(6, b.curveLen);
       if (tt <= 1) { const p = bez(b, tt); tx = p[0]; tz = p[1]; }
       else { const e2 = edgeFrame(b.to, b.next), ex = (tt - 1) * b.curveLen; tx = b.P2[0] + e2.ux * ex; tz = b.P2[1] + e2.uz * ex; }
       if (b.turnType !== 0) vT = Math.min(vT, b.turnV || 5.5);
+      b.sig = b.turnDir || 0;
     }
+    // (blue lights and the army don't bother with indicators)
+    c.blink = onBlueLights(c) || c.military ? 0 : b.sig || 0;
 
     // look for anything in the way: cars, the player, pedestrians
     let gap = Infinity, blocker = null;
@@ -9610,7 +9683,7 @@ body.touch .tk-sign .key { display: none; }
     // keep whichever gearbox you used last; a car taken on the move starts in a gear that suits its speed
     c.auto = gearAuto;
     const vf = Math.max(0, c.vx * Math.sin(c.h) + c.vz * Math.cos(c.h));
-    c.gear = 0; c.inR = false; c.rT = 0;
+    c.gear = 0; c.inR = false; c.rT = 0; c.blink = 0;
     while (c.gear < c.M.gears - 1 && vf > c.M.gearTop[c.gear] * 0.85) c.gear++;
     player.model.group.visible = false;
     player.vx = player.vz = player.vy = 0;
@@ -10011,6 +10084,7 @@ body.touch .tk-sign .key { display: none; }
       const glow = c.mat.userData.glow;
       glow.y = c.braking ? BRAKE_GLOW : TAIL_GLOW;
       c.mat.userData.rev.value = c.reversing && !c.dead ? 1.8 : 0;
+      updateBlink(c, dt);
       updateEngine(c, vf, dt);
       damageFx(c, dt);
       if (c.M.police) policeLights(c, dt);
@@ -10084,7 +10158,7 @@ body.touch .tk-sign .key { display: none; }
 
   /* ================= HUD ================= */
   const el = {
-    prompt: $('prompt'), promptText: $('promptText'), dash: $('dash'), kmh: $('kmh'), gear: $('gear'), bar: $('revbar'), rpm: $('rpm'), mode: $('gearMode'),
+    prompt: $('prompt'), promptText: $('promptText'), dash: $('dash'), kmh: $('kmh'), gear: $('gear'), blinkL: $('blinkL'), blinkR: $('blinkR'), bar: $('revbar'), rpm: $('rpm'), mode: $('gearMode'),
     engineRow: $('engineRow'), hpbar: $('hpbar'), hpText: $('hpText'), limit: $('limit'), limitNum: $('limitNum'), wanted: $('wanted'), wantedHint: $('wantedHint'), wantedTitle: $('wantedTitle'),
     fineTag: $('fineTag'), fines: $('fines'), horses: $('horses'), btnUp: $('btnUp'), btnDown: $('btnDown'),
     carName: $('carName'), help: $('help'), sound: $('soundLabel'), btnUse: $('btnUse'), btnJump: $('btnJump'), touch: $('touch'),
@@ -10156,6 +10230,8 @@ body.touch .tk-sign .key { display: none; }
       const c = driving, vf = c.vx * Math.sin(c.h) + c.vz * Math.cos(c.h);
       const kmh = Math.round(Math.abs(vf) * 3.6), rf = clamp(c.rpm / (c.M.red * 1.04), 0, 1);
       el.kmh.textContent = kmh;
+      el.blinkL.classList.toggle('on', !!c.blinkLit && !!(c.blink & 1));
+      el.blinkR.classList.toggle('on', !!c.blinkLit && !!(c.blink & 2));
       el.gear.textContent = gearOf(c, vf);
       el.mode.textContent = c.M.boat ? (c.M.boat === 'jetski' ? 'Jet' : 'Båt') : c.M.cvt ? 'Variator' : c.M.ev ? 'El' : c.auto ? 'Auto' : 'Manuell';
       el.mode.classList.toggle('man', !c.auto && !c.M.boat);
@@ -10779,6 +10855,33 @@ body.touch .tk-sign .key { display: none; }
       o.start(t); o.stop(t + len + 0.02);
     }
   }
+  // The indicators: c.blink is 1 for left, 2 for right and 3 for the hazard lights. They are lit for 0.4 s of every
+  // 0.75 s (80 flashes a minute, starting lit), and in your own car the relay ticks. Like a real stalk, a left or right
+  // signal drops back by itself once the car has turned that way and the wheel comes back to the middle
+  function updateBlink(c, dt) {
+    const bl = c.blink || 0, ind = c.mat.userData.ind;
+    let lit = false;
+    if (bl) { c.blinkT = (c.blinkT || 0) + dt; lit = c.blinkT % 0.75 < 0.4; } else c.blinkT = 0;
+    ind.x = lit && bl & 1 ? IND_GLOW : 0; ind.y = lit && bl & 2 ? IND_GLOW : 0;
+    if (c === driving && lit !== !!c.blinkLit) blinkTick(lit);
+    c.blinkLit = lit;
+    if (c === driving && (bl === 1 || bl === 2)) {
+      c.blinkTurn = (c.blinkTurn || 0) + wrapAngle(c.h - (c.blinkH ?? c.h)) * (bl === 1 ? 1 : -1);
+      if (c.blinkTurn > 0.5 && Math.abs(c.steer) < 0.08) c.blink = 0;
+    }
+    c.blinkH = c.h;
+  }
+  function setBlink(k) {
+    const c = driving;
+    if (!c || c.M.boat || paused()) return;
+    c.blink = c.blink === k ? 0 : k; c.blinkT = 0; c.blinkTurn = 0;
+  }
+  function blinkTick(on) {
+    if (!audio || muted) return;
+    const t = audio.ctx.currentTime;
+    noiseBurst(t, 0.022, on ? 0.1 : 0.075, 'bandpass', on ? 2900 : 2100, 4, 0, 0.001);
+    tone(t, 'square', on ? 1500 : 1150, on ? 900 : 700, 0.018, 0.02, 0);
+  }
   function horn() { if (driving) beep(driving.M.moped ? [740] : driving.M.bus ? [220, 277] : driving.M.sport ? [523, 659] : [392, 494], driving.M.moped ? 0.035 : 0.05, driving.M.moped ? 0.3 : 0.45); }
   function honkAt(x, z) {
     const s = placeSound(x, z, 70);
@@ -10853,6 +10956,9 @@ body.touch .tk-sign .key { display: none; }
     else if (code === 'KeyQ') POST.cycle();
     else if (code === 'KeyJ') JOBS.key();
     else if (code === 'KeyV') VENDORS.letGo();
+    else if (code === 'KeyZ') setBlink(1);
+    else if (code === 'KeyX') setBlink(2);
+    else if (code === 'KeyC') setBlink(3);
   }
   window.addEventListener('keydown', (e) => {
     if (bigmap.open) { if (e.code === 'Escape' || e.code === 'KeyK') { e.preventDefault(); onKey(e.code, e.repeat); } return; }
@@ -10915,6 +11021,8 @@ body.touch .tk-sign .key { display: none; }
   $('btnCars').addEventListener('pointerdown', (e) => { e.preventDefault(); openPicker(); });
   $('btnJob').addEventListener('pointerdown', (e) => { e.preventDefault(); if (!tankFire()) JOBS.key(); });
   el.btnUp.addEventListener('pointerdown', (e) => { e.preventDefault(); playerShift(1); });
+  el.blinkL.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); setBlink(1); });
+  el.blinkR.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); setBlink(2); });
   el.btnDown.addEventListener('pointerdown', (e) => { e.preventDefault(); playerShift(-1); });
 
   window.addEventListener('resize', () => {
