@@ -53,6 +53,8 @@ body.playing #hud { opacity: 1; }
 #stars.search svg.on path { animation: starBlink 0.7s steps(1) infinite; }
 #stars .heli { display: none; align-self: center; margin-left: 4px; font: 900 0.68rem/1 var(--font-sign); letter-spacing: 0.08em; color: var(--sign-yellow); }
 #stars.heli-on .heli { display: block; }
+#stars .army { display: none; align-self: center; margin-left: 4px; font: 900 0.68rem/1 var(--font-sign); letter-spacing: 0.08em; color: #9fcf6a; }
+#stars.army-on .army { display: block; }
 /* the lift's buttons while you ride it: brass buttons on a mahogany panel */
 #liftPanel {
   position: absolute; left: calc(18px + env(safe-area-inset-left, 0px)); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); pointer-events: auto;
@@ -204,6 +206,7 @@ body.job #wanted { top: calc(112px + env(safe-area-inset-top, 0px)); }
   position: absolute; top: calc(98px + env(safe-area-inset-top, 0px)); left: calc(14px + env(safe-area-inset-left, 0px));
   max-width: min(330px, calc(100vw - 32px)); box-sizing: border-box; padding: 14px 16px; border-radius: 12px; background: var(--glass);
   display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; align-items: center; font-size: 0.88rem;
+  max-height: calc(100vh - 118px - env(safe-area-inset-top, 0px)); overflow-y: auto;
 }
 
 /* ---------- start sign ---------- */
@@ -266,6 +269,7 @@ h1 { margin: 0; font: 900 clamp(2.2rem, 9vw, 3.1rem)/0.95 var(--font-sign); lett
 .lg-race { border-radius: 2px !important; background: #ffe14a; box-shadow: 0 0 0 2px #1b1c1e; }
 .lg-goal { background: #ffc21a; box-shadow: 0 0 0 2px var(--snow); }
 .lg-heli { background: radial-gradient(circle, #163d8c 0 38%, rgba(255,255,255,.75) 40%); box-shadow: 0 0 0 1px #11161b; }
+.lg-army { border-radius: 2px !important; background: #3d4a30; box-shadow: 0 0 0 2px var(--snow); }
 .lg-boat { border-radius: 1px 1px 7px 7px !important; height: 9px !important; background: var(--snow); box-shadow: 0 0 0 1.5px var(--sign-blue); }
 
 /* ---------- car picker ---------- */
@@ -352,7 +356,7 @@ body.touch .tk-sign .key { display: none; }
     <div class="tag cash" id="cashTag" hidden title="Dina pengar: fickpengarna och det du tjänat på jobb">Kassa <b id="cash">0 kr</b></div>
     <div class="tag dala-tag" title="Dalahästar du hittat"><svg class="dala" viewBox="0 0 20 20" aria-hidden="true"><path d="M4 18V11L3 10V8l2-1 1-4h3l1 2-2 1v1h7l1 1v8h-3v-4H8v4z" fill="#c8102e" stroke="#fff" stroke-width="1"/></svg><b id="horses">0/20</b></div>
   </div>
-  <div id="stars" role="img" aria-label="Polisen letar inte efter dig" title="Hur mycket polisen är efter dig. Från tre stjärnor kommer helikoptern"><span class="heli">HELIKOPTER</span></div>
+  <div id="stars" role="img" aria-label="Polisen letar inte efter dig" title="Hur mycket polisen är efter dig. Från tre stjärnor kommer helikoptern"><span class="heli">HELIKOPTER</span><span class="army">MILITÄR</span></div>
   <div id="loc"><span id="locStreet"></span><span id="locDistrict">Norrmalm</span></div>
   <div id="job" hidden><span class="job-icon" id="jobIcon">T</span><span><b id="jobTitle"></b><small id="jobHint"></small></span><span id="jobClock"></span></div>
   <div id="bigText" hidden></div>
@@ -385,23 +389,24 @@ body.touch .tk-sign .key { display: none; }
     <div class="dash-foot"><span id="carName">Kombi</span><span class="hint"><span class="key">N</span><span class="key">M</span>Växla</span></div>
   </div>
   <div id="help" hidden>
-    <span class="key">W A S D</span><span>Gå, eller gasa och styr</span>
+    <span class="key">W A S D</span><span>Gå, eller gasa och styr. Håll in S så bromsar bilen och backar sedan</span>
     <span class="key">Mus</span><span>Titta runt (klicka i spelet)</span>
     <span class="key">Shift</span><span>Spring</span>
     <span class="key">Mellanslag</span><span>Hoppa, eller handbroms i bilen</span>
     <span class="key">M / N</span><span>Växla upp / ner</span>
     <span class="key">G</span><span>Automat eller manuell växellåda</span>
     <span class="key">E</span><span>Kliv in, ta en bil i trafiken, kliv ur</span>
-    <span class="key">B</span><span>Välj bilmodell</span>
+    <span class="key">B</span><span>Välj bilmodell, eller en båt när du står vid en kaj</span>
     <span class="key">K</span><span>Stor karta (eller klicka på kartan)</span>
-    <span class="key">F</span><span>Tuta</span>
+    <span class="key">F</span><span>Tuta, eller skjut med kanonen i stridsvagnen</span>
     <span class="key">L</span><span>Blåljus, när du kör en polisbil</span>
     <span class="key">Polis</span><span>Kör in till kanten och stanna, så kommer en konstapel fram. E skriver under boten. 50 km/h för fort eller flykt: du blir gripen och hamnar i cellen på polisstationen i Gamla stan</span>
+    <span class="key">Militär</span><span>Vid fem stjärnor kommer militären: stridsvagn, pansarbilar och en lastbil med soldater</span>
     <span class="key">Dalahäst</span><span>20 st gömda i stan, 9 i Gamla stan. Gå eller kör in i dem</span>
     <span class="key">J</span><span>Jobb: taxi i taxin, paket i Sprintern, busslinje i bussen. Vid en gul ljuspelare: starta gatlopp</span>
     <span class="key">Glass</span><span>Glasskiosk och ballongförsäljare vid Skeppsbron, i Kungsträdgården, på Medborgarplatsen och på Djurgården. Gå fram och tryck E för att köpa</span>
     <span class="key">V</span><span>Släpp en ballong</span>
-    <span class="key">R</span><span>Ställ bilen på gatan igen</span>
+    <span class="key">R</span><span>Ställ bilen på gatan igen, eller båten ute på öppet vatten</span>
     <span class="key">T</span><span>Ljud av och på</span>
     <span class="key">Q</span><span>Grafikkvalitet: hög, mellan eller enkel</span>
     <span class="key">Esc</span><span>Släpp musen</span>
@@ -438,7 +443,7 @@ body.touch .tk-sign .key { display: none; }
         <li><span class="k"><span class="key">Mellanslag</span></span><span>Hoppa, eller handbroms i bilen</span></li>
         <li><span class="k"><span class="key">M</span><span class="key">N</span></span><span>Växla upp och ner</span></li>
         <li><span class="k"><span class="key">E</span></span><span>Kliv in, eller ta en bil som kör förbi</span></li>
-        <li><span class="k"><span class="key">B</span></span><span>Välj bilmodell</span></li>
+        <li><span class="k"><span class="key">B</span></span><span>Välj bil, eller båt vid en kaj</span></li>
         <li><span class="k"><span class="key">J</span></span><span>Jobb (taxi, paket, buss) och gatlopp</span></li>
       </ul>
       <ul class="keys only-touch">
@@ -447,7 +452,7 @@ body.touch .tk-sign .key { display: none; }
         <li><span class="k"><span class="key">Hoppa</span></span><span>Hoppa, eller bromsa i bilen</span></li>
         <li><span class="k"><span class="key">Kliv in</span></span><span>Kliv in, eller ta en bil</span></li>
         <li><span class="k"><span class="key">▲</span><span class="key">▼</span></span><span>Växla upp och ner</span></li>
-        <li><span class="k"><span class="key">Bilar</span></span><span>Välj bilmodell</span></li>
+        <li><span class="k"><span class="key">Bilar</span></span><span>Välj bil, eller båt vid en kaj</span></li>
       </ul>
       <button id="play" class="btn-sign" type="button">Spela</button>
     </div>
@@ -468,7 +473,7 @@ body.touch .tk-sign .key { display: none; }
     <canvas id="bigmapCanvas"></canvas>
     <div class="legend">
       <span><i class="lg-you"></i>Du</span><span><i class="lg-police"></i>Polis</span><span><i class="lg-car"></i>Din bil</span>
-      <span><i class="lg-t">T</i>Tunnelbana</span><span><i class="lg-dala"></i>Hittad dalahäst</span><span><i class="lg-park"></i>Park</span><span><i class="lg-main"></i>Huvudgata</span><span><i class="lg-race"></i>Gatlopp</span><span><i class="lg-goal"></i>Mål och GPS</span><span><i class="lg-ice"></i>Glasskiosk</span><span><i class="lg-balloon"></i>Ballonger</span><span><i class="lg-heli"></i>Polishelikopter</span><span><i class="lg-boat"></i>Båt</span>
+      <span><i class="lg-t">T</i>Tunnelbana</span><span><i class="lg-dala"></i>Hittad dalahäst</span><span><i class="lg-park"></i>Park</span><span><i class="lg-main"></i>Huvudgata</span><span><i class="lg-race"></i>Gatlopp</span><span><i class="lg-goal"></i>Mål och GPS</span><span><i class="lg-ice"></i>Glasskiosk</span><span><i class="lg-balloon"></i>Ballonger</span><span><i class="lg-heli"></i>Polishelikopter</span><span><i class="lg-boat"></i>Båt</span><span><i class="lg-army"></i>Militär</span>
     </div>
   </div>
 </div>
@@ -4531,6 +4536,11 @@ body.touch .tk-sign .key { display: none; }
     } else if (id.hat === 'beanie') {
       cap(r * 1.1, Math.PI * 0.58, id.hatColor);
       m.add(ball(r * 0.22, 6, 5), id.hatColor, 0, cy + r * 1.12, 0);
+    } else if (id.hat === 'combat') {
+      // the army's combat helmet under its camouflage cover
+      cap(r * 1.2, Math.PI * 0.56, 0x4a5638);
+      m.add(squash(cyl(r * 1.16, r * 1.22, r * 0.1, 14), 1, 1, 1.08), 0x3d4730, 0, cy - r * 0.08, -r * 0.02);
+      for (const [a, b] of [[0.6, 0.3], [-0.7, 0.5], [0.1, -0.6]]) m.add(ball(r * 0.32, 6, 4), 0x2a3221, Math.sin(a) * r * 0.95, cy + r * 0.55 + b * r * 0.2, Math.cos(a) * r * 0.6 * Math.sign(b));
     } else if (id.hat === 'helmet') {
       // Högvakten's spiked helmet (pickelhuva): black leather with a brass spike and plate
       cap(r * 1.14, Math.PI * 0.55, 0x15171a);
@@ -4556,6 +4566,14 @@ body.touch .tk-sign .key { display: none; }
       b.add(squash(cyl(0.157, 0.157, 0.05, 12), 1.17, 1, 0.8), 0xf2f2ee, 0, 1.08, 0);
       b.box(0.05, 0.05, 0.02, 0xd4a53a, 0, 1.08, 0.128);
       for (const s of [1, -1]) b.add(new THREE.BoxGeometry(0.045, 0.48, 0.02), 0xf2f2ee, s * 0.05, 1.29, 0.122, 0, 0, s * 0.45);
+    }
+    if (o.soldier) {
+      // M90 camouflage: splinters of dark green and black over the green, and a vest of webbing over the chest
+      for (const [x, y, z, sx, sy] of [[0.1, 1.2, 0.12, 0.09, 0.06], [-0.12, 1.33, 0.11, 0.07, 0.08], [0.15, 1.36, -0.1, 0.08, 0.05], [-0.08, 1.1, -0.12, 0.09, 0.05], [0.0, 1.0, 0.13, 0.06, 0.04], [-0.16, 1.18, -0.06, 0.06, 0.07]]) {
+        b.add(new THREE.BoxGeometry(sx * 2, sy * 2, 0.02), Math.abs(x + y) % 0.3 < 0.15 ? 0x2c3623 : 0x1c1f17, x, y, z, 0, Math.atan2(x, z), 0.5);
+      }
+      b.add(squash(cyl(0.185, 0.17, 0.3, 12), 1.2, 1, 0.8), 0x3f4a33, 0, 1.25, 0);
+      for (const sx of [1, -1]) b.box(0.07, 0.09, 0.05, 0x323b28, sx * 0.1, 1.18, 0.15);
     }
     if (o.police) {
       // the police: reflective yellow-green band round the chest and a POLIS-blue collar
@@ -5040,9 +5058,22 @@ body.touch .tk-sign .key { display: none; }
     { id: 'riva', name: 'Riva Aquarama', kind: 'Motorbåt', def: 'Rivan', boat: 'riva', engine: 'Två V8, 2 × 350 hk', hull: [[-4.01, 1.15, -0.32, 0.6], [-3.0, 1.27, -0.4, 0.64], [-1.0, 1.3, -0.48, 0.7], [1.0, 1.22, -0.48, 0.76], [2.5, 0.92, -0.33, 0.82], [3.5, 0.5, -0.08, 0.84], [4.01, 0.06, 0.24, 0.8]], W: 2.6, L: 8.02, R: 0.3, wb: 5, max: 22, zero: [50, 5.8], brake: 3.5, rev: 2.5, mass: 2.4, grip: 1,
       colors: [0x7a3b1c], gears: 1, idle: 650, red: 4800, eng: 'v8', shape: {} }
   );
+  // Försvarsmakten, called in at five stars: Stridsvagn 122 (the Swedish Leopard 2A5, 62 tonnes, 72 km/h, the arrowhead
+  // armour on the turret and the long 120 mm gun), Pansarterrängbil 360 (Patria AMV, eight wheels, a remote weapon
+  // station on the roof) and a six-wheeled Scania lastterrängbil with soldiers under the tarpaulin, all in the M90
+  // splinter camouflage. Not in the car picker, but they can be taken. (Their shapes are their own: see militaryGeometry)
+  MODELS.push(
+    { id: 'strv122', name: 'Stridsvagn 122', kind: 'Stridsvagn', def: 'stridsvagnen', mil: 'tank', W: 3.7, L: 7.7, R: 0.35, wb: 2.2, max: 20, zero: [50, 10], brake: 14, rev: 6, mass: 60, grip: 1.5,
+      axles: [2.85, 1.9, 0.95, 0, -0.95, -1.9, -2.85], steers: 0, colors: [0x5b6b45], gears: 4, idle: 650, red: 2600, eng: 'tank', rim: 'tank', shape: {} },
+    { id: 'patgb360', name: 'Pansarterrängbil 360', kind: 'Patria AMV', def: 'pansarbilen', mil: 'patria', W: 2.8, L: 7.7, R: 0.6, wb: 4.5, max: 28, zero: [50, 8], brake: 16, rev: 7, mass: 22, grip: 1.15,
+      axles: [2.5, 1.15, -0.6, -1.95], steers: 2, colors: [0x5b6b45], gears: 7, idle: 600, red: 2500, eng: 'bus', rim: 'mil', shape: {} },
+    { id: 'miltruck', name: 'Lastterrängbil', kind: 'Scania 6×6', def: 'lastbilen', mil: 'truck', W: 2.55, L: 8.5, R: 0.6, wb: 5.6, max: 25, zero: [50, 11], brake: 14, rev: 6, mass: 15, grip: 1.0,
+      axles: [3.0, -1.35, -2.75], steers: 1, colors: [0x5b6b45], gears: 8, idle: 600, red: 2400, eng: 'bus', rim: 'mil', shape: {} }
+  );
   const MODEL = Object.fromEntries(MODELS.map((m) => [m.id, m]));
-  const PICKABLE = MODELS.filter((m) => !m.police);
-  const REGULARS = MODELS.filter((m) => !m.sport && !m.bus && !m.police && !m.moped && !m.boat), SPORTS = MODELS.filter((m) => m.sport);
+  const PICKABLE = MODELS.filter((m) => !m.police && !m.mil);
+  const REGULARS = MODELS.filter((m) => !m.sport && !m.bus && !m.police && !m.moped && !m.boat && !m.mil), SPORTS = MODELS.filter((m) => m.sport);
+  const MILITARY = MODELS.filter((m) => m.mil);
   const BOATS = MODELS.filter((m) => m.boat);
 
   /* ---------- gearbox and engine ---------- */
@@ -5397,7 +5428,7 @@ body.touch .tk-sign .key { display: none; }
     return sh;
   }
 
-  const wheelX = (M) => (M.moped ? 0 : M.W / 2 - (M.bus ? 0.24 : 0.17));
+  const wheelX = (M) => (M.moped ? 0 : M.W / 2 - (M.mil === 'tank' ? 0.33 : M.mil ? 0.3 : M.bus ? 0.24 : 0.17));
   // a tube from point a to point b, radius r at a and r2 at b
   function tubeTo(m, a, b, r, col, r2 = r, n = 10) {
     const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), len = d.length();
@@ -5634,6 +5665,136 @@ body.touch .tk-sign .key { display: none; }
     }
     return { body: mg.build(), glass: gl.build(), front: frontGeo, decal: null, plates: new Builder().build(), flashers: null, head, rake, frontAxle: null, driver, rear: null, parts };
   }
+  // The army's vehicles, in their own frame (z forwards, y up from the road, +x the driver's left), painted in M90: the
+  // Swedish splinter camouflage of light and dark green, black and pale green in sharp-edged patches. The tank's turret
+  // with its gun and the Patria's weapon station turn on their own (front, about head).
+  const M90 = [0x5b6b45, 0x34402b, 0x1e2119, 0x7d8b5e];
+  function camouflage(m, base) {
+    const b = new THREE.Color(base), cols = M90.map((c) => new THREE.Color(c)), P = m.p, C = m.c;
+    const hash = (u, v) => { const h = Math.sin(u * 127.1 + v * 311.7) * 43758.5453; return h - Math.floor(h); };
+    for (let i = 0; i < P.length; i += 9) {
+      if (Math.abs(C[i] - b.r) > 1e-4 || Math.abs(C[i + 1] - b.g) > 1e-4 || Math.abs(C[i + 2] - b.b) > 1e-4) continue;
+      const x = (P[i] + P[i + 3] + P[i + 6]) / 3, y = (P[i + 1] + P[i + 4] + P[i + 7]) / 3, z = (P[i + 2] + P[i + 5] + P[i + 8]) / 3;
+      const h = hash(Math.floor(x * 0.9 + z * 0.55 + y * 0.5), Math.floor(z * 0.8 - x * 0.6 + y * 0.9));
+      const c = cols[h < 0.4 ? 0 : h < 0.68 ? 1 : h < 0.84 ? 2 : 3];
+      for (let k = 0; k < 9; k += 3) { C[i + k] = c.r; C[i + k + 1] = c.g; C[i + k + 2] = c.b; }
+    }
+  }
+  function militaryGeometry(M, paint) {
+    const surf = (col) => (col === COL.head ? SURF.head : col === COL.tail ? SURF.tail : col === COL.rev ? SURF.rev : col === GLOSS ? SURF.gloss : [0.82, 0.05, 0, 0]);
+    const mg = new Merger(surf), gl = new Merger(), front = new Merger(surf);
+    // a box cut into pieces about half a metre across, so the camouflage has room for its patches
+    const cbox = (m, w, h, d, col, x, y, z) => m.add(new THREE.BoxGeometry(w, h, d, Math.max(1, Math.round(w / 0.55)), Math.max(1, Math.round(h / 0.55)), Math.max(1, Math.round(d / 0.55))), col, x, y, z);
+    const DARK = 0x2a2c2e, OLIVE = 0x4f5a3c, hw = M.W / 2, hl = M.L / 2;
+    let driver, head = null, parts;
+    if (M.mil === 'tank') {
+      const tw = 0.62;
+      for (const s of [1, -1]) {
+        const xc = s * (hw - tw / 2);
+        // the track: the top and bottom runs and the slanted ends, the sprocket at the back and the idler at the front
+        mg.box(tw, 0.09, 7.1, DARK, xc, 0.92, 0); mg.box(tw, 0.09, 6.7, DARK, xc, 0.05, 0);
+        mg.hexa([[xc - tw / 2, 0.01, 3.35], [xc + tw / 2, 0.01, 3.35], [xc + tw / 2, 0.86, 3.86], [xc - tw / 2, 0.86, 3.86], [xc - tw / 2, 0.1, 3.35], [xc + tw / 2, 0.1, 3.35], [xc + tw / 2, 0.97, 3.55], [xc - tw / 2, 0.97, 3.55]], DARK);
+        mg.hexa([[xc - tw / 2, 0.01, -3.35], [xc + tw / 2, 0.01, -3.35], [xc + tw / 2, 0.86, -3.86], [xc - tw / 2, 0.86, -3.86], [xc - tw / 2, 0.1, -3.35], [xc + tw / 2, 0.1, -3.35], [xc + tw / 2, 0.97, -3.55], [xc - tw / 2, 0.97, -3.55]], DARK);
+        for (const z of [3.45, -3.45]) mg.add(new THREE.CylinderGeometry(0.34, 0.34, tw * 0.8, 14), 0x3a3d38, xc, 0.55, z, 0, 0, Math.PI / 2);
+        // the armoured skirt over the top of the track, the lower half of the road wheels showing under it
+        cbox(mg, 0.08, 0.55, 7.2, paint, s * (hw + 0.02), 0.76, -0.05);
+      }
+      // the hull between the tracks, the deck over them, the sloped glacis plate, the engine deck with its grilles
+      cbox(mg, M.W - 2 * tw, 0.75, 7.2, paint, 0, 0.72, 0);
+      cbox(mg, M.W + 0.04, 0.3, 6.5, paint, 0, 1.18, -0.45);
+      mg.hexa([[-hw, 1.03, 2.8], [hw, 1.03, 2.8], [hw, 0.85, 3.85], [-hw + 0.1, 0.85, 3.85], [-hw, 1.33, 2.8], [hw, 1.33, 2.8], [hw - 0.1, 0.98, 3.85], [-hw + 0.1, 0.98, 3.85]], paint);
+      for (let z = -3.4; z < -1.6; z += 0.36) mg.box(2.2, 0.03, 0.18, DARK, 0, 1.345, z);
+      for (const s of [1, -1]) {
+        mg.box(0.22, 0.12, 0.06, COL.head, s * 1.35, 1.02, 3.66);
+        mg.box(0.2, 0.1, 0.05, COL.tail, s * 1.5, 1.15, -3.72);
+      }
+      // the driver's hatch at the front left, the driver's head out of it
+      mg.add(new THREE.CylinderGeometry(0.34, 0.34, 0.08, 14), DARK, 0.75, 1.38, 2.35);
+      driver = { x: 0.75, y: 0.8, z: 2.3 };
+      // the turret: the box with its bustle behind, the arrowhead armour on the front, the mantlet and the 120 mm gun with
+      // its thermal sleeve, the commander's cupola and the gunner's sight, smoke dischargers on the sides
+      head = [0, 1.33, -0.45];
+      cbox(front, 3.0, 0.78, 3.4, paint, 0, 0.39, -0.1);
+      cbox(front, 2.6, 0.62, 1.1, paint, 0, 0.42, -2.3);
+      for (const s of [1, -1]) {
+        front.hexa([[s * 0.36, 0.04, 1.6], [s * 1.5, 0.04, 1.6], [s * 1.0, 0.04, 2.55], [s * 0.62, 0.04, 2.55], [s * 0.36, 0.76, 1.6], [s * 1.5, 0.76, 1.6], [s * 1.0, 0.66, 2.45], [s * 0.62, 0.66, 2.45]], paint);
+        for (let k = 0; k < 4; k++) front.add(new THREE.CylinderGeometry(0.06, 0.06, 0.3, 8), DARK, s * 1.56, 0.62, -0.9 - k * 0.16, 0.3, 0, s * 0.9);
+      }
+      cbox(front, 0.7, 0.62, 0.5, paint, 0, 0.42, 1.85);
+      front.add(new THREE.CylinderGeometry(0.085, 0.09, 5.2, 12), paint, 0, 0.46, 4.6, Math.PI / 2, 0, 0);
+      front.add(new THREE.CylinderGeometry(0.12, 0.12, 1.4, 12), DARK, 0, 0.46, 3.2, Math.PI / 2, 0, 0);
+      front.add(new THREE.CylinderGeometry(0.1, 0.1, 0.12, 12), 0x1a1c19, 0, 0.46, 7.2, Math.PI / 2, 0, 0);
+      front.add(new THREE.CylinderGeometry(0.36, 0.38, 0.28, 14), paint, 0.62, 0.92, -0.75);
+      for (let k = 0; k < 6; k++) { const a = (k / 6) * TAU; front.box(0.1, 0.08, 0.06, GLOSS, 0.62 + Math.cos(a) * 0.3, 1.02, -0.75 + Math.sin(a) * 0.3); }
+      cbox(front, 0.45, 0.4, 0.55, paint, -0.75, 0.95, 0.75);
+      front.box(0.32, 0.22, 0.04, GLOSS, -0.75, 0.98, 1.03);
+      tubeTo(front, [-1.2, 0.78, -2.4], [-1.25, 3.0, -2.5], 0.015, DARK);
+      tubeTo(front, [1.2, 0.78, -2.4], [1.25, 2.6, -2.5], 0.015, DARK);
+      camouflage(front, paint);
+      parts = [{ cz: 0, hw, hl, top: 2.15 }];
+    } else if (M.mil === 'patria') {
+      // Patria AMV: the lower hull between the wheels, the upper hull leaning in, the long sloped glacis, the driver's
+      // hatch with its vision blocks, the rear door, and a remote weapon station on the roof
+      const lo = 0.55, mid = 1.12, top = 2.25;
+      mg.hexa([[-hw + 0.22, lo, -hl + 0.1], [hw - 0.22, lo, -hl + 0.1], [hw - 0.22, lo, hl - 0.45], [-hw + 0.22, lo, hl - 0.45], [-hw + 0.12, mid, -hl], [hw - 0.12, mid, -hl], [hw - 0.12, mid, hl], [-hw + 0.12, mid, hl]], paint);
+      cbox(mg, 2 * hw - 0.24, mid - lo, M.L - 0.4, paint, 0, (lo + mid) / 2, -0.15);
+      mg.hexa([[-hw, mid, -hl], [hw, mid, -hl], [hw, mid, 2.85], [-hw, mid, 2.85], [-hw + 0.26, top, -hl + 0.08], [hw - 0.26, top, -hl + 0.08], [hw - 0.26, top, 2.2], [-hw + 0.26, top, 2.2]], paint);
+      mg.hexa([[-hw, mid, 2.85], [hw, mid, 2.85], [hw - 0.08, mid, hl], [-hw + 0.08, mid, hl], [-hw + 0.26, top, 2.2], [hw - 0.26, top, 2.2], [hw - 0.16, mid + 0.2, hl], [-hw + 0.16, mid + 0.2, hl]], paint);
+      for (let i = 0; i < 5; i++) { const z = -hl + 0.6 + i * 1.3; cbox(mg, 2 * hw - 0.6, 0.06, 0.9, paint, 0, top + 0.03, z); }
+      for (const s of [1, -1]) {
+        mg.box(0.24, 0.13, 0.05, COL.head, s * (hw - 0.35), mid + 0.12, hl + 0.01);
+        mg.box(0.2, 0.12, 0.05, COL.tail, s * (hw - 0.3), mid + 0.4, -hl - 0.01);
+        // the wheel stations, dark behind the tyres
+        for (const az of M.axles) mg.box(0.08, 0.85, 1.3, DARK, s * (hw - 0.2), 0.95, az);
+        tubeTo(mg, [s * (hw - 0.4), top, -hl + 0.4], [s * (hw - 0.45), top + 2.2, -hl + 0.35], 0.012, DARK);
+      }
+      mg.box(1.2, 1.1, 0.04, OLIVE, 0, 1.55, -hl - 0.02);
+      mg.add(new THREE.CylinderGeometry(0.36, 0.36, 0.08, 14), DARK, 0.75, top + 0.06, 2.0);
+      for (let k = 0; k < 3; k++) gl.box(0.16, 0.08, 0.04, 0xffffff, 0.52 + k * 0.23, top - 0.02, 2.24 + 0.002 * k);
+      driver = { x: 0.75, y: 1.53, z: 1.95 };
+      head = [0, top + 0.06, 0.2];
+      front.add(new THREE.CylinderGeometry(0.45, 0.5, 0.25, 16), paint, 0, 0.12, 0);
+      cbox(front, 0.62, 0.45, 0.75, paint, 0, 0.47, 0.05);
+      front.add(new THREE.CylinderGeometry(0.035, 0.04, 1.3, 8), DARK, 0.12, 0.5, 0.95, Math.PI / 2, 0, 0);
+      front.box(0.22, 0.2, 0.28, DARK, -0.28, 0.55, 0.22);
+      front.box(0.14, 0.1, 0.03, GLOSS, -0.28, 0.56, 0.37);
+      camouflage(front, paint);
+      parts = [{ cz: 0, hw, hl, top: top + 0.6 }];
+    } else {
+      // the Scania: a forward cab with its windscreen and grille, the chassis, and the cargo body under an arched olive
+      // tarpaulin on its hoops, mudguards over the wheels
+      const cab0 = 2.3, cab1 = hl - 0.1;
+      cbox(mg, M.W, 1.55, cab1 - cab0, paint, 0, 1.92, (cab0 + cab1) / 2);
+      cbox(mg, M.W - 0.2, 0.32, cab1 - cab0 - 0.4, paint, 0, 2.86, (cab0 + cab1) / 2 - 0.15);
+      gl.hexa([[-hw + 0.12, 2.12, cab1 + 0.01], [hw - 0.12, 2.12, cab1 + 0.01], [hw - 0.12, 2.12, cab1 + 0.04], [-hw + 0.12, 2.12, cab1 + 0.04], [-hw + 0.14, 2.62, cab1 - 0.04], [hw - 0.14, 2.62, cab1 - 0.04], [hw - 0.14, 2.62, cab1 - 0.01], [-hw + 0.14, 2.62, cab1 - 0.01]], 0xffffff);
+      for (const s of [1, -1]) {
+        gl.box(0.03, 0.5, 0.75, 0xffffff, s * (hw + 0.005), 2.38, cab1 - 0.55);
+        mg.box(0.26, 0.16, 0.05, COL.head, s * (hw - 0.3), 1.08, cab1 + 0.12);
+        mg.box(0.18, 0.12, 0.05, COL.tail, s * (hw - 0.25), 1.05, -hl - 0.02);
+        tubeTo(mg, [s * hw, 2.6, cab1 - 0.3], [s * (hw + 0.35), 2.5, cab1 - 0.2], 0.025, DARK);
+        mg.box(0.06, 0.38, 0.22, GLOSS, s * (hw + 0.38), 2.35, cab1 - 0.2);
+        for (const az of M.axles) mg.box(0.5, 0.06, 1.35, DARK, s * (hw - 0.3), 1.32, az);
+        mg.box(0.12, 0.45, 1.0, DARK, s * 0.62, 1.0, 0.8);
+      }
+      mg.box(M.W - 0.3, 0.6, 0.06, DARK, 0, 1.45, cab1 + 0.02);
+      mg.box(M.W + 0.1, 0.32, 0.25, DARK, 0, 0.9, cab1 + 0.12);
+      for (const s of [1, -1]) mg.box(0.18, 0.3, M.L - 0.4, DARK, s * 0.5, 0.95, -0.1);
+      // the cargo body: a floor, low sides in the camouflage, the tarpaulin over its hoops
+      const b0 = -hl + 0.1, b1 = cab0 - 0.15, bl = b1 - b0, bz = (b0 + b1) / 2;
+      cbox(mg, M.W, 0.15, bl, DARK, 0, 1.22, bz);
+      cbox(mg, M.W, 0.55, bl, paint, 0, 1.57, bz);
+      mg.box(M.W - 0.02, 1.0, bl - 0.02, OLIVE, 0, 2.35, bz);
+      sectionLoft(mg, Array.from({ length: 2 }, (_, i) => [b0 + i * bl, hw - 0.05, 2.84, 3.2]), OLIVE);
+      for (let z = b0 + 0.4; z < b1; z += 1.1) mg.box(M.W + 0.02, 1.4, 0.06, 0x434c33, 0, 2.5, z);
+      mg.box(1.9, 1.2, 0.04, 0x434c33, 0, 2.35, b0 - 0.02);
+      driver = { x: 0.6, y: 1.72, z: 3.35 };
+      parts = [{ cz: 0, hw, hl, top: 3.25 }];
+    }
+    camouflage(mg, paint);
+    let frontGeo = null;
+    if (head) { frontGeo = front.build(); frontGeo.computeBoundingSphere(); }
+    return { body: mg.build(), glass: gl.build(), front: frontGeo, decal: null, plates: new Builder().build(), flashers: null, head, rake: 0, frontAxle: null, driver, rear: null, parts };
+  }
   // someone riding the moped: sitting upright on the seat, feet on the floor, hands on the grips, a full-face helmet
   function riderGeometry(id) {
     if (id.riderGeo) return id.riderGeo;
@@ -5662,6 +5823,7 @@ body.touch .tk-sign .key { display: none; }
   function carGeometry(M, paint) {
     if (M.moped) return mopedGeometry(M, paint);
     if (M.boat) return boatGeometry(M, paint);
+    if (M.mil) return militaryGeometry(M, paint);
     const mg = new Merger(carSurf(paint)), gl = new Merger();
     const sh = loftBody(M, paint, mg, gl), S = M.shape, { hl, hw, r0, r1, r2, r3 } = sh;
     const roofMid = sh.ring((r1 + r2) / 2), gT = roofMid.gT;
@@ -5983,6 +6145,21 @@ body.touch .tk-sign .key { display: none; }
   function wheelGeometry(R, style) {
     const key = R + style;
     if (wheelCache.has(key)) return wheelCache.get(key);
+    if (style === 'mil' || style === 'tank') {
+      // the army's: a fat cross-country tyre on a plain olive rim with a big hub, or a tank's rubber-tyred road wheel
+      const m = new Merger(carSurf(-1)), tank = style === 'tank', tw = tank ? 0.62 : 0.42, rim = R * (tank ? 0.82 : 0.55);
+      m.add(new THREE.CylinderGeometry(R, R, tw * 0.9, 24, 1, true), tank ? 0x2a2c2e : COL.tyre, 0, 0, 0, 0, 0, Math.PI / 2);
+      m.add(new THREE.CylinderGeometry(R * 0.96, R * 0.96, tw, 24), tank ? 0x2a2c2e : COL.tyre, 0, 0, 0, 0, 0, Math.PI / 2);
+      for (const sx of [-1, 1]) {
+        const fx = sx * (tw / 2 + 0.004);
+        m.add(new THREE.CylinderGeometry(rim, rim * 0.92, 0.03, 20), tank ? 0x4a5240 : 0x4f5a3c, fx, 0, 0, 0, 0, Math.PI / 2);
+        m.add(new THREE.CylinderGeometry(rim * 0.32, rim * 0.32, 0.06, 10), 0x2b2e2a, fx + sx * 0.02, 0, 0, 0, 0, Math.PI / 2);
+        if (!tank) for (let k = 0; k < 8; k++) { const a = (k / 8) * TAU; m.add(new THREE.CylinderGeometry(0.022, 0.022, 0.05, 6), 0x8a8f94, fx + sx * 0.02, Math.cos(a) * rim * 0.48, Math.sin(a) * rim * 0.48, 0, 0, Math.PI / 2); }
+      }
+      const g = m.build();
+      wheelCache.set(key, g);
+      return g;
+    }
     if (style === 'scooter') {
       // a 12-inch scooter wheel: a fat tyre, round in profile, on five spokes, the brake disc on the left
       const m = new Merger(carSurf(-1)), tube = 0.064, rim = 0.155;
@@ -6045,7 +6222,7 @@ body.touch .tk-sign .key { display: none; }
     const key = R + style;
     if (caliperCache.has(key)) return caliperCache.get(key);
     let g = null;
-    if (style !== 'aero' && style !== 'steel' && style !== 'scooter') {
+    if (style !== 'aero' && style !== 'steel' && style !== 'scooter' && style !== 'mil' && style !== 'tank') {
       const m = new Merger(carSurf(-1)), big = style === 'sport' || style === 'black' || style === 'f40', tw = big ? 0.3 : 0.27, rim = R * (big ? 0.74 : 0.68);
       for (const sx of [-1, 1]) m.add(new THREE.BoxGeometry(0.014, rim * 0.34, rim * 0.42), big ? COL.caliper : COL.caliperGrey, sx * (tw / 2 + 0.0075), rim * 0.47, -rim * 0.3, 0.55, 0, 0);
       g = m.build();
@@ -6116,9 +6293,12 @@ body.touch .tk-sign .key { display: none; }
     if (geo.rear) { rearSeat = new THREE.Mesh(playerId.driverGeo, personMat); rearSeat.position.set(geo.rear.x, geo.rear.y, geo.rear.z); rearSeat.visible = false; body.add(rearSeat); }
     const spins = [], pivots = [], wheels = [], calipers = [], wg = wheelGeometry(M.R, M.rim), cg = caliperGeometry(M.R, M.rim);
     const wx = wheelX(M), wz = M.wb / 2;
-    // (a moped's two wheels lean with its body; the front one is in the steering)
-    for (const sz of M.boat ? [] : [1, -1]) for (const sx of M.moped ? [0] : [1, -1]) {
-      const pivot = new THREE.Group(); pivot.position.set(sx * wx, M.R, sz * wz);
+    // (a moped's two wheels lean with its body; the front one is in the steering. The army's vehicles run on more axles,
+    // the front M.steers of them steering, and the tank's road wheels inside its tracks steer none)
+    const axles = M.boat ? [] : M.axles || [wz, -wz];
+    axles.forEach((az, ai) => { for (const sx of M.moped ? [0] : [1, -1]) {
+      const sz = az > 0 ? 1 : -1, steers = M.axles ? ai < M.steers : sz === 1;
+      const pivot = new THREE.Group(); pivot.position.set(sx * wx, M.R, az);
       if (M.moped) {
         if (sz === 1) pivot.position.copy(geo.frontAxle);
         (sz === 1 ? steerGroup : body).add(pivot);
@@ -6129,9 +6309,9 @@ body.touch .tk-sign .key { display: none; }
       if (cg) { const cm = new THREE.Mesh(cg, wheelMat); cm.visible = false; pivot.add(cm); calipers.push(cm); }
       if (!M.moped) group.add(pivot);
       spins.push(spin);
-      wheels.push({ pivot, sx, sz, toe: 0, camber: 0 });
-      if (sz === 1) pivots.push(pivot);
-    }
+      wheels.push({ pivot, sx, sz, z: az, steers, toe: 0, camber: 0 });
+      if (steers) pivots.push(pivot);
+    } });
     const flashers = geo.flashers ? geo.flashers.map(([x, y, z]) => {
       const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0x4d7bff, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0 }));
       s.position.set(x, y, z); s.scale.setScalar(2.2); body.add(s);
@@ -6593,7 +6773,7 @@ body.touch .tk-sign .key { display: none; }
   }
   const engineEnd = (M) => (M.rearEngine || M.bus ? -1 : 1);
   function engineSpot(c) {
-    const M = c.M, e = engineEnd(M), lz = M.moped ? 0.05 : M.boat ? -(M.L / 2 - 0.5) : e * (M.L / 2 - (M.bus ? 1 : 0.7)), ly = M.moped ? 0.3 : M.boat ? WATER_Y + 1.1 : M.bus ? 2.9 : carShape(M).belt(lz) + 0.05;
+    const M = c.M, e = engineEnd(M), lz = M.moped ? 0.05 : M.boat ? -(M.L / 2 - 0.5) : e * (M.L / 2 - (M.bus ? 1 : 0.7)), ly = M.moped ? 0.3 : M.boat ? WATER_Y + 1.1 : M.mil ? 1.9 : M.bus ? 2.9 : carShape(M).belt(lz) + 0.05;
     const co = Math.cos(c.h), si = Math.sin(c.h);
     return { x: c.x + lz * si, y: ly, z: c.z + lz * co };
   }
@@ -6604,7 +6784,7 @@ body.touch .tk-sign .key { display: none; }
     const M = c.M, co = Math.cos(c.h), si = Math.sin(c.h);
     const ex = wx - c.x, ez = wz - c.z, lx = ex * co - ez * si, lz = ex * si + ez * co;
     const ldx = dx * co - dz * si, ldz = dx * si + dz * co;
-    const ly = M.moped || M.boat ? 0.5 : M.bus ? 0.9 : carShape(M).sill(0) + 0.3;
+    const ly = M.moped || M.boat ? 0.5 : M.mil ? 1.0 : M.bus ? 0.9 : carShape(M).sill(0) + 0.3;
     const hard = speed - 2.5;
     if (hard > 1.5) {
       const depth = Math.min(0.7, 0.032 * Math.pow(hard, 1.15)), radius = Math.min(1.5, 0.55 + speed * 0.045);
@@ -6616,11 +6796,11 @@ body.touch .tk-sign .key { display: none; }
       if (glassHit && speed > 8 && !c.glassBroken) { c.glassBroken = true; c.glass.material = crackedMat; glassBurst(wx, ly + 0.6, wz, dx, dz, speed); }
       // a hard knock near a wheel bends it, and a bent front wheel pulls the steering
       if (!M.moped) for (const wh of c.wheels) {
-        if (speed < 7 || Math.abs(lz - wh.sz * M.wb / 2) > 0.9 || lx * wh.sx < M.W / 2 - 0.6) continue;
+        if (speed < 7 || M.mil || Math.abs(lz - wh.z) > 0.9 || lx * wh.sx < M.W / 2 - 0.6) continue;
         const k = Math.min(1, speed / 25);
         wh.toe = clamp(wh.toe + (Math.random() - 0.5) * 0.25 * k, -0.18, 0.18);
         wh.camber = clamp(wh.camber + wh.sx * (0.04 + Math.random() * 0.08) * k, -0.25, 0.25);
-        if (wh.sz === 1) c.align = clamp(c.align + wh.sx * (0.01 + Math.random() * 0.03) * k, -0.08, 0.08);
+        if (wh.steers) c.align = clamp(c.align + wh.sx * (0.01 + Math.random() * 0.03) * k, -0.08, 0.08);
       }
     }
     // engine health: the end with the engine is the soft spot
@@ -6808,7 +6988,7 @@ body.touch .tk-sign .key { display: none; }
     if (emerg && all.includes(from) && cost(from) + 60 < cost(best)) return from;
     return best;
   }
-  const onBlueLights = (c) => !!(c.police && (c.police.state === 'chase' || c.police.state === 'call'));
+  const onBlueLights = (c) => !!(c.police && !c.military && (c.police.state === 'chase' || c.police.state === 'call'));
   function startTurn(b) {
     const e1 = edgeFrame(b.from, b.to), e2 = edgeFrame(b.to, b.next), B = e1.B, off = B.r + 4;
     b.P0 = [B.x - e1.ux * off + e1.rx * e1.lane, B.z - e1.uz * off + e1.rz * e1.lane];
@@ -6861,7 +7041,7 @@ body.touch .tk-sign .key { display: none; }
       if (remain < 20) b.passT = Math.min(b.passT, 0);
       const chasing = onBlueLights(c);
       // traffic keeps to the speed limit; police on blue lights don't, but even they slow down in the narrow lanes
-      if (!chasing) vT = Math.min(vT, (e.e.limit / 3.6) * 1.08);
+      if (!chasing && !(c.military && c.police.state === 'chase')) vT = Math.min(vT, (e.e.limit / 3.6) * 1.08);
       else if (!e.e.drive) vT = Math.min(vT, e.e.hw < 2.2 ? 8 : 12);
       // police on blue lights drive on the crown of the road, straddling the solid line, and swing right over into
       // the oncoming lane to get past; in a lane they keep to the middle
@@ -7053,6 +7233,7 @@ body.touch .tk-sign .key { display: none; }
   // TOLERANCE: how far over the limit you can go before a patrol bothers; SPEED_EYE: how far a patrol notices it
   const POLICE_TARGET = 4, CHASE_SPEED = 33, PATROL_SPEED = 14, TOLERANCE = 15, SPEED_EYE = 55;
   const OFFICER = { shirt: 0x1f3a6e, pants: 0x1c2333, hat: 'cap', hatColor: 0x1b2b4f, police: true, sleeves: true };
+  const SOLDIER = { shirt: 0x5b6b45, pants: 0x55643f, hat: 'combat', soldier: true, sleeves: true };
   let sirenCars = [], wanted = null, fines = 0, policeCool = 0, policeSpawnT = 0;
   // The limit where you are. With a heading (the sign by the speedometer) it is the street you are driving along. Without
   // one (what the police go by) it is the fastest street there, so crossing a slower street at a junction is never
@@ -7079,6 +7260,91 @@ body.touch .tk-sign .key { display: none; }
     c.bot.cruise = PATROL_SPEED;
     setOccupant(c, makeIdentity(OFFICER));
     return c;
+  }
+  // the army: driven like the police in a chase, but with soldiers aboard, no blue lights, and it rams
+  let armySpawnT = 0;
+  const armyTarget = () => (wanted && wanted.stars >= 5 && !stop ? 4 : 0);
+  function makeArmy(c) {
+    makePolice(c);
+    c.military = true; c.police.callIn = Infinity; c.aim = 0; c.fireT = 4 + Math.random() * 4;
+    setOccupant(c, makeIdentity(SOLDIER));
+    if (wanted) setChase(c, true);
+    c.siren = false;
+    return c;
+  }
+  // The tank's gun. The army only fires warning shots, over your head, with a blast you feel in your chest; take the tank
+  // yourself and F fires a real round: it flies along the barrel to the first thing in its way, and the blast dents and
+  // shoves the cars near by and knocks people off their feet (they get up again)
+  function fireCannon(c, live) {
+    const a = c.h + (c.aim || 0), fx = Math.sin(a), fz = Math.cos(a), co = Math.cos(c.h), si = Math.sin(c.h), hd = c.geo.head;
+    const px = c.x + hd[0] * co + hd[2] * si, pz = c.z - hd[0] * si + hd[2] * co, my = hd[1] + 0.46;
+    const mx = px + fx * 7.3, mz = pz + fz * 7.3;
+    for (let i = 0; i < 16; i++) smokeFx.spawn({ x: mx, y: my, z: mz, vx: fx * (3 + Math.random() * 7) + (Math.random() - 0.5) * 3, vy: Math.random() * 1.5, vz: fz * (3 + Math.random() * 7) + (Math.random() - 0.5) * 3, life: 1.6 + Math.random(), size: [0.8, 4.5], alpha: 0.45, c: SMOKE_COL.grey, drag: 1.5, fadeIn: 0.02 });
+    for (let i = 0; i < 24; i++) sparkFx.spawn({ x: mx, y: my, z: mz, vx: fx * (10 + Math.random() * 14) + (Math.random() - 0.5) * 6, vy: (Math.random() - 0.3) * 4, vz: fz * (10 + Math.random() * 14) + (Math.random() - 0.5) * 6, life: 0.12 + Math.random() * 0.1, size: [0.9, 0.3], alpha: 1, c: SPARK_COL, drag: 2 });
+    // the whole tank rocks back, and the blast is felt close by
+    c.pitch -= 0.05;
+    cannonSound(mx, mz, 1);
+    const dc = Math.hypot(mx - camera.position.x, mz - camera.position.z);
+    if (dc < 120) bump(Math.max(4, 20 - dc * 0.15));
+    if (!live) return;
+    let hx = mx + fx * 160, hz = mz + fz * 160;
+    for (let d = 1; d <= 160; d += 1.5) {
+      const x = mx + fx * d, z = mz + fz * d;
+      if (blockedAt(x, z, 0.3) || cars.some((o) => o !== c && Math.hypot(o.x - x, o.z - z) < Math.min(o.M.W, o.M.L) / 2 + 0.3) || persons.some((p) => p !== player && !p.asleep && Math.hypot(p.x - x, p.z - z) < 0.7)) { hx = x; hz = z; break; }
+    }
+    explode(hx, hz, walkable(hx, hz) ? 0.6 : WATER_Y + 0.3);
+    // (a cannon going off in town: every police car hears it)
+    offense('skott', 0, c.x, c.z, true);
+  }
+  function explode(x, z, y) {
+    for (let i = 0; i < 30; i++) {
+      const a = Math.random() * TAU, sp = 2 + Math.random() * 7;
+      smokeFx.spawn({ x, y: y + 0.5, z, vx: Math.cos(a) * sp, vy: 1 + Math.random() * 4, vz: Math.sin(a) * sp, life: 2.5 + Math.random() * 2, size: [1.2, 6], alpha: 0.5, c: i % 3 ? SMOKE_COL.black : SMOKE_COL.grey, drag: 1.2, fadeIn: 0.05 });
+      fireFx.spawn({ x, y: y + 0.6, z, vx: Math.cos(a) * sp * 0.7, vy: 2 + Math.random() * 5, vz: Math.sin(a) * sp * 0.7, life: 0.35 + Math.random() * 0.3, size: [2.4, 0.6], alpha: 1, color: i % 2 ? 0xffb347 : 0xff6a1a, drag: 2.2, grav: -1 });
+    }
+    sparkBurst(x, y + 0.4, z, 0, 0, 22);
+    cannonSound(x, z, 1.3);
+    if (Math.hypot(x - camera.position.x, z - camera.position.z) < 90) bump(14);
+    for (const o of cars) {
+      const dx = o.x - x, dz = o.z - z, d = Math.hypot(dx, dz) || 0.1;
+      if (d > 9 || o.M.mil === 'tank') continue;
+      const k = (9 - d) / 9, ux = dx / d, uz = dz / d;
+      crash(o, x + ux * 0.5, z + uz * 0.5, ux, uz, 6 + k * 22, null);
+      o.vx += (ux * k * 9) / Math.sqrt(o.M.mass); o.vz += (uz * k * 9) / Math.sqrt(o.M.mass);
+    }
+    for (const p of persons) {
+      if (p.asleep || (p === player && driving)) continue;
+      const dx = p.x - x, dz = p.z - z, d = Math.hypot(dx, dz) || 0.1;
+      if (d > 8) continue;
+      p.vx = (dx / d) * (8 - d) * 1.2; p.vz = (dz / d) * (8 - d) * 1.2; p.vy = 5; p.grounded = false; p.knockT = 1.6;
+      if (p.ai && p.ai.state !== 'cop' && p.ai.state !== 'idle' && p.ai.state !== 'vendor') { p.ai.state = 'flee'; p.ai.t = 5; }
+    }
+  }
+  function tankFire() {
+    const c = driving;
+    if (!c || c.M.mil !== 'tank' || paused()) return false;
+    if ((c.reloadT || 0) > 0) { toast('Kanonen laddas om …'); return true; }
+    c.reloadT = 2.5;
+    fireCannon(c, true);
+    return true;
+  }
+  // the turret (or the weapon station) turns to its target: you, when the army is after you, or where the camera looks
+  // while you drive it yourself. An army tank in range fires a warning shot now and then
+  function aimTurret(c, dt) {
+    let want = 0;
+    if (c === driving) want = wrapAngle(camYaw - c.h);
+    else if (c.military && c.police && c.police.state === 'chase') { const T = playerTarget(); want = wrapAngle(Math.atan2(T.x - c.x, T.z - c.z) - c.h); }
+    c.aim = (c.aim || 0) + clamp(wrapAngle(want - (c.aim || 0)), -0.9 * dt, 0.9 * dt);
+    c.steerGroup.rotation.y = c.aim;
+    if (c.reloadT > 0) c.reloadT -= dt;
+    if (c.M.mil === 'tank' && c.military && c.police && c.police.state === 'chase' && wanted) {
+      const T = playerTarget(), d = Math.hypot(T.x - c.x, T.z - c.z);
+      if ((c.fireT -= dt) <= 0 && d < 140 && Math.abs(wrapAngle(want - c.aim)) < 0.08 && clearView(c.x, c.z, T.x, T.z)) {
+        c.fireT = 7 + Math.random() * 6;
+        fireCannon(c, false);
+        if (!wanted.warned) { wanted.warned = true; toast('Stridsvagnen skjuter varningsskott! Stanna, eller kör för livet.'); }
+      }
+    }
   }
   function playerTarget() {
     return driving ? { x: driving.x, z: driving.z, vx: driving.vx, vz: driving.vz } : { x: player.x, z: player.z, vx: player.vx, vz: player.vz };
@@ -7148,13 +7414,14 @@ body.touch .tk-sign .key { display: none; }
   function updateStars(w) {
     let s = w.over >= 30 || w.kinds.has('krock') || w.kinds.has('stöld') || w.kinds.has('påkörning') ? 2 : 1;
     if (w.over >= ARREST_OVER || w.kinds.has('smitning')) s = 3;
+    if (w.kinds.has('skott')) s = 4;
     s = clamp(s + w.bonus + Math.floor((w.fleeT || 0) / STAR_FLEE), 1, 5);
     if (s <= w.stars) return;
     const was = w.stars;
     w.stars = s; w.starT = 0;
     if (s >= 3 && was < 3) toast(s === 3 ? 'Tre stjärnor! Polishelikoptern är på väg.' : 'Polishelikoptern är på väg, och fler polisbilar kallas in.');
     else if (s === 4) toast('Fyra stjärnor! Piketen och fler polisbilar kallas in.');
-    else if (s === 5) toast('Fem stjärnor! Hela Stockholmspolisen letar efter dig.');
+    else if (s === 5) toast('Fem stjärnor! Militären rycker ut med stridsvagnar, pansarbilar och soldater.');
   }
   const stars = () => (wanted ? wanted.stars : 0);
   // with more stars the police drive faster, come from further away, are more of them and search longer
@@ -7166,7 +7433,7 @@ body.touch .tk-sign .key { display: none; }
     // a car whose crew is out on foot, or which is busy with a stop or a prisoner, stays as it is
     if (!P || !b || P.out || P.state === 'wait' || P.state === 'stop' || P.state === 'transport') return;
     P.state = on ? 'chase' : 'patrol';
-    c.siren = on; c.yelp = false;
+    c.siren = on && !c.military; c.yelp = false;
     b.cruise = on ? chaseSpeed() : PATROL_SPEED; b.turnV = on ? 8.5 : 5.5; b.goal = null; b.passT = 0; P.goalNode = -1;
     if (P.direct) { P.direct = false; resyncBot(c); }
     if (!on) b.next = chooseNext(b.from, b.to, null);
@@ -7183,6 +7450,7 @@ body.touch .tk-sign .key { display: none; }
     if (w.kinds.has('påkörning')) rows.push({ why: 'påkörning', text: 'Påkörning av fotgängare', kr: 4000 });
     if ((w.fleeT || 0) > FLEE_ARREST) rows.push({ why: 'du stannade inte', text: 'Underlåtenhet att stanna på polisens tecken', kr: 1500 });
     if (w.over >= ARREST_OVER) rows.push({ why: 'grov hastighetsöverträdelse', text: 'Grov hastighetsöverträdelse, körkortet dras in', kr: 2000 });
+    if (w.kinds.has('skott')) rows.push({ why: 'skottlossning', text: 'Skottlossning med stridsvagn i tätort', kr: 25000 });
     if (w.kinds.has('smitning')) rows.push({ why: 'du smet från kontrollen', text: 'Avvikande från poliskontroll', kr: 3000 });
     if (!rows.length) rows.push({ why: 'ordningsstörning', text: 'Ordningsstörning', kr: 800 });
     return { f: rows.reduce((a, r) => a + r.kr, 0), why: rows.map((r) => r.why), rows };
@@ -7225,7 +7493,7 @@ body.touch .tk-sign .key { display: none; }
     if (P.state === 'stop') return stopDrive(c, dt);
     if (P.state === 'wait') return parkDrive(c, null);
     if (P.state === 'transport') return transportDrive(c, dt);
-    if (P.state === 'patrol' && !wanted && (P.callIn -= dt) <= 0) setCall(c, true);
+    if (P.state === 'patrol' && !wanted && !c.military && (P.callIn -= dt) <= 0) setCall(c, true);
     if (P.state === 'call') {
       const g = c.bot.goal;
       if ((P.callT -= dt) <= 0 || !g || Math.hypot(g.x - c.x, g.z - c.z) < 30) setCall(c, false);
@@ -7251,7 +7519,7 @@ body.touch .tk-sign .key { display: none; }
     const vf = c.vx * fx + c.vz * fz, tsp = Math.hypot(T.vx, T.vz), lead = Math.min(1.2, d / 20);
     const tx = T.x + T.vx * lead, tz = T.z + T.vz * lead;
     let vT = clamp((d - 8) * 1.1 + tsp * 1.1, 0, chaseSpeed());
-    if (d < 11 && tsp < 2) vT = 0;
+    if (d < 11 && tsp < 2) vT = c.military ? Math.min(chaseSpeed(), 9) : 0;
     const dx = tx - c.x, dz = tz - c.z, lz = dx * fx + dz * fz, lx = dx * lxv + dz * lzv;
     const maxSteer = 0.6 / (1 + Math.abs(vf) * 0.03);
     const delta = lz < 0.3 ? Math.sign(lx || 1) * maxSteer : Math.atan((2 * M.wb * lx) / (lx * lx + lz * lz));
@@ -7268,7 +7536,7 @@ body.touch .tk-sign .key { display: none; }
   }
   function policeUpdate(dt) {
     if (policeCool > 0) policeCool -= dt;
-    sirenCars = cars.filter((c) => c.siren);
+    sirenCars = cars.filter((c) => c.siren || (c.military && c.police && c.police.state === 'chase'));
     updateFootCops(dt);
     if (stop) { stopUpdate(dt); return; }
     const T = playerTarget();
@@ -7288,10 +7556,10 @@ body.touch .tk-sign .key { display: none; }
       if (st === 'wait' || st === 'transport' || st === 'stop') continue;
       if (st !== 'chase') { if (d < chaseRadius()) setChase(c, true); else continue; }
       chasers++;
-      if (d < nearest) { nearest = d; nearCop = c; }
+      if (d < nearest && !c.military) { nearest = d; nearCop = c; }
       if (!inSight && d < 130 && clearView(c.x, c.z, T.x, T.z)) inSight = true;
       // you are on foot close by, or out of reach of a car: pull up and send the constable after you
-      if (!driving && (d < 24 || (d < 90 && (offRoad || c.bot.stuckT > 1.5 || c.bot.stuckTotal > 5)))) { c.police.state = 'wait'; c.siren = false; c.beacon = true; c.police.direct = false; }
+      if (!driving && c.M.mil !== 'tank' && (d < 24 || (d < 90 && (offRoad || c.bot.stuckT > 1.5 || c.bot.stuckTotal > 5)))) { c.police.state = 'wait'; c.siren = false; c.beacon = !c.military; c.police.direct = false; }
     }
     for (const fc of footCops) {
       if (fc.mode !== 'chase') continue;
@@ -7768,7 +8036,7 @@ body.touch .tk-sign .key { display: none; }
   function newStop(c, mode, phase, officer) {
     const T = stopTarget();
     stop = {
-      car: c, mode, phase, t: 0, at: { x: T.x, z: T.z }, officer: officer || null, crew: c.occupant || makeIdentity(OFFICER), name: rpick(CONSTABLES),
+      car: c, mode, phase, t: 0, at: { x: T.x, z: T.z }, officer: officer || null, crew: c.occupant || makeIdentity(OFFICER), name: rpick(CONSTABLES), title: 'Konstapel',
       ticket: null, nav: {}, pnav: {}, locked: false, spot: phase === 'approach' && driving ? stopSpot(c, T) : null, door: null,
       vehicle: driving ? driving.M.name + ', ' + plateOf(driving) : 'Gående'
     };
@@ -7786,10 +8054,12 @@ body.touch .tk-sign .key { display: none; }
   function caughtOnFoot(fc) {
     footCops.splice(footCops.indexOf(fc), 1);
     // their own car, or (if it was taken from them) the nearest other patrol
-    let car = fc.car && fc.car.police && cars.indexOf(fc.car) >= 0 && !fc.car.dead ? fc.car : null;
+    let car = fc.car && fc.car.police && !fc.car.military && cars.indexOf(fc.car) >= 0 && !fc.car.dead ? fc.car : null;
+    // (a soldier hands you over to the police: the nearest patrol is called up)
+    if (!car && fc.car && fc.car.military) { const pc = spawnBot(25, MODEL.polis, 140); if (pc) { makePolice(pc); pc.vx = pc.vz = 0; } }
     if (!car) {
       let bd = Infinity;
-      for (const c of cars) if (c.police && c.bot && !c.dead && (c.police.state === 'patrol' || c.police.state === 'chase' || c.police.state === 'call')) { const d = Math.hypot(c.x - fc.p.x, c.z - fc.p.z); if (d < bd) { bd = d; car = c; } }
+      for (const c of cars) if (c.police && !c.military && c.bot && !c.dead && (c.police.state === 'patrol' || c.police.state === 'chase' || c.police.state === 'call')) { const d = Math.hypot(c.x - fc.p.x, c.z - fc.p.z); if (d < bd) { bd = d; car = c; } }
       if (car) fc.door = doorNear(car, fc.p.x, fc.p.z, false);
     }
     if (!car) {
@@ -7805,8 +8075,9 @@ body.touch .tk-sign .key { display: none; }
     if (car !== fc.car) { car.vx = car.vz = 0; fc.crew = fc.crew || car.occupant; setOccupant(car, null); }
     const S = newStop(car, arrestable(wanted) ? 'arrest' : 'ticket', 'talk', fc.p);
     S.crew = fc.crew; S.door = fc.door;
+    if (fc.car && fc.car.military) S.title = 'Soldat';
     fc.p.ai.role = 'stop';
-    if (S.mode === 'arrest') { S.phase = 'cuff'; S.locked = true; toast('Konstapel ' + S.name + ': Stå still! Du är gripen.'); }
+    if (S.mode === 'arrest') { S.phase = 'cuff'; S.locked = true; toast(S.title + ' ' + S.name + ': Stå still! Du är gripen.'); }
     else showTicket();
   }
   // the patrol's driving while it pulls in: line up a few metres short of the spot, then roll into it and stop
@@ -7848,11 +8119,11 @@ body.touch .tk-sign .key { display: none; }
       a.textContent = r.text; b.textContent = fmtKr(r.kr); li.append(a, b); ul.append(li);
     }
     $('tkSum').textContent = fmtKr(f);
-    $('tkOfficer').textContent = 'Konstapel ' + S.name;
+    $('tkOfficer').textContent = S.title + ' ' + S.name;
     $('tkTitle').textContent = S.mode === 'arrest' ? 'Gripen: anmälan om brott' : 'Föreläggande av ordningsbot';
     $('tkSignText').textContent = S.mode === 'arrest' ? 'Tagen del' : 'Skriv under';
     $('ticket').hidden = false;
-    if (S.mode !== 'arrest') toast('Konstapel ' + S.name + ': ' + (wanted.kinds.has('fart') ? 'Hej, polisen här. Vet du hur fort du körde?' : 'Hej, polisen här. Det där gick inte bra.'));
+    if (S.mode !== 'arrest') toast(S.title + ' ' + S.name + ': ' + (wanted.kinds.has('fart') ? 'Hej, polisen här. Vet du hur fort du körde?' : 'Hej, polisen här. Det där gick inte bra.'));
   }
   // E: sign the ticket. The fine is yours, and the constable walks back to the car
   function signTicket() {
@@ -7959,7 +8230,7 @@ body.touch .tk-sign .key { display: none; }
         if (S.t > 16) { const w = windowSpot(o); if (personFits(w.x, w.z)) { o.x = w.x; o.z = w.z; } o.arrived = true; }
         if (o.arrived) {
           S.t = 0;
-          if (S.mode === 'arrest') { S.phase = 'order'; S.locked = true; toast('Konstapel ' + S.name + ': Kliv ur bilen! Du är gripen' + (wanted.over >= ARREST_OVER ? ' för grov hastighetsöverträdelse.' : ' för att du försökte köra ifrån oss.')); }
+          if (S.mode === 'arrest') { S.phase = 'order'; S.locked = true; toast(S.title + ' ' + S.name + ': Kliv ur bilen! Du är gripen' + (wanted.over >= ARREST_OVER ? ' för grov hastighetsöverträdelse.' : ' för att du försökte köra ifrån oss.')); }
           else { S.phase = 'talk'; showTicket(); }
         }
         break;
@@ -7985,7 +8256,7 @@ body.touch .tk-sign .key { display: none; }
             if (!S.ticket) showTicket();
             S.rearDoor = doorNear(c, player.x, player.z, true);
             S.phase = 'escort'; S.t = 0;
-            toast('Konstapel ' + S.name + ': Följ med till bilen.');
+            toast(S.title + ' ' + S.name + ': Följ med till bilen.');
             // a long way to the car: the patrol comes round instead (a short fade and you are both beside it)
             if (Math.hypot(S.rearDoor.x - player.x, S.rearDoor.z - player.z) > 30) fadeThen(() => {
               const rd = S.rearDoor;
@@ -8051,7 +8322,7 @@ body.touch .tk-sign .key { display: none; }
           if (S.t > 45) { o.x = C2[0]; o.z = C2[1]; }
           STATION.doors[1].want = 1;
           S.phase = 'incell'; S.t = 0;
-          toast('Konstapel ' + S.name + ': In i cellen.');
+          toast(S.title + ' ' + S.name + ': In i cellen.');
         }
         break;
       }
@@ -8170,16 +8441,25 @@ body.touch .tk-sign .key { display: none; }
     }
     c.police = null; c.siren = false; c.beacon = false; c.yelp = false;
     offense('stöld', 0, c.x, c.z, c);
-    toast('Du tog polisbilen! Det räknas som stöld.');
+    toast(c.military ? 'Du tog ' + c.M.def + '! Militären är efter dig.' : 'Du tog polisbilen! Det räknas som stöld.');
   }
   function deployCop(c) {
     const ex = exitSpot(c) || doorSpot(c, 1, false);
-    const crew = c.occupant || makeIdentity(OFFICER), fc = { p: null, car: c, crew, door: ex, mode: 'chase', retT: 0 };
+    const crew = c.occupant || makeIdentity(c.military ? SOLDIER : OFFICER), fc = { p: null, car: c, crew, door: ex, mode: 'chase', retT: 0 };
     fc.p = makePerson(crew, ex.x, ex.z, { state: 'cop', role: 'foot', fc, nav: {}, dodgeT: 0 });
     fc.p.keep = true; fc.p.rot = c.h;
     setOccupant(c, null);
-    c.police.out = fc; c.beacon = true; c.siren = false; c.yelp = false;
+    c.police.out = fc; c.beacon = !c.military; c.siren = false; c.yelp = false;
     footCops.push(fc);
+    // the truck has a squad in the back: they jump down and spread out after you
+    if (c.M.mil === 'truck') for (let i = 0; i < 3; i++) {
+      const co = Math.cos(c.h), si = Math.sin(c.h), lx = (i - 1) * 1.1, lz = -c.M.L / 2 - 1.0, x = c.x + lx * co + lz * si, z = c.z - lx * si + lz * co;
+      if (!personFits(x, z)) continue;
+      const sq = { p: null, car: c, crew: makeIdentity(SOLDIER), door: { x, z }, mode: 'chase', retT: 0 };
+      sq.p = makePerson(sq.crew, x, z, { state: 'cop', role: 'foot', fc: sq, nav: {}, dodgeT: 0 });
+      sq.p.keep = true; sq.p.rot = c.h + Math.PI;
+      footCops.push(sq);
+    }
   }
   function copBoard(fc) {
     removePerson(fc.p);
@@ -9379,6 +9659,19 @@ body.touch .tk-sign .key { display: none; }
   const alongEdge = (f, s, margin) => (f.len > margin * 2 ? clamp(s, margin, f.len - margin) : f.len / 2);
   function resetToRoad() {
     if (!driving) return;
+    // a boat is freed where it is: turned and nudged to the nearest open water with room to steer
+    if (driving.M.boat) {
+      const c = driving;
+      for (let r = 0; r <= 30; r += 2) for (let a = 0; a < TAU; a += r ? 0.5 : TAU) for (const dh of [0, Math.PI / 2, -Math.PI / 2, Math.PI]) {
+        const x = c.x + Math.cos(a) * r, z = c.z + Math.sin(a) * r, h = c.h + dh;
+        if (!boatFree(c.M, x, z, h, c) || !boatFree(c.M, x + Math.sin(h) * 4, z + Math.cos(h) * 4, h, c)) continue;
+        c.x = x; c.z = z; c.h = h; c.vx = c.vz = 0; c.steer = 0;
+        camYaw = h;
+        return;
+      }
+      toast('Det finns inget öppet vatten här.');
+      return;
+    }
     // back onto the nearest street a car can use: a proper street if there is one nearby, otherwise a wide lane
     const c = driving, ne0 = nearestEdge(c.x, c.z, (e) => e.drive), ne = ne0.e && ne0.d < 60 ? ne0 : nearestEdge(c.x, c.z, (e) => e.emerg && e.hw >= 2.4);
     if (!ne.e) return;
@@ -9580,8 +9873,16 @@ body.touch .tk-sign .key { display: none; }
   let botSpawnT = 0, npcCheckT = 0;
   function manageTraffic(dt) {
     botSpawnT -= dt;
-    let bots = 0, police = 0;
-    for (const c of cars) { if (c.police) police++; else if (c.bot) bots++; }
+    let bots = 0, police = 0, army = 0;
+    for (const c of cars) { if (c.military) army++; else if (c.police) police++; else if (c.bot) bots++; }
+    // five stars: the army is called in, a tank, armoured cars and a truck of soldiers, from further off than the police
+    const at = armyTarget();
+    if (army < at && (armySpawnT -= dt) <= 0) {
+      const kinds = cars.filter((c) => c.military).map((c) => c.M.mil), M = !kinds.includes('tank') ? MODEL.strv122 : !kinds.includes('truck') ? MODEL.miltruck : MODEL.patgb360;
+      const c = spawnBot(230, M, 520);
+      if (c) makeArmy(c);
+      armySpawnT = 3;
+    }
     if (bots < BOT_TARGET && botSpawnT <= 0) { spawnBot(130); botSpawnT = 0.5; }
     policeSpawnT -= dt;
     // with stars more patrols come, sooner and from nearer by, and from four stars the piket too
@@ -9598,7 +9899,8 @@ body.touch .tk-sign .key { display: none; }
       const d = Math.hypot(c.x - player.x, c.z - player.z);
       if (c.police && c.police.state !== 'patrol') continue;
       // the extra patrols of a chase go home again once it is over
-      if (c.police && police > pt && d > 220) { removeCar(c); police--; continue; }
+      if (c.military && !at && d > 140) { removeCar(c); continue; }
+      if (c.police && !c.military && police > pt && d > 220) { removeCar(c); police--; continue; }
       if (c.bot) {
         if ((c.bot.stuckTotal > 12 && d > 70) || d > (c.police ? 800 : TRAFFIC_RANGE + 120)) removeCar(c);
         continue;
@@ -9678,6 +9980,7 @@ body.touch .tk-sign .key { display: none; }
       const vf = c.vx * Math.sin(c.h) + c.vz * Math.cos(c.h), a = (vf - c.prevVf) / Math.max(dt, 1e-3);
       c.prevVf = vf;
       const yawRate = (vf / c.M.wb) * Math.tan(c.steer), k = 1 - Math.exp(-6 * dt);
+      if (c.M.mil && c.steerGroup) aimTurret(c, dt);
       if (c.M.boat) {
         // afloat: it bobs on the swell, lifts its bow as it climbs up to plane, and leans into the turns (a jet ski a lot)
         const jet = c.M.boat === 'jetski', av = Math.abs(vf), seed = c.seed || (c.seed = Math.random() * 10), t = clock + seed;
@@ -9698,7 +10001,7 @@ body.touch .tk-sign .key { display: none; }
       } else {
         c.roll += (clamp(yawRate * vf * 0.0045, -0.07, 0.07) - c.roll) * k;
         c.pitch += (clamp(-a * 0.004, -0.05, 0.05) - c.pitch) * k;
-        for (const w of c.wheels) w.pivot.rotation.set(0, (w.sz === 1 ? c.steer : 0) + w.toe, w.camber);
+        for (const w of c.wheels) w.pivot.rotation.set(0, (w.steers ? c.steer : 0) + w.toe, w.camber);
       }
       c.body.rotation.set(c.pitch, 0, c.roll);
       c.group.position.set(c.x, 0, c.z);
@@ -9818,8 +10121,8 @@ body.touch .tk-sign .key { display: none; }
       if (prompt) { el.promptText.textContent = prompt; el.prompt.classList.toggle('steal', !shop && !liftP && !!nearCar && !!nearCar.bot); el.prompt.classList.toggle('shop', !!shop); }
     }
     // the stars: as many lit as the police want you, flashing while they search for you; the helicopter beside them
-    const ns = stars(), searching = !!wanted && !wanted.inSight && !stop, hl = !!heli && heli.state !== 'leave';
-    const sk = ns + ':' + searching + ':' + hl;
+    const ns = stars(), searching = !!wanted && !wanted.inSight && !stop, hl = !!heli && heli.state !== 'leave', army = !!wanted && cars.some((c) => c.military && c.police && c.police.state === 'chase');
+    const sk = ns + ':' + searching + ':' + hl + ':' + army;
     if (sk !== lastStars) {
       const was = lastStars ? Number(lastStars.split(':')[0]) : 0;
       lastStars = sk;
@@ -9828,7 +10131,7 @@ body.touch .tk-sign .key { display: none; }
         if (i < ns && i >= was) { sv.classList.remove('new'); void sv.getBoundingClientRect(); sv.classList.add('new'); }
       });
       const box = $('stars');
-      box.classList.toggle('search', searching); box.classList.toggle('heli-on', hl);
+      box.classList.toggle('search', searching); box.classList.toggle('heli-on', hl); box.classList.toggle('army-on', army);
       box.setAttribute('aria-label', ns ? 'Efterlyst: ' + ns + ' av 5 stjärnor' + (hl ? ', helikoptern är ute' : '') : 'Polisen letar inte efter dig');
     }
     if (driving !== lastDriving) {
@@ -9841,6 +10144,7 @@ body.touch .tk-sign .key { display: none; }
       // (an electric car and a scooter's variator have no gears to change)
       el.shiftHint.hidden = !!driving && !!(driving.M.ev || driving.M.cvt || driving.M.boat);
       el.btnJump.textContent = driving ? 'Broms' : 'Hoppa';
+      $('btnJob').textContent = driving && driving.M.mil === 'tank' ? 'Skjut' : 'Jobb';
       el.btnUp.hidden = el.btnDown.hidden = !driving;
     }
     const ph = stop && stop.phase;
@@ -10098,6 +10402,12 @@ body.touch .tk-sign .key { display: none; }
     }
     VENDORS.drawBig(g, toX, toY, k);
     JOBS.drawBig(g, toX, toY, k);
+    // the army: dark green squares
+    for (const c of cars) {
+      if (!c.military || c === driving) continue;
+      g.fillStyle = '#3d4a30'; g.strokeStyle = '#fff'; g.lineWidth = 1.5;
+      g.fillRect(toX(c.x) - 5, toY(c.z) - 5, 10, 10); g.strokeRect(toX(c.x) - 5, toY(c.z) - 5, 10, 10);
+    }
     // police and you
     for (const c of cars) {
       if (!c.M.police || c === driving) continue;
@@ -10182,6 +10492,8 @@ body.touch .tk-sign .key { display: none; }
     f40: { cyl: 8, saw: 0.62, sub: 0.3, harm: 0.46, harmWave: 'sawtooth', harmRatio: 2, noise: 0.12, clatter: 0, lope: 0.05, drive: 4.6, cut: 480, open: 4.6, q: 2.4, turbo: 1.7, pops: 0.9, flutter: 1, vol: 1.05 },
     // a 50 cc two-stroke single: fires on every turn, a thin buzzy rasp through the expansion pipe that goes
     // ring-ding-ding at idle, and the variator keeps it screaming while you ride
+    // the tank's MTU V12 diesel: a deep rumble, the turbines whining over it and the clatter of the tracks
+    tank: { cyl: 12, saw: 0.38, sub: 0.85, harm: 0.1, noise: 0.22, clatter: 0.65, lope: 0.12, drive: 3.4, cut: 170, open: 1.6, q: 0.8, turbo: 0.9, pops: 0, vol: 1.35 },
     // the jet ski's supercharged Rotax triple: a hard, high rasp with the supercharger whining over it
     jetski: { cyl: 3, saw: 0.5, sub: 0.22, harm: 0.42, harmWave: 'sawtooth', harmRatio: 1.5, noise: 0.22, clatter: 0, lope: 0.04, drive: 2.8, cut: 520, open: 3.4, q: 1.4, turbo: 1.1, pops: 0, vol: 0.85 },
     // a big V8 outboard: a deep burble through the water at idle that turns into a growl
@@ -10279,6 +10591,17 @@ body.touch .tk-sign .key { display: none; }
       t += 0.03 + Math.random() * 0.11;
       noiseBurst(t, 0.05 + Math.random() * 0.04, (0.12 + Math.random() * 0.2) * level, 'lowpass', 700 + Math.random() * 900, 1.5, pan, 0.002);
     }
+  }
+  // a cannon: a crack, a deep boom rolling away, and the thud you feel
+  function cannonSound(x, z, size) {
+    if (!audio || muted) return;
+    const s = placeSound(x, z, 700);
+    if (s.level < 0.003) return;
+    const t = audio.ctx.currentTime, L = Math.min(1, s.level * size);
+    noiseBurst(t, 0.18, 0.6 * L, 'highpass', 1500, 0.5, s.pan, 0.001);
+    const f = noiseBurst(t, 1.8, 0.9 * L, 'lowpass', 1200, 0.7, s.pan, 0.004);
+    f.frequency.setValueAtTime(1200, t); f.frequency.exponentialRampToValueAtTime(110, t + 1.4);
+    tone(t, 'sine', 85, 26, 1.1, 0.9 * L, s.pan);
   }
   // the wastegates chattering as you lift off on boost: a hiss, then a quick flutter
   function flutter(level, pan) {
@@ -10519,7 +10842,7 @@ body.touch .tk-sign .key { display: none; }
     else if (code === 'Space') jumpQueued = true;
     else if (code === 'KeyH') el.help.hidden = !el.help.hidden;
     else if (code === 'KeyT') toggleMute();
-    else if (code === 'KeyF') horn();
+    else if (code === 'KeyF') { if (!tankFire()) horn(); }
     else if (code === 'KeyR') resetToRoad();
     else if (code === 'KeyB') openPicker();
     else if (code === 'KeyM') playerShift(1);
@@ -10590,7 +10913,7 @@ body.touch .tk-sign .key { display: none; }
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.btnJump.addEventListener(ev, () => { touchBrake = false; });
   el.btnUse.addEventListener('pointerdown', (e) => { e.preventDefault(); if (!useKey() && !LIFT.use() && !VENDORS.use()) toggleCar(); });
   $('btnCars').addEventListener('pointerdown', (e) => { e.preventDefault(); openPicker(); });
-  $('btnJob').addEventListener('pointerdown', (e) => { e.preventDefault(); JOBS.key(); });
+  $('btnJob').addEventListener('pointerdown', (e) => { e.preventDefault(); if (!tankFire()) JOBS.key(); });
   el.btnUp.addEventListener('pointerdown', (e) => { e.preventDefault(); playerShift(1); });
   el.btnDown.addEventListener('pointerdown', (e) => { e.preventDefault(); playerShift(-1); });
 
