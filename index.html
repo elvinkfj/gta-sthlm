@@ -12437,6 +12437,22 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     }
 
     /* ---------- connecting ---------- */
+    const ICE = [
+      { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] },
+      { urls: 'stun:stun.cloudflare.com:3478' },
+      { urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478'], username: 'peerjs', credential: 'peerjsp' },
+      { urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp'], username: 'openrelayproject', credential: 'openrelayproject' }
+    ];
+    // the line to the server, kept up while you are in a room: it can drop when the phone sleeps or the tab is in the background,
+    // and while it is down nobody new can find the room. Called up again until it is back
+    function keepLine() {
+      const peer = S.peer;
+      if (!peer || peer.destroyed || !peer.disconnected || !inRoom()) return;
+      try { peer.reconnect(); } catch { /* tried again in a moment */ }
+    }
+    setInterval(keepLine, 4000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) keepLine(); });
+    window.addEventListener('online', keepLine);
     let peerLib = null;
     function loadPeer() {
       if (window.Peer) return Promise.resolve(window.Peer);
@@ -12457,7 +12473,8 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     }
     function newPeer(id) {
       // ?peerserver=host:port uses a PeerJS server of your own instead of the free one
-      const opts = { debug: 0 }, own = params.get('peerserver');
+      // several ways through: STUN servers to find each other's address, and TURN servers that pass the traffic on when two networks won't let it straight through
+      const opts = { debug: 0, config: { iceServers: ICE } }, own = params.get('peerserver');
       if (own) { const [host, port] = own.split(':'), p = Number(port) || 443; Object.assign(opts, { host, port: p, path: '/', secure: p === 443 }); }
       const peer = id ? new window.Peer(id, opts) : new window.Peer(opts);
       // the server only introduces players; if the line to it drops, the room carries on and it is called up again
@@ -12519,17 +12536,31 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       let peer;
       try { peer = newPeer(); } catch { trouble({ type: 'browser-incompatible' }); return; }
       S.peer = peer;
-      const wait = setTimeout(() => { if (S.peer === peer && !inRoom()) fail('Rum ' + code + ' svarar inte. Kolla koden, och att din vän har rummet öppet.'); }, 20000);
-      peer.on('open', (id) => {
-        // (it fires again when the line to the server comes back: the connection to the room is still there)
-        if (S.peer !== peer || S.hostConn) return;
-        S.myId = id;
+      let iceFailed = false, tries = 0, retry = null;
+      const wait = setTimeout(() => {
+        if (S.peer !== peer || inRoom()) return;
+        clearTimeout(retry);
+        fail(iceFailed ? 'Hittade rum ' + code + ', men era nätverk släpper inte igenom anslutningen. Prova ett annat nät, till exempel mobilens.'
+          : 'Rum ' + code + ' svarar inte. Kolla koden, och att din vän har spelet öppet och framme på skärmen.');
+      }, 32000);
+      // knock on the room's door; if nothing has come through after a while, knock again on a fresh connection
+      const knock = () => {
+        if (S.peer !== peer || inRoom()) return;
+        if (S.hostConn) try { S.hostConn.close(); } catch { /* gone already */ }
         const conn = peer.connect(PREFIX + code.toLowerCase(), { reliable: true, serialization: 'json' });
         S.hostConn = conn;
         conn.on('open', () => conn.send({ t: 'hi', v: PROTO, name: S.name, look: look() }));
         conn.on('data', (m) => clientData(conn, m, code, wait));
         conn.on('close', () => { if (S.hostConn === conn && inRoom()) hostGone(); });
         conn.on('error', () => { /* the close, or the wait running out, deals with it */ });
+        conn.on('iceStateChanged', (st) => { if (st === 'failed') iceFailed = true; });
+        if (++tries < 3) retry = setTimeout(knock, 10000);
+      };
+      peer.on('open', (id) => {
+        // (it fires again when the line to the server comes back: the connection to the room is still there)
+        if (S.peer !== peer || S.hostConn) return;
+        S.myId = id;
+        knock();
       });
       peer.on('error', (err) => { if (S.peer === peer) { if (!inRoom()) clearTimeout(wait); trouble(err); } });
     }
