@@ -12453,6 +12453,133 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     setInterval(keepLine, 4000);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) keepLine(); });
     window.addEventListener('online', keepLine);
+
+    /* ---------- the second way through ---------- */
+    // some networks won't let a direct connection through, and the free TURN servers often don't answer. Then the game's
+    // messages go via a free, open MQTT broker instead: a little slower, but it gets through almost everywhere.
+    // The room listens on several brokers at once; whoever joins uses the first one that answers. ?relay=wss://… picks another
+    const RELAY_SRC = ['https://cdn.jsdelivr.net/npm/mqtt@5.10.4/dist/mqtt.min.js', 'https://unpkg.com/mqtt@5.10.4/dist/mqtt.min.js'];
+    const BROKERS = params.get('relay') ? [params.get('relay')] : ['wss://broker.hivemq.com:8884/mqtt', 'wss://broker.emqx.io:8084/mqtt', 'wss://test.mosquitto.org:8081/mqtt'];
+    const TOPIC = 'gubbe-pa-vagen/' + PROTO + '/', RELAY_ID = /^[\w-]{1,64}$/;
+    const R = { clients: [], conns: new Map(), out: null, me: '', room: '' };
+    let mqttLib = null;
+    function loadMqtt() {
+      if (window.mqtt) return Promise.resolve(window.mqtt);
+      if (mqttLib) return mqttLib;
+      mqttLib = new Promise((resolve, reject) => {
+        let i = 0;
+        const next = () => {
+          if (i >= RELAY_SRC.length) { mqttLib = null; reject(new Error('mqtt')); return; }
+          const s = document.createElement('script');
+          s.src = RELAY_SRC[i++]; s.async = true;
+          s.onload = () => (window.mqtt ? resolve(window.mqtt) : next());
+          s.onerror = () => { s.remove(); next(); };
+          document.head.append(s);
+        };
+        next();
+      });
+      return mqttLib;
+    }
+    // a connection over the broker that looks like a PeerJS one to the rest of the code: peer, open, send, close, on
+    function relayConn(cl, peer, topic) {
+      const ls = {};
+      const conn = {
+        peer, open: true, relay: true, seen: performance.now(),
+        on(ev, fn) { (ls[ev] = ls[ev] || []).push(fn); return conn; },
+        emit(ev, a) { for (const fn of ls[ev] || []) fn(a); },
+        send(m) { if (conn.open && cl.connected) cl.publish(topic, JSON.stringify({ f: R.me, m })); },
+        close() {
+          if (!conn.open) return;
+          conn.open = false;
+          try { if (cl.connected) cl.publish(topic, JSON.stringify({ f: R.me, bye: 1 })); } catch { /* gone already */ }
+          if (R.conns.get(peer) === conn) R.conns.delete(peer);
+          conn.emit('close');
+        }
+      };
+      return conn;
+    }
+    const readRelay = (buf) => { try { const o = JSON.parse(String(buf)); return o && typeof o === 'object' && typeof o.f === 'string' && RELAY_ID.test(o.f) ? o : null; } catch { return null; } };
+    // the room: listen on every broker for those knocking
+    async function relayListen(code, me) {
+      relayDown();
+      try { await loadMqtt(); } catch { return; }
+      if (!inRoom() || !S.host || S.myId !== me) return;
+      R.me = me; R.room = code;
+      for (const url of BROKERS) {
+        let cl;
+        try { cl = window.mqtt.connect(url, { connectTimeout: 8000, reconnectPeriod: 4000, keepalive: 30 }); } catch { continue; }
+        R.clients.push(cl);
+        cl.on('error', () => { /* it tries again by itself */ });
+        cl.on('connect', () => cl.subscribe(TOPIC + code + '/h'));
+        cl.on('message', (topic, buf) => {
+          const o = readRelay(buf);
+          if (!o || !inRoom() || !S.host || o.f === R.me) return;
+          let conn = R.conns.get(o.f);
+          if (o.bye) { if (conn) conn.close(); return; }
+          if (!o.m || typeof o.m !== 'object') return;
+          if (!conn || conn.cl !== cl) {
+            if (o.m.t !== 'hi') return;
+            if (conn) conn.close();
+            conn = relayConn(cl, o.f, TOPIC + code + '/c/' + o.f);
+            conn.cl = cl;
+            R.conns.set(o.f, conn);
+            accept(conn);
+          }
+          conn.seen = performance.now();
+          conn.emit('data', o.m);
+        });
+      }
+    }
+    // joining: the first broker that answers, a door to the room on it
+    async function relayKnock(code, me) {
+      try { await loadMqtt(); } catch { return null; }
+      let cl = R.clients[0];
+      if (!cl || !cl.connected) {
+        relayDown();
+        for (const url of BROKERS) {
+          if (S.joining !== code || S.myId !== me) return null;
+          const c = await new Promise((res) => {
+            let c0;
+            try { c0 = window.mqtt.connect(url, { connectTimeout: 6000, reconnectPeriod: 0, keepalive: 30 }); } catch { res(null); return; }
+            const t = setTimeout(() => fin(false), 7000);
+            function fin(ok) { clearTimeout(t); if (ok) { res(c0); return; } try { c0.end(true); } catch { /* never was */ } res(null); }
+            c0.once('connect', () => fin(true));
+            c0.once('error', () => fin(false));
+          });
+          if (c) { cl = c; break; }
+        }
+        if (!cl || !cl.connected) return null;
+        R.clients.push(cl);
+        cl.options.reconnectPeriod = 4000;
+        cl.on('error', () => { /* it tries again by itself */ });
+        cl.on('message', (topic, buf) => {
+          const o = readRelay(buf), conn = R.out;
+          if (!o || !conn || o.f !== conn.peer) return;
+          if (o.bye) { conn.close(); return; }
+          if (!o.m || typeof o.m !== 'object') return;
+          conn.seen = performance.now();
+          conn.emit('data', o.m);
+        });
+        cl.on('connect', () => cl.subscribe(TOPIC + code + '/c/' + me));
+        await new Promise((res) => cl.subscribe(TOPIC + code + '/c/' + me, () => res()));
+      }
+      R.me = me; R.room = code;
+      if (R.out) R.out.close();
+      R.out = relayConn(cl, PREFIX + code.toLowerCase(), TOPIC + code + '/h');
+      return R.out;
+    }
+    function relayDown() {
+      const all = [...R.conns.values(), R.out].filter(Boolean);
+      R.conns.clear(); R.out = null;
+      for (const c of all) c.close();
+      for (const cl of R.clients) try { cl.end(false); } catch { /* gone already */ }
+      R.clients = [];
+    }
+    // a relay connection that has gone quiet (the game sends 15 times a second) has gone
+    setInterval(() => {
+      const now = performance.now();
+      for (const c of [...R.conns.values(), R.out]) if (c && c.open && now - c.seen > 25000) c.close();
+    }, 2000);
     let peerLib = null;
     function loadPeer() {
       if (window.Peer) return Promise.resolve(window.Peer);
@@ -12488,6 +12615,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     function fail(msg) {
       const peer = S.peer;
       S.peer = null; S.hostConn = null;
+      relayDown();
       if (peer) try { peer.destroy(); } catch { /* already gone */ }
       busy(false);
       status(msg, true);
@@ -12537,30 +12665,42 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       try { peer = newPeer(); } catch { trouble({ type: 'browser-incompatible' }); return; }
       S.peer = peer;
       let iceFailed = false, tries = 0, retry = null;
+      const me0 = () => S.myId;
       const wait = setTimeout(() => {
         if (S.peer !== peer || inRoom()) return;
         clearTimeout(retry);
         fail(iceFailed ? 'Hittade rum ' + code + ', men era nätverk släpper inte igenom anslutningen. Prova ett annat nät, till exempel mobilens.'
           : 'Rum ' + code + ' svarar inte. Kolla koden, och att din vän har spelet öppet och framme på skärmen.');
       }, 32000);
-      // knock on the room's door; if nothing has come through after a while, knock again on a fresh connection
-      const knock = () => {
+      // knock on the room's door: first straight through, then (if nothing has come back) via the broker, and again
+      const knock = async () => {
         if (S.peer !== peer || inRoom()) return;
-        if (S.hostConn) try { S.hostConn.close(); } catch { /* gone already */ }
-        const conn = peer.connect(PREFIX + code.toLowerCase(), { reliable: true, serialization: 'json' });
+        const n = tries++;
+        if (n < 4) retry = setTimeout(knock, n === 0 ? 6000 : 8000);
+        let conn;
+        if (n === 0) {
+          conn = peer.connect(PREFIX + code.toLowerCase(), { reliable: true, serialization: 'json' });
+          conn.on('iceStateChanged', (st) => { if (st === 'failed') iceFailed = true; });
+        } else {
+          if (n === 1) status('Går med i rum ' + code + ' en annan väg …');
+          const me = me0();
+          conn = await relayKnock(code, me);
+          if (!conn || S.peer !== peer || inRoom() || S.myId !== me) return;
+        }
+        if (S.hostConn && S.hostConn !== conn) try { S.hostConn.close(); } catch { /* gone already */ }
         S.hostConn = conn;
-        conn.on('open', () => conn.send({ t: 'hi', v: PROTO, name: S.name, look: look() }));
         conn.on('data', (m) => clientData(conn, m, code, wait));
         conn.on('close', () => { if (S.hostConn === conn && inRoom()) hostGone(); });
         conn.on('error', () => { /* the close, or the wait running out, deals with it */ });
-        conn.on('iceStateChanged', (st) => { if (st === 'failed') iceFailed = true; });
-        if (++tries < 3) retry = setTimeout(knock, 10000);
+        const hi = () => conn.send({ t: 'hi', v: PROTO, name: S.name, look: look() });
+        if (conn.relay) hi(); else conn.on('open', hi);
       };
       peer.on('open', (id) => {
         // (it fires again when the line to the server comes back: the connection to the room is still there)
         if (S.peer !== peer || S.hostConn) return;
         S.myId = id;
         knock();
+        loadMqtt().catch(() => {});
       });
       peer.on('error', (err) => { if (S.peer === peer) { if (!inRoom()) clearTimeout(wait); trouble(err); } });
     }
@@ -12636,6 +12776,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       S.timer = setInterval(send, SEND_MS);
       showRoom(); hud();
       if (!S.host) toast('Du är med i rum ' + code + '.');
+      else relayListen(code, S.myId);
     }
     function leave() {
       if (S.ride) unride(true);
@@ -12644,6 +12785,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       const peer = S.peer;
       Object.assign(S, { peer: null, host: false, code: '', joining: '', myId: '', hostId: '', hostConn: null, lastCar: null, near: null });
       S.conns.clear();
+      relayDown();
       if (peer) try { peer.destroy(); } catch { /* already gone */ }
       seats();
       busy(false); showSetup(); hud();
