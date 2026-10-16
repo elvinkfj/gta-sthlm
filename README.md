@@ -22,7 +22,7 @@ I spelet ser ni varandra gå, springa och hoppa, med namnet ovanför huvudet. Na
 
 Var och en har sin egen trafik, sin egen polis och sina egna dalahästar, så en vän kan köra genom en bil som bara du ser. Stänger den som har rummet sitt spel stängs rummet för alla, och då kan någon annan skapa ett nytt.
 
-Spelarnas webbläsare pratar direkt med varandra (WebRTC). Den fria servern hos PeerJS behövs bara för att de ska hitta varandra, och den som har rummet skickar vidare allt mellan de andra. Ni behöver alltså inte ha en egen server. Det fungerar mellan olika nätverk, men vissa skol- och jobbnätverk stoppar den här sortens trafik. Kommer ni inte in kan ni prova ett annat nät, till exempel mobilens. Vill ni ha en egen PeerJS-server kan ni lägga till `?peerserver=adress:port` i adressen.
+Spelarnas webbläsare pratar direkt med varandra (WebRTC). Den fria servern hos PeerJS behövs bara för att de ska hitta varandra, och den som har rummet skickar vidare allt mellan de andra. Ni behöver alltså inte ha en egen server. Släpper era nätverk inte igenom en direkt anslutning går spelet efter några sekunder över till en reservväg: meddelandena skickas då via en fri, öppen MQTT-server (HiveMQ, EMQX eller Mosquitto). Det går lite långsammare men kommer fram nästan överallt, och det behövs inget konto. Det som skickas den vägen (var ni är, bilarna och chatten) går genom en öppen server, så skriv inget hemligt i chatten. Kommer ni ändå inte in kan ni prova ett annat nät, till exempel mobilens. Vill ni ha en egen PeerJS-server kan ni lägga till `?peerserver=adress:port` i adressen.
 
 ## Kontroller
 
