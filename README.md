@@ -1,10 +1,28 @@
 # Gubbe på Vägen
 
-Ett 3D-spel i webbläsaren där du är en gubbe i Stockholms innerstad. Du går runt, väljer bland drygt 30 bilar som finns i verkligheten (och en moped) och kör genom stan, eller tar en vattenskoter eller motorbåt ut på vattnet. Bilarna i trafiken kan du springa fram till och ta medan de kör. Polisen patrullerar, krockar syns och märks på bilen, och vid fem stjärnor kommer militären.
+Ett 3D-spel i webbläsaren där du är en gubbe i Stockholms innerstad. Du går runt, väljer bland drygt 30 bilar som finns i verkligheten (och en moped) och kör genom stan, eller tar en vattenskoter eller motorbåt ut på vattnet. Bilarna i trafiken kan du springa fram till och ta medan de kör. Polisen patrullerar, krockar syns och märks på bilen, och vid fem stjärnor kommer militären. Du kan också spela med upp till sju vänner i samma Stockholm.
 
 ## Spela
 
 Öppna `index.html` i Chrome, Safari, Firefox eller Edge. Spelet är en enda fil och behöver ingen installation, men datorn måste vara uppkopplad eftersom 3D-motorn (Three.js) och typsnitten laddas från internet.
+
+### Spela med vänner
+
+Upp till åtta spelare kan vara i samma Stockholm samtidigt, på dator eller mobil.
+
+1. En av er trycker **Spela med vänner** på startskylten (eller P i spelet), skriver sitt namn, väljer färg på tröjan och trycker **Skapa rum**. Då får hen en rumskod på fyra bokstäver, till exempel `KQTM`.
+2. Vännerna trycker också **Spela med vänner**, skriver sitt namn och rumskoden och trycker **Gå med**. Ligger spelet på nätet (till exempel på GitHub Pages) kan den som har rummet i stället skicka länken med **Kopiera länken**. Den öppnar spelet med koden redan ifylld.
+3. Tryck **Spela**. Den som går med börjar bredvid den som har rummet.
+
+I spelet ser ni varandra gå, springa och hoppa, med namnet ovanför huvudet. Namnet syns genom husen så att ni hittar varandra, och på båda kartorna är vännerna en prick i tröjans färg. Kör en vän ser du rätt bil i rätt färg, med bromsljus, backljus, blinkers, blåljus och motorljud. Du hör tutan och ser bucklorna, de spruckna rutorna och röken när vännen krockar. Är polisen efter en vän syns stjärnorna bredvid namnet. Skjuter en vän med stridsvagnen smäller det hos dig också. Du kan krocka med vännernas bilar, och en vän som kör på dig välter dig.
+
+- **Åk med:** gå fram till en väns bil, båt eller moped när vännen sitter vid ratten och tryck E (Åk med på mobilen). Du sätter dig bredvid föraren, och fler får plats i baksätet och i bussen. E igen kliver ur, och i farten hoppar du ur och slår i marken. Ur en båt kliver du bara i land vid en kaj.
+- **Gå till en vän:** i rumsskylten (P) står alla i rummet. Gå till ställer dig på trottoaren bredvid den vännen, var i stan hen än är.
+- **Chatt:** tryck Y, skriv och tryck Enter. Meddelandena syns nere till vänster en stund. I rumsskylten kan du också chatta, och där står de senaste meddelandena kvar.
+
+Var och en har sin egen trafik, sin egen polis och sina egna dalahästar, så en vän kan köra genom en bil som bara du ser. Stänger den som har rummet sitt spel stängs rummet för alla, och då kan någon annan skapa ett nytt.
+
+Spelarnas webbläsare pratar direkt med varandra (WebRTC). Den fria servern hos PeerJS behövs bara för att de ska hitta varandra, och den som har rummet skickar vidare allt mellan de andra. Ni behöver alltså inte ha en egen server. Det fungerar mellan olika nätverk, men vissa skol- och jobbnätverk stoppar den här sortens trafik. Kommer ni inte in kan ni prova ett annat nät, till exempel mobilens. Vill ni ha en egen PeerJS-server kan ni lägga till `?peerserver=adress:port` i adressen.
 
 ## Kontroller
 
@@ -19,7 +37,7 @@ Ett 3D-spel i webbläsaren där du är en gubbe i Stockholms innerstad. Du går 
 | G | Byt mellan automat och manuell växellåda (mopeden har variator och elbilarna en enda växel) |
 | Z / X | Blinkers åt vänster / höger. Tryck igen för att slå av, men precis som i en riktig bil slår den av sig själv när du har svängt och rätat upp ratten |
 | C | Varningsblinkers |
-| E | Kliv in, ta en bil som kör förbi, kliv ur. Vid en glasskiosk eller ballongförsäljare: köp glass eller en ballong. Under en poliskontroll: skriv under boten. I polisbilens baksäte: hoppa fram till stationen. I cellen: sov så att tiden går fortare. Vid hissen i gula huset: ring på hissen. I hissen: åk upp till lägenheten eller ner till gatan |
+| E | Kliv in, ta en bil som kör förbi, kliv ur. Vid en glasskiosk eller ballongförsäljare: köp glass eller en ballong. Under en poliskontroll: skriv under boten. I polisbilens baksäte: hoppa fram till stationen. I cellen: sov så att tiden går fortare. Vid hissen i gula huset: ring på hissen. I hissen: åk upp till lägenheten eller ner till gatan. Vid en väns bil: åk med |
 | 0–5 | I hissen i gula huset: välj våning (0 är gatan, 3 lägenhetens entré, 5 sovrummen). Du kan också klicka eller trycka på knapparna i hisspanelen |
 | B | Välj bilmodell. Står du vid en kaj kan du välja en båt i stället |
 | J | Jobb: taxi i taxin, paketleveranser i Sprintern och busslinje i SL-bussen. Vid en gul ljuspelare: starta ett gatlopp. J igen avbryter |
@@ -31,8 +49,10 @@ Ett 3D-spel i webbläsaren där du är en gubbe i Stockholms innerstad. Du går 
 | T | Ljud av och på |
 | Q | Grafikkvalitet: hög, mellan eller enkel |
 | H | Visa hjälp |
+| P | Spela med vänner: skapa ett rum, gå med i en väns rum eller gå till en vän |
+| Y | Chatta med vännerna i rummet |
 
-På mobil och surfplatta finns en styrspak och knappar på skärmen, ▲ ▼ för att växla när du kör och en Jobb-knapp (som skjuter när du kör stridsvagnen). Blinkersen slår du på och av genom att trycka på pilarna bredvid hastighetsmätaren.
+På mobil och surfplatta finns en styrspak och knappar på skärmen, ▲ ▼ för att växla när du kör och en Jobb-knapp (som skjuter när du kör stridsvagnen). Blinkersen slår du på och av genom att trycka på pilarna bredvid hastighetsmätaren. Knappen Vänner bredvid kartan öppnar rumsskylten.
 
 ## Innehåll
 

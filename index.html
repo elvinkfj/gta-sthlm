@@ -276,6 +276,7 @@ h1 { margin: 0; font: 900 clamp(2.2rem, 9vw, 3.1rem)/0.95 var(--font-sign); lett
 .lg-goal { background: #ffc21a; box-shadow: 0 0 0 2px var(--snow); }
 .lg-heli { background: radial-gradient(circle, #163d8c 0 38%, rgba(255,255,255,.75) 40%); box-shadow: 0 0 0 1px #11161b; }
 .lg-army { border-radius: 2px !important; background: #3d4a30; box-shadow: 0 0 0 2px var(--snow); }
+.lg-friend { background: #c8102e; box-shadow: 0 0 0 2px var(--snow); }
 .lg-boat { border-radius: 1px 1px 7px 7px !important; height: 9px !important; background: var(--snow); box-shadow: 0 0 0 1.5px var(--sign-blue); }
 
 /* ---------- car picker ---------- */
@@ -348,6 +349,65 @@ body.touch .tk-sign .key { display: none; }
   body.touch.driving #job { top: calc(226px + env(safe-area-inset-top, 0px)); }
   body.job.touch.driving #wanted { top: calc(292px + env(safe-area-inset-top, 0px)); }
 }
+/* ---------- playing with friends: the room sign, the chat and the friends button ---------- */
+.start-actions { display: flex; flex-wrap: wrap; gap: 10px 12px; margin-top: 4px; }
+#play { margin-top: 0; }
+.btn-sign.alt { background: var(--snow); }
+.btn-sign.small { font-size: 0.95rem; padding: 10px 16px 8px; }
+#mp { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; box-sizing: border-box; overflow-y: auto; background: rgba(6, 16, 26, 0.55); }
+.mp-sign { width: min(540px, 100%); min-width: 0; }
+.mp-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.mp-head h2 { margin: 0; font: 900 1.9rem/1 var(--font-sign); }
+#mpSetup, #mpRoom { display: grid; gap: 14px; }
+.mp-chat { display: grid; gap: 8px; }
+.mp-field { display: grid; gap: 6px; font-weight: 700; font-size: 0.74rem; letter-spacing: 0.14em; text-transform: uppercase; }
+.mp-input {
+  min-width: 0; box-sizing: border-box; border: 0; border-radius: 8px; padding: 11px 12px 9px; background: var(--snow); color: var(--asphalt);
+  font: 700 1.05rem/1 var(--font-sign); letter-spacing: 0; text-transform: none; box-shadow: inset 0 0 0 3px var(--asphalt);
+  -webkit-user-select: text; user-select: text; touch-action: manipulation;
+}
+.mp-input:focus-visible { outline: 3px solid var(--sign-yellow); outline-offset: 2px; }
+#mpCode { width: 5.6em; text-align: center; text-transform: uppercase; font-family: var(--font-gauge); letter-spacing: 0.2em; }
+.swatches { display: flex; flex-wrap: wrap; gap: 9px; }
+.swatch { width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%; cursor: pointer; box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.5); }
+.swatch[aria-checked="true"] { box-shadow: 0 0 0 3px var(--sign-blue), 0 0 0 6px var(--snow); }
+.swatch:focus-visible { outline: 3px solid var(--sign-yellow); outline-offset: 5px; }
+.mp-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.mp-or { font-weight: 700; opacity: 0.8; }
+.mp-join { display: flex; gap: 8px; }
+.mp-code { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.mp-code span { font-weight: 700; font-size: 0.74rem; letter-spacing: 0.16em; text-transform: uppercase; }
+.mp-code b { font: 700 2.6rem/1 var(--font-gauge); letter-spacing: 0.16em; color: var(--sign-yellow); }
+.mp-code small { flex-basis: 100%; font-size: 0.86rem; opacity: 0.88; }
+#mpList { list-style: none; margin: 0; padding: 12px 0 0; border-top: 2px solid rgba(255, 255, 255, 0.35); display: grid; gap: 8px; }
+#mpList li { display: flex; align-items: center; gap: 10px; min-height: 34px; font-weight: 700; }
+#mpList li small { font-weight: 700; opacity: 0.75; }
+#mpList li button { margin-left: auto; }
+.mp-dot { width: 14px; height: 14px; flex: none; border-radius: 50%; box-shadow: 0 0 0 2px var(--snow); }
+.mp-status { margin: 0; font-weight: 700; font-size: 0.92rem; line-height: 1.4; }
+.mp-status:empty { display: none; }
+.mp-status.err { padding: 7px 11px; border-radius: 8px; background: var(--sign-red); }
+#mpChatLog { max-height: 150px; overflow-y: auto; display: grid; gap: 4px; padding: 8px 10px; border-radius: 8px; background: rgba(0, 0, 0, 0.22); font-size: 0.9rem; overflow-wrap: anywhere; }
+#mpChatLog:empty { display: none; }
+.mp-say { display: flex; gap: 8px; }
+.mp-say input, #chatBar input { flex: 1; width: 0; }
+.chat-name { display: inline-flex; align-items: center; gap: 6px; margin-right: 6px; font-weight: 900; }
+.chat-name i { width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 0 1.5px var(--snow); }
+#chatLog { position: absolute; left: calc(14px + env(safe-area-inset-left, 0px)); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 4px; justify-items: start; max-width: min(360px, calc(100vw - 300px)); }
+.chat-line { padding: 5px 10px; border-radius: 8px; background: var(--glass); font-size: 0.86rem; font-weight: 700; overflow-wrap: anywhere; animation: chatFade 12s linear forwards; }
+@keyframes chatFade { 0%, 85% { opacity: 1; } 100% { opacity: 0; } }
+#chatBar {
+  position: absolute; left: 50%; bottom: calc(92px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); pointer-events: auto;
+  display: flex; gap: 8px; width: min(480px, calc(100vw - 32px)); box-sizing: border-box; padding: 8px; border-radius: 12px; background: var(--glass);
+}
+#btnFriends {
+  display: none; position: absolute; pointer-events: auto; top: calc(22px + env(safe-area-inset-top, 0px)); right: calc(150px + env(safe-area-inset-right, 0px));
+  padding: 8px 12px 6px; border: 0; border-radius: 999px; background: var(--snow); color: var(--asphalt); font: 900 0.82rem/1 var(--font-sign);
+  box-shadow: inset 0 0 0 2px var(--asphalt), 0 4px 12px rgba(0, 0, 0, 0.3); touch-action: manipulation;
+}
+body.touch #btnFriends { display: block; }
+body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0px)); max-width: calc(100vw - 150px); }
+@media (max-width: 760px) { body.touch #btnFriends { right: calc(142px + env(safe-area-inset-right, 0px)); } }
 @media (prefers-reduced-motion: reduce) { .sign { animation: none; } #hud { transition: none; } #limit.over, #wanted, .beacon, #ticket { animation: none; } #limit.over { box-shadow: inset 0 0 0 7px var(--sign-red), 0 0 0 4px var(--sign-red); } }
 </style>
 </head>
@@ -361,6 +421,7 @@ body.touch .tk-sign .key { display: none; }
     <div class="tag"><span class="key">B</span>Välj bil</div>
     <div class="tag"><span class="key">K</span>Karta</div>
     <div class="tag"><span class="key">T</span><span id="soundLabel">Ljud på</span></div>
+    <div class="tag" id="mpTag"><span class="key">P</span><span id="mpTagText">Spela med vänner</span></div>
     <div class="tag fine" id="fineTag" hidden>Böter <b id="fines">0 kr</b></div>
     <div class="tag cash" id="cashTag" hidden title="Dina pengar: fickpengarna och det du tjänat på jobb">Kassa <b id="cash">0 kr</b></div>
     <div class="tag dala-tag" title="Dalahästar du hittat"><svg class="dala" viewBox="0 0 20 20" aria-hidden="true"><path d="M4 18V11L3 10V8l2-1 1-4h3l1 2-2 1v1h7l1 1v8h-3v-4H8v4z" fill="#c8102e" stroke="#fff" stroke-width="1"/></svg><b id="horses">0/20</b></div>
@@ -387,6 +448,9 @@ body.touch .tk-sign .key { display: none; }
     <button type="button" data-floor="0"><b>0</b>Gatan</button>
   </div>
   <canvas id="map" aria-label="Karta, klicka för att se hela staden" title="Visa hela kartan (K)"></canvas>
+  <button id="btnFriends" type="button">Vänner</button>
+  <div id="chatLog" aria-live="polite"></div>
+  <form id="chatBar" hidden autocomplete="off"><input id="chatInput" class="mp-input" maxlength="120" placeholder="Skriv till dina vänner …" aria-label="Meddelande till dina vänner" enterkeyhint="send"><button class="btn-sign small" type="submit">Skicka</button></form>
   <div id="toast" hidden></div>
   <div id="prompt" hidden><span class="key">E</span><span id="promptText">Kliv in</span></div>
   <div id="limit" hidden aria-label="Hastighetsgräns"><span id="limitNum">40</span></div>
@@ -421,6 +485,8 @@ body.touch .tk-sign .key { display: none; }
     <span class="key">R</span><span>Ställ bilen på gatan igen, eller båten ute på öppet vatten</span>
     <span class="key">T</span><span>Ljud av och på</span>
     <span class="key">Q</span><span>Grafikkvalitet: hög, mellan eller enkel</span>
+    <span class="key">P</span><span>Spela med vänner: skapa ett rum eller gå med i en väns rum, gå till en vän</span>
+    <span class="key">Y</span><span>Chatta med dina vänner i rummet</span>
     <span class="key">Esc</span><span>Släpp musen</span>
   </div>
 </div>
@@ -467,7 +533,45 @@ body.touch .tk-sign .key { display: none; }
         <li><span class="k"><span class="key">▲</span><span class="key">▼</span></span><span>Växla upp och ner</span></li>
         <li><span class="k"><span class="key">Bilar</span></span><span>Välj bil, eller båt vid en kaj</span></li>
       </ul>
-      <button id="play" class="btn-sign" type="button">Spela</button>
+      <div class="start-actions">
+        <button id="play" class="btn-sign" type="button">Spela</button>
+        <button id="playFriends" class="btn-sign alt" type="button">Spela med vänner</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="mp" hidden role="dialog" aria-modal="true" aria-labelledby="mpTitle">
+  <div class="sign mp-sign">
+    <div class="sign-inner">
+      <div class="mp-head">
+        <h2 id="mpTitle">Spela med vänner</h2>
+        <button id="mpClose" class="btn-sign picker-close" type="button">Stäng</button>
+      </div>
+      <div id="mpSetup">
+        <p class="lede">En av er skapar ett rum och får en kod. De andra skriver in koden här, eller öppnar länken. Ni kan vara upp till åtta spelare i samma Stockholm.</p>
+        <label class="mp-field">Ditt namn<input id="mpName" class="mp-input" maxlength="14" autocomplete="nickname" placeholder="Vad heter du?" enterkeyhint="done"></label>
+        <div class="mp-field"><span id="mpColorsLabel">Färg på tröjan</span><div class="swatches" id="mpColors" role="radiogroup" aria-labelledby="mpColorsLabel"></div></div>
+        <div class="mp-actions">
+          <button id="mpHost" class="btn-sign" type="button">Skapa rum</button>
+          <span class="mp-or">eller</span>
+          <form class="mp-join" id="mpJoinForm" autocomplete="off"><input id="mpCode" class="mp-input" maxlength="4" placeholder="KOD" aria-label="Rumskod, fyra bokstäver" autocapitalize="characters" spellcheck="false" enterkeyhint="go"><button id="mpJoin" class="btn-sign" type="submit">Gå med</button></form>
+        </div>
+      </div>
+      <div id="mpRoom" hidden>
+        <div class="mp-code"><span>Rumskod</span><b id="mpCodeBig">ABCD</b><small id="mpCodeHint">Skicka koden till dina vänner, så kan de gå med.</small></div>
+        <div class="mp-actions" id="mpShare"><button id="mpCopy" class="btn-sign small alt" type="button">Kopiera länken</button></div>
+        <ul id="mpList" aria-label="Spelare i rummet"></ul>
+        <div class="mp-chat">
+          <div id="mpChatLog" aria-live="polite"></div>
+          <form class="mp-say" id="mpSay" autocomplete="off"><input id="mpSayInput" class="mp-input" maxlength="120" placeholder="Skriv till dina vänner …" aria-label="Meddelande till dina vänner" enterkeyhint="send"><button class="btn-sign small" type="submit">Skicka</button></form>
+        </div>
+        <div class="mp-actions">
+          <button id="mpPlay" class="btn-sign" type="button">Spela</button>
+          <button id="mpLeave" class="btn-sign small alt" type="button">Lämna rummet</button>
+        </div>
+      </div>
+      <p id="mpStatus" class="mp-status" role="status" aria-live="polite"></p>
     </div>
   </div>
 </div>
@@ -486,7 +590,7 @@ body.touch .tk-sign .key { display: none; }
     <canvas id="bigmapCanvas"></canvas>
     <div class="legend">
       <span><i class="lg-you"></i>Du</span><span><i class="lg-police"></i>Polis</span><span><i class="lg-car"></i>Din bil</span>
-      <span><i class="lg-t">T</i>Tunnelbana</span><span><i class="lg-dala"></i>Hittad dalahäst</span><span><i class="lg-park"></i>Park</span><span><i class="lg-main"></i>Huvudgata</span><span><i class="lg-race"></i>Gatlopp</span><span><i class="lg-goal"></i>Mål och GPS</span><span><i class="lg-ice"></i>Glasskiosk</span><span><i class="lg-balloon"></i>Ballonger</span><span><i class="lg-heli"></i>Polishelikopter</span><span><i class="lg-boat"></i>Båt</span><span><i class="lg-army"></i>Militär</span>
+      <span><i class="lg-t">T</i>Tunnelbana</span><span><i class="lg-dala"></i>Hittad dalahäst</span><span><i class="lg-park"></i>Park</span><span><i class="lg-main"></i>Huvudgata</span><span><i class="lg-race"></i>Gatlopp</span><span><i class="lg-goal"></i>Mål och GPS</span><span><i class="lg-ice"></i>Glasskiosk</span><span><i class="lg-balloon"></i>Ballonger</span><span><i class="lg-heli"></i>Polishelikopter</span><span><i class="lg-boat"></i>Båt</span><span><i class="lg-army"></i>Militär</span><span><i class="lg-friend"></i>Vän</span>
     </div>
   </div>
 </div>
@@ -567,6 +671,7 @@ body.touch .tk-sign .key { display: none; }
   scene.fog = new THREE.Fog(0xffffff, 180, 1350);
   scene.fog.color.setRGB(HAZE[0], HAZE[1], HAZE[2]);
   const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.2, 2400);
+  camera.layers.enable(1);
 
   const hemi = new THREE.HemisphereLight(0xdcecff, 0x8a8172, 0.3);
   scene.add(hemi);
@@ -6628,10 +6733,12 @@ body.touch .tk-sign .key { display: none; }
     for (const c of cars) { c.px = c.x; c.pz = c.z; }
     for (let i = 0; i < cars.length; i++) for (let j = i + 1; j < cars.length; j++) {
       const a = cars[i], b = cars[j];
+      if (a.remote && b.remote) continue;
       const lim = (a.M.L + b.M.L) / 2 + 0.5, ddx = a.x - b.x, ddz = a.z - b.z;
       if (ddx * ddx + ddz * ddz > lim * lim) continue;
       const afx = Math.sin(a.h), afz = Math.cos(a.h), bfx = Math.sin(b.h), bfz = Math.cos(b.h);
-      const ia = 1 / a.M.mass, ib = 1 / b.M.mass;
+      // a friend's car is where their game says it is: it can't be shoved, only bounced off
+      const ia = a.remote ? 0 : 1 / a.M.mass, ib = b.remote ? 0 : 1 / b.M.mass;
       for (const oa of a.offs) for (const ob of b.offs) {
         const ax = a.x + afx * oa, az = a.z + afz * oa, bx = b.x + bfx * ob, bz = b.z + bfz * ob;
         const dx = ax - bx, dz = az - bz, rr2 = a.r + b.r, d2 = dx * dx + dz * dz;
@@ -6653,7 +6760,7 @@ body.touch .tk-sign .key { display: none; }
         }
       }
     }
-    for (const c of cars) if ((c.x !== c.px || c.z !== c.pz) && !(c.M.boat ? boatFits(c.M, c.x, c.z, c.h) : fitsM(c.M, c.x, c.z, c.h))) { c.x = c.px; c.z = c.pz; }
+    for (const c of cars) if (!c.remote && (c.x !== c.px || c.z !== c.pz) && !(c.M.boat ? boatFits(c.M, c.x, c.z, c.h) : fitsM(c.M, c.x, c.z, c.h))) { c.x = c.px; c.z = c.pz; }
   }
 
   /* ---------- particles: smoke, sparks, glass and bits ---------- */
@@ -6850,15 +6957,13 @@ body.touch .tk-sign .key { display: none; }
     const ex = wx - c.x, ez = wz - c.z, lx = ex * co - ez * si, lz = ex * si + ez * co;
     const ldx = dx * co - dz * si, ldz = dx * si + dz * co;
     const ly = M.moped || M.boat ? 0.5 : M.mil ? 1.0 : M.bus ? 0.9 : carShape(M).sill(0) + 0.3;
+    // a friend's car: their own game dents it and tells us how, so here it only gives off sparks and a bang
+    if (c.remote) { sparkBurst(wx, ly + 0.1, wz, dx, dz, speed); crashSound(wx, wz, speed, false); return; }
     const hard = speed - 2.5;
     if (hard > 1.5) {
       const depth = Math.min(0.7, 0.032 * Math.pow(hard, 1.15)), radius = Math.min(1.5, 0.55 + speed * 0.045);
-      ownGeometry(c);
-      dentGeometry(c.geo.body, lx, ly, lz, ldx, ldz, depth, radius, Math.min(0.8, speed / 25), speed > 5);
-      dentGeometry(c.geo.decal, lx, ly, lz, ldx, ldz, depth, radius, 0, false);
-      const glassHit = dentGeometry(c.geo.glass, lx, ly + 0.4, lz, ldx, ldz, depth * 0.8, radius * 1.1, 0, false);
-      c.dented = true;
-      if (glassHit && speed > 8 && !c.glassBroken) { c.glassBroken = true; c.glass.material = crackedMat; glassBurst(wx, ly + 0.6, wz, dx, dz, speed); }
+      dentCar(c, lx, ly, lz, ldx, ldz, depth, radius, speed);
+      if (c === driving) MP.dent(c, [lx, ly, lz, ldx, ldz, depth, radius, speed]);
       // a hard knock near a wheel bends it, and a bent front wheel pulls the steering
       if (!M.moped) for (const wh of c.wheels) {
         if (speed < 7 || M.mil || Math.abs(lz - wh.z) > 0.9 || lx * wh.sx < M.W / 2 - 0.6) continue;
@@ -6886,6 +6991,19 @@ body.touch .tk-sign .key { display: none; }
       player.vx = vx * 0.55; player.vz = vz * 0.55; player.vy = 5.5; player.grounded = false; player.knockT = 1.4;
       c.fallen = Math.random() < 0.5 ? 1.4 : -1.4;
       toast('Du flög av mopeden!');
+    }
+  }
+  // a dent at (lx, ly, lz) in the car's own frame, pushed in along (ldx, ldz); a hard enough one breaks the glass
+  function dentCar(c, lx, ly, lz, ldx, ldz, depth, radius, speed) {
+    ownGeometry(c);
+    dentGeometry(c.geo.body, lx, ly, lz, ldx, ldz, depth, radius, Math.min(0.8, speed / 25), speed > 5);
+    dentGeometry(c.geo.decal, lx, ly, lz, ldx, ldz, depth, radius, 0, false);
+    const glassHit = dentGeometry(c.geo.glass, lx, ly + 0.4, lz, ldx, ldz, depth * 0.8, radius * 1.1, 0, false);
+    c.dented = true;
+    if (glassHit && speed > 8 && !c.glassBroken) {
+      c.glassBroken = true; c.glass.material = crackedMat;
+      const co = Math.cos(c.h), si = Math.sin(c.h);
+      glassBurst(c.x + lx * co + lz * si, ly + 0.6, c.z - lx * si + lz * co, ldx * co + ldz * si, -ldx * si + ldz * co, speed);
     }
   }
   function engineDies(c) {
@@ -7366,8 +7484,8 @@ body.touch .tk-sign .key { display: none; }
       if (blockedAt(x, z, 0.3) || cars.some((o) => o !== c && Math.hypot(o.x - x, o.z - z) < Math.min(o.M.W, o.M.L) / 2 + 0.3) || persons.some((p) => p !== player && !p.asleep && Math.hypot(p.x - x, p.z - z) < 0.7)) { hx = x; hz = z; break; }
     }
     explode(hx, hz, walkable(hx, hz) ? 0.6 : WATER_Y + 0.3);
-    // (a cannon going off in town: every police car hears it)
-    offense('skott', 0, c.x, c.z, true);
+    // (a cannon going off in town: every police car hears it, unless it was a friend's tank: then they are after them)
+    if (!c.remote) offense('skott', 0, c.x, c.z, true);
   }
   function explode(x, z, y) {
     for (let i = 0; i < 30; i++) {
@@ -7386,7 +7504,7 @@ body.touch .tk-sign .key { display: none; }
       o.vx += (ux * k * 9) / Math.sqrt(o.M.mass); o.vz += (uz * k * 9) / Math.sqrt(o.M.mass);
     }
     for (const p of persons) {
-      if (p.asleep || (p === player && driving)) continue;
+      if (p.asleep || p.remote || (p === player && driving)) continue;
       const dx = p.x - x, dz = p.z - z, d = Math.hypot(dx, dz) || 0.1;
       if (d > 8) continue;
       p.vx = (dx / d) * (8 - d) * 1.2; p.vz = (dz / d) * (8 - d) * 1.2; p.vy = 5; p.grounded = false; p.knockT = 1.6;
@@ -7399,6 +7517,7 @@ body.touch .tk-sign .key { display: none; }
     if ((c.reloadT || 0) > 0) { toast('Kanonen laddas om …'); return true; }
     c.reloadT = 2.5;
     fireCannon(c, true);
+    MP.event('fire', { a: c.aim || 0 });
     return true;
   }
   // the turret (or the weapon station) turns to its target: you, when the army is after you, or where the camera looks
@@ -7406,6 +7525,7 @@ body.touch .tk-sign .key { display: none; }
   function aimTurret(c, dt) {
     let want = 0;
     if (c === driving) want = wrapAngle(camYaw - c.h);
+    else if (c.remote) want = c.aimWant || 0;
     else if (c.military && c.police && c.police.state === 'chase') { const T = playerTarget(); want = wrapAngle(Math.atan2(T.x - c.x, T.z - c.z) - c.h); }
     c.aim = (c.aim || 0) + clamp(wrapAngle(want - (c.aim || 0)), -0.9 * dt, 0.9 * dt);
     c.steerGroup.rotation.y = c.aim;
@@ -8355,7 +8475,7 @@ body.touch .tk-sign .key { display: none; }
         if ((Math.hypot(o.x - S.rearDoor.x, o.z - S.rearDoor.z) < 1.4 && Math.hypot(player.x - S.rearDoor.x, player.z - S.rearDoor.z) < 1.6) || S.t > 40) {
           $('ticket').hidden = true;
           player.model.group.visible = false; player.vx = player.vz = 0;
-          if (c.rearSeat) c.rearSeat.visible = true;
+          if (c.rearSeat) { c.rearSeat.geometry = playerId.driverGeo; c.rearSeat.visible = true; }
           S.riding = true;
           S.door = doorNear(c, o.x, o.z, false);
           S.phase = 'board'; S.t = 0;
@@ -9602,7 +9722,7 @@ body.touch .tk-sign .key { display: none; }
   /* ================= game state ================= */
   let started = false, pickerOpen = false, nearCar = null;
   // the car picker and the big map both pause the game
-  const paused = () => pickerOpen || bigmap.open;
+  const paused = () => pickerOpen || bigmap.open || MP.panelOpen;
   let camYaw = player.rot, camPitch = 0.3, camDist = 6, lastLook = -1e9, clipT = 1;
   const camTarget = new THREE.Vector3(player.x, 1.6, player.z);
   let jumpQueued = false;
@@ -9626,9 +9746,11 @@ body.touch .tk-sign .key { display: none; }
   }
 
   function findNearCar() {
-    if (driving || !started || (stop && stop.locked)) return null;
+    if (driving || MP.ride || !started || (stop && stop.locked)) return null;
     let best = null, bd = Infinity;
     for (const c of cars) {
+      // (a friend's car you can only ride along in)
+      if (c.remote) continue;
       const dx = player.x - c.x, dz = player.z - c.z;
       if (dx * dx + dz * dz > 100) continue;
       const co = Math.cos(c.h), si = Math.sin(c.h), lx = dx * co - dz * si, lz = dx * si + dz * co;
@@ -9921,6 +10043,7 @@ body.touch .tk-sign .key { display: none; }
   function chooseModel(M) {
     closePicker();
     if (stop && stop.locked) return;
+    if (MP.ride) MP.unride();
     let spot = null;
     if (driving && driving.M.boat && !exitSpot(driving)) {
       // out on the water: another boat takes this one's place, but a car has to wait for dry land
@@ -9988,7 +10111,7 @@ body.touch .tk-sign .key { display: none; }
       let walkers = 0;
       for (let i = persons.length - 1; i >= 0; i--) {
         const p = persons[i];
-        if (p === player) continue;
+        if (p === player || p.remote) continue;
         const d = Math.hypot(p.x - camTarget.x, p.z - camTarget.z);
         p.asleep = d > 150;
         p.model.group.visible = !p.asleep;
@@ -10002,11 +10125,13 @@ body.touch .tk-sign .key { display: none; }
 
   /* ================= simulation step ================= */
   function physicsStep(dt, pIntent) {
-    for (const c of cars) updateCar(c, dt, c.input);
+    // (a friend's car is moved by their game, and only shown here)
+    for (const c of cars) if (!c.remote) updateCar(c, dt, c.input);
     carPairs();
-    for (const c of cars) if (c === driving || c.vx !== 0 || c.vz !== 0) carWorld(c);
+    for (const c of cars) if (!c.remote && (c === driving || c.vx !== 0 || c.vz !== 0)) carWorld(c);
     if (driving) { player.x = driving.x; player.z = driving.z; player.rot = driving.h; player.y = 0; }
     else if (stop && stop.riding) { player.x = stop.car.x; player.z = stop.car.z; player.vx = player.vz = 0; }
+    else if (MP.ride) { const c = MP.ride; player.x = c.x; player.z = c.z; player.y = 0; player.vx = c.vx; player.vz = c.vz; player.vy = 0; player.rot = c.h; }
     else personMove(player, dt, pIntent);
     for (const p of persons) {
       // someone who climbed out of a wreck during this step gets their first plan next frame
@@ -10116,8 +10241,8 @@ body.touch .tk-sign .key { display: none; }
     return Math.max(0.1, tmin);
   }
   function updateCamera(dt) {
-    // in the back of a police car the camera follows the car just as when you drive
-    const car = driving || (stop && stop.riding ? stop.car : null);
+    // in the back of a police car, or riding along with a friend, the camera follows the car just as when you drive
+    const car = driving || (stop && stop.riding ? stop.car : null) || MP.ride;
     const vf = car ? car.vx * Math.sin(car.h) + car.vz * Math.cos(car.h) : 0;
     let tx, ty, tz, want;
     if (car) { tx = car.x; ty = car.M.boat ? WATER_Y + (car.M.boat === 'jetski' ? 1.6 : 2.0) : car.M.bus ? 3.2 : car.M.moped ? 1.45 : 1.7; tz = car.z; want = (car.M.bus ? 15 : car.M.moped ? 5.2 : car.M.boat === 'jetski' ? 6.5 : car.M.boat ? 11 : 9.5) + Math.abs(vf) * 0.05; }
@@ -10187,12 +10312,14 @@ body.touch .tk-sign .key { display: none; }
   }
   function updateHUD(dt) {
     // at a kiosk or a balloon seller E buys, otherwise it is for the car you stand by
+    // riding along with a friend, or by a friend's car you can get in
+    const mpP = started ? MP.prompt() : null;
     const liftP = started && !driving ? LIFT.prompt() : null, shop = !liftP && started && !driving ? VENDORS.prompt() : null;
-    const prompt = liftP || shop || (started && !driving && nearCar ? (nearCar.bot ? 'Ta ' + nearCar.M.def : 'Kliv in i ' + nearCar.M.def) : null);
+    const prompt = mpP || liftP || shop || (started && !driving && nearCar ? (nearCar.bot ? 'Ta ' + nearCar.M.def : 'Kliv in i ' + nearCar.M.def) : null);
     if (prompt !== lastPrompt) {
       lastPrompt = prompt;
       el.prompt.hidden = !prompt || isTouch;
-      if (prompt) { el.promptText.textContent = prompt; el.prompt.classList.toggle('steal', !shop && !liftP && !!nearCar && !!nearCar.bot); el.prompt.classList.toggle('shop', !!shop); }
+      if (prompt) { el.promptText.textContent = prompt; el.prompt.classList.toggle('steal', !mpP && !shop && !liftP && !!nearCar && !!nearCar.bot); el.prompt.classList.toggle('shop', !mpP && !!shop); }
     }
     // the stars: as many lit as the police want you, flashing while they search for you; the helicopter beside them
     const ns = stars(), searching = !!wanted && !wanted.inSight && !stop, hl = !!heli && heli.state !== 'leave', army = !!wanted && cars.some((c) => c.military && c.police && c.police.state === 'chase');
@@ -10223,9 +10350,9 @@ body.touch .tk-sign .key { display: none; }
     }
     const ph = stop && stop.phase;
     const vendor = !driving && VENDORS.near;
-    const use = ph === 'talk' ? 'Skriv under' : ph === 'transport' || ph === 'park' ? 'Hoppa fram' : ph === 'jail' ? 'Sov' : driving ? 'Kliv ur' : liftP ? 'Hissen' : vendor ? (vendor.seller ? 'Köp glass' : 'Köp ballong') : nearCar && nearCar.bot ? 'Ta bilen' : 'Kliv in';
+    const use = ph === 'talk' ? 'Skriv under' : ph === 'transport' || ph === 'park' ? 'Hoppa fram' : ph === 'jail' ? 'Sov' : mpP ? (MP.ride ? 'Kliv ur' : 'Åk med') : driving ? 'Kliv ur' : liftP ? 'Hissen' : vendor ? (vendor.seller ? 'Köp glass' : 'Köp ballong') : nearCar && nearCar.bot ? 'Ta bilen' : 'Kliv in';
     if (use !== lastUse) { el.btnUse.textContent = use; lastUse = use; }
-    el.btnUse.classList.toggle('off', !driving && !nearCar && !vendor && !liftP && !['talk', 'transport', 'park', 'jail'].includes(ph));
+    el.btnUse.classList.toggle('off', !mpP && !driving && !nearCar && !vendor && !liftP && !['talk', 'transport', 'park', 'jail'].includes(ph));
     if (driving) {
       const c = driving, vf = c.vx * Math.sin(c.h) + c.vz * Math.cos(c.h);
       const kmh = Math.round(Math.abs(vf) * 3.6), rf = clamp(c.rpm / (c.M.red * 1.04), 0, 1);
@@ -10330,7 +10457,8 @@ body.touch .tk-sign .key { display: none; }
     JOBS.drawMini(g, px, pz, 1 / s);
     VENDORS.drawMini(g, px, pz, 1 / s);
     for (const c of cars) {
-      if (c === driving || Math.abs(c.x - px) > 160 || Math.abs(c.z - pz) > 160) continue;
+      // (a friend at the wheel is their dot, drawn below)
+      if (c === driving || (c.remote && c.occupant) || Math.abs(c.x - px) > 160 || Math.abs(c.z - pz) > 160) continue;
       g.save(); g.translate(c.x, c.z); g.rotate(-c.h);
       const flash = c.siren && Math.floor(clock * 4) % 2;
       g.fillStyle = c.M.police ? (flash ? '#e0102e' : '#2f6bff') : hex(c.color); g.strokeStyle = c.bot || c.M.police ? '#11161b' : '#ffffff'; g.lineWidth = 0.9;
@@ -10339,6 +10467,7 @@ body.touch .tk-sign .key { display: none; }
       g.restore();
     }
     if (heli) drawHeliIcon(g, heli.x, heli.z, heli.h, 1 / s, true);
+    MP.drawMini(g, px, pz, 1 / s);
     const rot = driving ? driving.h : player.rot, u = 1 / s;
     g.translate(px, pz); g.rotate(-rot);
     g.beginPath(); g.moveTo(0, 9 * u); g.lineTo(6.5 * u, -6 * u); g.lineTo(0, -2.5 * u); g.lineTo(-6.5 * u, -6 * u); g.closePath();
@@ -10503,6 +10632,7 @@ body.touch .tk-sign .key { display: none; }
       g.fillStyle = hex(spawnedCar.color); g.strokeStyle = '#fff'; g.lineWidth = 2;
       g.fillRect(toX(spawnedCar.x) - 4, toY(spawnedCar.z) - 4, 8, 8); g.strokeRect(toX(spawnedCar.x) - 4, toY(spawnedCar.z) - 4, 8, 8);
     }
+    MP.drawBig(g, toX, toY, text);
     const p = driving || player, rot = driving ? driving.h : player.rot, X = toX(p.x), Y = toY(p.z);
     g.save(); g.translate(X, Y); g.rotate(-rot);
     g.beginPath(); g.moveTo(0, 13); g.lineTo(9, -8); g.lineTo(0, -3); g.lineTo(-9, -8); g.closePath();
@@ -10882,7 +11012,11 @@ body.touch .tk-sign .key { display: none; }
     noiseBurst(t, 0.022, on ? 0.1 : 0.075, 'bandpass', on ? 2900 : 2100, 4, 0, 0.001);
     tone(t, 'square', on ? 1500 : 1150, on ? 900 : 700, 0.018, 0.02, 0);
   }
-  function horn() { if (driving) beep(driving.M.moped ? [740] : driving.M.bus ? [220, 277] : driving.M.sport ? [523, 659] : [392, 494], driving.M.moped ? 0.035 : 0.05, driving.M.moped ? 0.3 : 0.45); }
+  function horn() {
+    if (!driving) return;
+    beep(driving.M.moped ? [740] : driving.M.bus ? [220, 277] : driving.M.sport ? [523, 659] : [392, 494], driving.M.moped ? 0.035 : 0.05, driving.M.moped ? 0.3 : 0.45);
+    MP.event('horn');
+  }
   function honkAt(x, z) {
     const s = placeSound(x, z, 70);
     if (s.level > 0) beep([415, 523], 0.04 * s.level + 0.003, 0.3, s.pan);
@@ -10940,7 +11074,7 @@ body.touch .tk-sign .key { display: none; }
     if (repeat) return;
     // under arrest most keys do nothing: you can still look at the map, the help and the sound, and E moves things on
     if (stop && stop.locked && !['KeyE', 'Enter', 'KeyH', 'KeyT', 'KeyK', 'KeyQ'].includes(code) && !(stop.phase === 'jail' && code === 'Space')) return;
-    if (code === 'KeyE' || code === 'Enter') { if (!useKey() && !LIFT.use() && !VENDORS.use()) toggleCar(); }
+    if (code === 'KeyE' || code === 'Enter') { if (!useKey() && !MP.use() && !LIFT.use() && !VENDORS.use()) toggleCar(); }
     else if (/^(Digit|Numpad)[0-5]$/.test(code)) LIFT.digit(Number(code.slice(-1)));
     else if (code === 'Space') jumpQueued = true;
     else if (code === 'KeyH') el.help.hidden = !el.help.hidden;
@@ -10959,8 +11093,10 @@ body.touch .tk-sign .key { display: none; }
     else if (code === 'KeyZ') setBlink(1);
     else if (code === 'KeyX') setBlink(2);
     else if (code === 'KeyC') setBlink(3);
+    else if (code === 'KeyP') MP.openPanel();
   }
   window.addEventListener('keydown', (e) => {
+    if (MP.keydown(e)) return;
     if (bigmap.open) { if (e.code === 'Escape' || e.code === 'KeyK') { e.preventDefault(); onKey(e.code, e.repeat); } return; }
     if (pickerOpen) { if (e.code === 'Escape' || e.code === 'KeyB' || /^Digit\d$/.test(e.code)) { e.preventDefault(); onKey(e.code, e.repeat); } return; }
     if (NO_SCROLL.includes(e.code)) e.preventDefault();
@@ -11017,7 +11153,7 @@ body.touch .tk-sign .key { display: none; }
   stick.addEventListener('pointercancel', endStick);
   el.btnJump.addEventListener('pointerdown', (e) => { e.preventDefault(); touchBrake = true; jumpQueued = true; });
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.btnJump.addEventListener(ev, () => { touchBrake = false; });
-  el.btnUse.addEventListener('pointerdown', (e) => { e.preventDefault(); if (!useKey() && !LIFT.use() && !VENDORS.use()) toggleCar(); });
+  el.btnUse.addEventListener('pointerdown', (e) => { e.preventDefault(); if (!useKey() && !MP.use() && !LIFT.use() && !VENDORS.use()) toggleCar(); });
   $('btnCars').addEventListener('pointerdown', (e) => { e.preventDefault(); openPicker(); });
   $('btnJob').addEventListener('pointerdown', (e) => { e.preventDefault(); if (!tankFire()) JOBS.key(); });
   el.btnUp.addEventListener('pointerdown', (e) => { e.preventDefault(); playerShift(1); });
@@ -11234,6 +11370,8 @@ body.touch .tk-sign .key { display: none; }
     function renderMirror() {
       camera.updateMatrixWorld();
       mirror.copy(camera);
+      // (not the names over your friends' heads)
+      mirror.layers.disable(1);
       mirror.position.set(camera.position.x, 2 * WATER_Y - camera.position.y, camera.position.z);
       camera.getWorldDirection(_dir);
       _tgt.copy(camera.position).add(_dir); _tgt.y = 2 * WATER_Y - _tgt.y;
@@ -11320,12 +11458,776 @@ body.touch .tk-sign .key { display: none; }
   })();
   POST.setLevel(POST.level, true);
 
+  /* ================= playing with friends ================= */
+  // Up to eight players in the same Stockholm. One of you opens a room and gets a code of four letters; the others type
+  // the code in (or open the link with it) and join. The browsers talk straight to each other over WebRTC, with PeerJS's
+  // free server only there to introduce them, and the one who opened the room passes everything on to the rest. Each of
+  // you keeps your own traffic, police and Dalahästar. What goes between you is where you are and what you drive, and how:
+  // its lamps, blinkers, siren, dents and the tank's gun. The horn and the chat go too, and you can ride along in a
+  // friend's car. The others are shown a moment (DELAY) behind, smoothly in between the updates that come 15 times a second.
+  const MP = (() => {
+    const PROTO = 1, MAX = 8, SEND_MS = 66, DELAY = 140, PREFIX = 'gubbe-pa-vagen-', ABC = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const PEER_SRC = ['https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js', 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js'];
+    const COLORS = [0x2f6fdb, 0xc8102e, 0x2e8b57, 0xf2b705, 0x6a3d9a, 0xe46f2a, 0x1f9aa8, 0xb03a74, 0xe8e8e8, 0x222428];
+    const COLOR_NAMES = ['Blå', 'Röd', 'Grön', 'Gul', 'Lila', 'Orange', 'Turkos', 'Rosa', 'Vit', 'Svart'];
+    const store = {
+      get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+      set(k, v) { try { localStorage.setItem(k, v); } catch { /* a private window: forgotten next time */ } }
+    };
+    const params = new URLSearchParams(location.search);
+    const E = {
+      panel: $('mp'), setup: $('mpSetup'), room: $('mpRoom'), name: $('mpName'), colors: $('mpColors'), code: $('mpCode'), host: $('mpHost'), join: $('mpJoin'),
+      codeBig: $('mpCodeBig'), codeHint: $('mpCodeHint'), share: $('mpShare'), copy: $('mpCopy'), list: $('mpList'), play: $('mpPlay'), leave: $('mpLeave'),
+      status: $('mpStatus'), chatLog: $('mpChatLog'), sayInput: $('mpSayInput'), tag: $('mpTagText'), friends: $('btnFriends'), hudLog: $('chatLog'), bar: $('chatBar'), barInput: $('chatInput')
+    };
+    const S = {
+      peer: null, host: false, code: '', joining: '', myId: '', hostId: '', hostConn: null, conns: new Map(), players: new Map(), busy: false, timer: 0,
+      name: (store.get('gubbe-namn') || '').slice(0, 14), ride: null, near: null, lastCar: null, panel: false, chat: false
+    };
+    // you, as one of the riders in a car (the others are the players themselves)
+    const me = { id: '', ident: playerId, mesh: null, seat: null };
+    const num = (v, d = 0) => (typeof v === 'number' && isFinite(v) ? v : d);
+    const colour = (v, d) => (Number.isInteger(v) && v >= 0 && v <= 0xffffff ? v : d);
+    const cleanName = (n) => String(n || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 14);
+    const cleanText = (t) => String(t || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 120);
+    const r1 = (v) => Math.round(v * 10) / 10, r2 = (v) => Math.round(v * 100) / 100, r3 = (v) => Math.round(v * 1000) / 1000;
+    const inRoom = () => !!S.code;
+
+    /* ---------- how you look ---------- */
+    const look = () => ({ skin: playerId.skin, shirt: playerId.shirt, pants: playerId.pants, hair: playerId.hair, hat: playerId.hat, hatColor: playerId.hatColor, sleeves: playerId.sleeves });
+    function cleanLook(o) {
+      o = o && typeof o === 'object' ? o : {};
+      return {
+        skin: colour(o.skin, SKINS[0]), shirt: colour(o.shirt, COLORS[0]), pants: colour(o.pants, PANTS[0]), hair: colour(o.hair, HAIRS[1]),
+        hat: o.hat === 'cap' || o.hat === 'beanie' ? o.hat : null, hatColor: colour(o.hatColor, 0xf7c600), sleeves: !!o.sleeves
+      };
+    }
+    // put a person model in other clothes
+    function dress(model, id) {
+      model.inner.children[0].geometry = id.bodyGeo;
+      model.legL.children[0].geometry = model.legR.children[0].geometry = id.legGeo;
+      model.armL.children[0].geometry = model.armR.children[0].geometry = id.armGeo;
+    }
+    function applyShirt(col) {
+      if (col === playerId.shirt) return;
+      const id = makeIdentity({ ...look(), shirt: col });
+      for (const k of ['bodyGeo', 'legGeo', 'armGeo', 'driverGeo']) playerId[k] = id[k];
+      playerId.shirt = col;
+      delete playerId.riderGeo;
+      dress(player.model, playerId);
+      if (driving) setOccupant(driving, playerId);
+      store.set('gubbe-trojfarg', String(col));
+      if (inRoom()) { event('look', { look: look() }); renderList(); }
+    }
+    {
+      const saved = Number(store.get('gubbe-trojfarg'));
+      if (COLORS.includes(saved)) applyShirt(saved);
+    }
+
+    /* ---------- connecting ---------- */
+    let peerLib = null;
+    function loadPeer() {
+      if (window.Peer) return Promise.resolve(window.Peer);
+      if (peerLib) return peerLib;
+      peerLib = new Promise((resolve, reject) => {
+        let i = 0;
+        const next = () => {
+          if (i >= PEER_SRC.length) { peerLib = null; reject(new Error('peerjs')); return; }
+          const s = document.createElement('script');
+          s.src = PEER_SRC[i++]; s.async = true;
+          s.onload = () => (window.Peer ? resolve(window.Peer) : next());
+          s.onerror = () => { s.remove(); next(); };
+          document.head.append(s);
+        };
+        next();
+      });
+      return peerLib;
+    }
+    function newPeer(id) {
+      // ?peerserver=host:port uses a PeerJS server of your own instead of the free one
+      const opts = { debug: 0 }, own = params.get('peerserver');
+      if (own) { const [host, port] = own.split(':'), p = Number(port) || 443; Object.assign(opts, { host, port: p, path: '/', secure: p === 443 }); }
+      const peer = id ? new window.Peer(id, opts) : new window.Peer(opts);
+      // the server only introduces players; if the line to it drops, the room carries on and it is called up again
+      peer.on('disconnected', () => setTimeout(() => {
+        if (S.peer === peer && !peer.destroyed && peer.disconnected) try { peer.reconnect(); } catch { /* tried again at the next drop */ }
+      }, 1500));
+      return peer;
+    }
+    function status(msg, err) { E.status.textContent = msg || ''; E.status.classList.toggle('err', !!err); }
+    function busy(on) { S.busy = on; E.host.disabled = E.join.disabled = on; }
+    function fail(msg) {
+      const peer = S.peer;
+      S.peer = null; S.hostConn = null;
+      if (peer) try { peer.destroy(); } catch { /* already gone */ }
+      busy(false);
+      status(msg, true);
+    }
+    function trouble(err) {
+      // once you are in a room it carries on between the players already in it: only meeting new ones needs the server
+      if (inRoom()) return;
+      const t = err && err.type;
+      fail(t === 'peer-unavailable' ? 'Hittade inget rum med koden ' + S.joining + '. Kolla koden, och att din vän har rummet öppet.'
+        : t === 'browser-incompatible' ? 'Den här webbläsaren kan inte spela med vänner. Prova Chrome, Safari, Firefox eller Edge.'
+        : 'Kunde inte nå servern som kopplar ihop spelarna. Kolla att du är uppkopplad och försök igen om en stund.');
+    }
+    function readyName() {
+      S.name = cleanName(E.name.value);
+      E.name.value = S.name;
+      if (!S.name) { status('Skriv ditt namn först, så att dina vänner ser vem du är.', true); E.name.focus(); return false; }
+      store.set('gubbe-namn', S.name);
+      return true;
+    }
+    const noLib = 'Kunde inte hämta det som behövs för att spela med vänner. Kolla att du är uppkopplad mot internet.';
+    async function hostRoom(tries = 0) {
+      if ((S.busy && !tries) || inRoom() || !readyName()) return;
+      busy(true); status('Skapar ett rum …');
+      try { await loadPeer(); } catch { fail(noLib); return; }
+      const code = Array.from({ length: 4 }, () => ABC[Math.floor(Math.random() * ABC.length)]).join('');
+      let peer;
+      try { peer = newPeer(PREFIX + code.toLowerCase()); } catch { trouble({ type: 'browser-incompatible' }); return; }
+      S.peer = peer;
+      peer.on('open', (id) => { if (S.peer === peer && !inRoom()) { S.host = true; S.myId = S.hostId = id; enter(code); } });
+      peer.on('connection', (conn) => { if (S.peer === peer) accept(conn); });
+      peer.on('error', (err) => {
+        if (S.peer !== peer) return;
+        // someone already has that code: draw another
+        if (err.type === 'unavailable-id' && !inRoom() && tries < 4) { S.peer = null; peer.destroy(); hostRoom(tries + 1); return; }
+        trouble(err);
+      });
+    }
+    async function joinRoom(raw) {
+      const code = String(raw || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
+      E.code.value = code;
+      if (S.busy || inRoom()) return;
+      if (code.length !== 4) { status('Rumskoden är fyra bokstäver. Fråga vännen som skapade rummet.', true); E.code.focus(); return; }
+      if (!readyName()) return;
+      busy(true); S.joining = code; status('Går med i rum ' + code + ' …');
+      try { await loadPeer(); } catch { fail(noLib); return; }
+      let peer;
+      try { peer = newPeer(); } catch { trouble({ type: 'browser-incompatible' }); return; }
+      S.peer = peer;
+      const wait = setTimeout(() => { if (S.peer === peer && !inRoom()) fail('Rum ' + code + ' svarar inte. Kolla koden, och att din vän har rummet öppet.'); }, 20000);
+      peer.on('open', (id) => {
+        if (S.peer !== peer) return;
+        S.myId = id;
+        const conn = peer.connect(PREFIX + code.toLowerCase(), { reliable: true, serialization: 'json' });
+        S.hostConn = conn;
+        conn.on('open', () => conn.send({ t: 'hi', v: PROTO, name: S.name, look: look() }));
+        conn.on('data', (m) => clientData(conn, m, code, wait));
+        conn.on('close', () => { if (S.hostConn === conn && inRoom()) hostGone(); });
+        conn.on('error', () => { /* the close, or the wait running out, deals with it */ });
+      });
+      peer.on('error', (err) => { if (S.peer === peer) { if (!inRoom()) clearTimeout(wait); trouble(err); } });
+    }
+    const info = (P) => ({ id: P.id, name: P.name, look: P.look });
+    function broadcast(m, except) {
+      for (const [id, c] of S.conns) if (id !== except && c.open) try { c.send(m); } catch { /* its close event drops it */ }
+    }
+    // you have the room: everyone else is connected to you, and you pass on what each of them sends
+    function accept(conn) {
+      conn.on('data', (m) => hostData(conn, m));
+      conn.on('close', () => dropConn(conn));
+      conn.on('error', () => dropConn(conn));
+    }
+    function hostData(conn, m) {
+      if (!m || typeof m !== 'object' || !inRoom()) return;
+      const id = conn.peer, P = S.players.get(id);
+      if (m.t === 'hi') {
+        if (P) return;
+        const no = m.v !== PROTO ? 'old' : S.players.size + 1 >= MAX ? 'full' : '';
+        if (no) { try { conn.send({ t: 'no', why: no }); } catch { /* gone already */ } setTimeout(() => conn.close(), 1000); return; }
+        S.conns.set(id, conn);
+        const np = addPlayer(id, m.name, m.look);
+        conn.send({ t: 'welcome', v: PROTO, host: S.myId, players: [{ id: S.myId, name: S.name, look: look() }, ...[...S.players.values()].filter((p) => p !== np).map(info)] });
+        broadcast({ t: 'join', ...info(np) }, id);
+        toast(np.name + ' kom in i rummet.');
+        return;
+      }
+      if (!P) return;
+      if (m.t === 's') { if (take(P, m.d)) broadcast({ t: 's', id, d: m.d }, id); }
+      else if (m.t === 'e') { const e = Object.assign({}, m, { id }); heard(P, e); broadcast(e, id); }
+    }
+    function dropConn(conn) {
+      if (S.conns.get(conn.peer) !== conn) return;
+      S.conns.delete(conn.peer);
+      removePlayer(conn.peer, true);
+      broadcast({ t: 'left', id: conn.peer });
+    }
+    function clientData(conn, m, code, wait) {
+      if (!m || typeof m !== 'object' || S.hostConn !== conn) return;
+      if (m.t === 'welcome') {
+        if (inRoom()) return;
+        clearTimeout(wait);
+        S.host = false; S.hostId = String(m.host || conn.peer);
+        for (const i of Array.isArray(m.players) ? m.players.slice(0, MAX) : []) if (i && typeof i.id === 'string' && i.id !== S.myId && !S.players.has(i.id)) addPlayer(i.id, i.name, i.look);
+        enter(code);
+        return;
+      }
+      if (m.t === 'no') { clearTimeout(wait); fail(m.why === 'full' ? 'Rummet är fullt. Det får plats åtta spelare.' : 'Ni har olika versioner av spelet. Ladda om sidan, alla som ska spela.'); return; }
+      if (!inRoom()) return;
+      const P = S.players.get(m.id);
+      if (m.t === 's') { if (P) take(P, m.d); }
+      else if (m.t === 'e') { if (P) heard(P, m); }
+      else if (m.t === 'join') { if (!P && typeof m.id === 'string' && m.id !== S.myId && S.players.size + 1 < MAX) toast(addPlayer(m.id, m.name, m.look).name + ' kom in i rummet.'); }
+      else if (m.t === 'left') { if (P) removePlayer(P.id, true); }
+    }
+    function hostGone() {
+      const H = S.players.get(S.hostId), who = H ? H.name : 'Den som hade rummet';
+      leave();
+      toast(who + ' stängde rummet.');
+      status(who + ' stängde rummet. Skapa ett eget rum, eller gå med i ett annat.', true);
+    }
+    function enter(code) {
+      S.code = code; S.joining = '';
+      busy(false); status('');
+      clearInterval(S.timer);
+      S.timer = setInterval(send, SEND_MS);
+      showRoom(); hud();
+      if (!S.host) toast('Du är med i rum ' + code + '.');
+    }
+    function leave() {
+      if (S.ride) unride(true);
+      for (const id of [...S.players.keys()]) removePlayer(id, false);
+      clearInterval(S.timer);
+      const peer = S.peer;
+      Object.assign(S, { peer: null, host: false, code: '', joining: '', myId: '', hostId: '', hostConn: null, lastCar: null, near: null });
+      S.conns.clear();
+      if (peer) try { peer.destroy(); } catch { /* already gone */ }
+      seats();
+      busy(false); showSetup(); hud();
+    }
+    window.addEventListener('pagehide', () => { if (S.peer) try { S.peer.destroy(); } catch { /* closing anyway */ } });
+
+    /* ---------- the other players ---------- */
+    function addPlayer(id, name, lk) {
+      const L = cleanLook(lk), ident = makeIdentity(L);
+      const person = makePerson(ident, player.x, player.z, null);
+      person.remote = true; person.keep = true; person.asleep = true; person.model.group.visible = false;
+      const P = { id, name: cleanName(name) || 'Vän', look: L, ident, person, car: null, snaps: [], offset: null, st: null, stars: 0, tag: makeTag(), tagKey: '', mesh: null, seat: null };
+      drawTag(P);
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { P.tagKey = ''; drawTag(P); }).catch(() => {});
+      S.players.set(id, P);
+      renderList(); hud();
+      return P;
+    }
+    function removePlayer(id, announce) {
+      const P = S.players.get(id);
+      if (!P) return;
+      S.players.delete(id);
+      dropCar(P);
+      removePerson(P.person);
+      if (P.mesh && P.mesh.parent) P.mesh.parent.remove(P.mesh);
+      scene.remove(P.tag); P.tag.material.map.dispose(); P.tag.material.dispose();
+      if (announce) toast(P.name + ' lämnade rummet.');
+      renderList(); hud();
+    }
+    function dropCar(P) {
+      const c = P.car;
+      if (!c) return;
+      if (S.ride === c) unride(true);
+      removeCar(c);
+      P.car = null;
+    }
+    // the name over a friend's head (or car), and their stars when the police are after them; seen through walls
+    function makeTag() {
+      const cv = document.createElement('canvas');
+      cv.width = 512; cv.height = 96;
+      const tex = new THREE.CanvasTexture(cv);
+      tex.minFilter = THREE.LinearFilter; tex.generateMipmaps = false;
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, fog: false, toneMapped: false, sizeAttenuation: false }));
+      s.center.set(0.5, 0); s.renderOrder = 20; s.visible = false;
+      // (layer 1: drawn for the camera, but not in the mirror image in the water)
+      s.layers.set(1);
+      scene.add(s);
+      return s;
+    }
+    function drawTag(P) {
+      const key = P.name + ':' + P.look.shirt + ':' + P.stars;
+      if (key === P.tagKey) return;
+      P.tagKey = key;
+      const cv = P.tag.material.map.image, g = cv.getContext('2d'), stars = '★'.repeat(P.stars);
+      g.clearRect(0, 0, cv.width, cv.height);
+      g.font = '900 46px Overpass, Arial, sans-serif';
+      const tw = Math.min(330, g.measureText(P.name).width);
+      g.font = '900 38px Arial, sans-serif';
+      const sw = stars ? g.measureText(stars).width + 14 : 0, w = Math.min(cv.width - 8, 86 + tw + sw), x0 = (cv.width - w) / 2;
+      roundRect(g, x0, 8, w, 78, 24); g.fillStyle = '#0a5ba8'; g.fill(); g.lineWidth = 6; g.strokeStyle = '#ffffff'; g.stroke();
+      g.beginPath(); g.arc(x0 + 40, 47, 15, 0, TAU); g.fillStyle = hex(P.look.shirt); g.fill(); g.lineWidth = 4; g.stroke();
+      g.textBaseline = 'middle'; g.fillStyle = '#ffffff'; g.font = '900 46px Overpass, Arial, sans-serif';
+      g.fillText(P.name, x0 + 66, 50, 330);
+      if (stars) { g.fillStyle = '#f7c600'; g.font = '900 38px Arial, sans-serif'; g.fillText(stars, x0 + 66 + tw + 14, 49); }
+      P.tag.material.map.needsUpdate = true;
+    }
+    // d: [time, x, y, z, heading, vx, vz, flags (1 on the ground, 2 in a vehicle, 4 handcuffed), stars, riding with (id or 0), car or 0]
+    // car: [id, model, colour, x, z, heading, vx, vz, steering, gear, throttle, flags (1 brakes, 2 reversing, 4 blue lights,
+    //       8 engine dead, 16 at the wheel), blinkers, engine health, turret, wheel slip]
+    function take(P, d) {
+      if (!Array.isArray(d) || d.length < 11) return false;
+      const t = num(d[0], NaN), a = P.snaps;
+      if (!isFinite(t) || (a.length && t <= a[a.length - 1].t)) return false;
+      const pos = (v) => clamp(num(v), -9000, 9000), vel = (v) => clamp(num(v), -150, 150);
+      const s = {
+        t, x: pos(d[1]), y: clamp(num(d[2]), -10, 80), z: pos(d[3]), rot: num(d[4]), vx: vel(d[5]), vz: vel(d[6]), f: num(d[7]) | 0,
+        stars: clamp(num(d[8]) | 0, 0, 5), ride: typeof d[9] === 'string' ? d[9] : '', c: null
+      };
+      const c = d[10];
+      if (Array.isArray(c) && c.length >= 16 && typeof c[0] === 'string') {
+        s.c = {
+          id: c[0].slice(0, 12), m: typeof c[1] === 'string' && MODEL[c[1]] ? c[1] : 'halvkombi', col: colour(c[2], 0xc8102e), x: pos(c[3]), z: pos(c[4]), h: num(c[5]),
+          vx: vel(c[6]), vz: vel(c[7]), st: clamp(num(c[8]), -1, 1), g: clamp(num(c[9]) | 0, 0, 9), th: clamp(num(c[10]), -1, 1), f: num(c[11]) | 0,
+          b: clamp(num(c[12]) | 0, 0, 3), hp: clamp(num(c[13], 100), 0, 100), a: num(c[14]), slip: clamp(num(c[15]), 0, 30)
+        };
+      }
+      a.push(s);
+      if (a.length > 40) a.shift();
+      // how far their clock is from ours, plus the quickest a message has come through
+      const off = performance.now() - t;
+      if (P.offset === null || off < P.offset) P.offset = off;
+      return true;
+    }
+    function mix(A, B, k, ex) {
+      const D = k < 0.5 ? A : B;
+      const o = {
+        x: lerp(A.x, B.x, k) + A.vx * ex, y: lerp(A.y, B.y, k), z: lerp(A.z, B.z, k) + A.vz * ex, rot: lerpAngle(A.rot, B.rot, k),
+        vx: lerp(A.vx, B.vx, k), vz: lerp(A.vz, B.vz, k), f: D.f, stars: D.stars, ride: D.ride, c: D.c
+      };
+      const ca = A.c, cb = B.c;
+      if (ca && cb && ca.id === cb.id) {
+        o.c = Object.assign({}, D.c, {
+          x: lerp(ca.x, cb.x, k) + ca.vx * ex, z: lerp(ca.z, cb.z, k) + ca.vz * ex, h: lerpAngle(ca.h, cb.h, k),
+          vx: lerp(ca.vx, cb.vx, k), vz: lerp(ca.vz, cb.vz, k), st: lerp(ca.st, cb.st, k), a: lerpAngle(ca.a, cb.a, k)
+        });
+      }
+      return o;
+    }
+    // where a player was at (their) time rt: in between two updates, or a little way on from the last one
+    function sample(P, rt) {
+      const a = P.snaps;
+      if (!a.length) return null;
+      while (a.length > 2 && a[1].t < rt - 400) a.shift();
+      let i = a.length - 1;
+      while (i > 0 && a[i].t > rt) i--;
+      const A = a[i], B = a[i + 1];
+      if (!B || rt <= A.t) return mix(A, A, 0, B ? 0 : clamp((rt - A.t) / 1000, 0, 0.25));
+      return mix(A, B, (rt - A.t) / (B.t - A.t), 0);
+    }
+    function place(P, st, dt) {
+      P.st = st;
+      const cs = st.c;
+      if (cs) {
+        let c = P.car;
+        if (!c || c.netId !== cs.id || c.M.id !== cs.m) {
+          dropCar(P);
+          c = makeCar(MODEL[cs.m], cs.col);
+          Object.assign(c, { remote: true, keep: true, netId: cs.id, owner: P, x: cs.x, z: cs.z, h: cs.h });
+          c.group.position.set(c.x, 0, c.z); c.group.rotation.y = c.h;
+          P.car = c;
+        }
+        // at the wheel, or the car stands where they left it
+        const on = !!(cs.f & 16);
+        if (on !== (c.occupant === P.ident)) setOccupant(c, on ? P.ident : null);
+        c.x = cs.x; c.z = cs.z; c.h = cs.h; c.steer = cs.st;
+        c.vx = on ? cs.vx : 0; c.vz = on ? cs.vz : 0;
+        c.wheelRot += ((c.vx * Math.sin(c.h) + c.vz * Math.cos(c.h)) * dt) / c.M.R;
+        c.gear = Math.min(cs.g, c.M.gears - 1); c.thr = on ? cs.th : 0; c.throttle = Math.abs(c.thr);
+        c.braking = !!(cs.f & 1); c.reversing = !!(cs.f & 2); c.siren = !!(cs.f & 4); c.dead = !!(cs.f & 8);
+        c.health = cs.hp; c.blink = cs.b; c.aimWant = cs.a; c.slip = on ? cs.slip : 0;
+      } else if (P.car) dropCar(P);
+      const p = P.person, hide = !!(st.f & 2) || !!st.ride;
+      p.asleep = hide; p.model.group.visible = !hide;
+      p.x = st.x; p.y = st.y; p.z = st.z; p.rot = st.rot; p.vx = st.vx; p.vz = st.vz;
+      p.grounded = !!(st.f & 1); p.cuffed = !!(st.f & 4);
+      if (st.stars !== P.stars) { P.stars = st.stars; drawTag(P); }
+    }
+    // what you send 15 times a second (see take)
+    function state() {
+      if (driving) S.lastCar = driving;
+      const c = driving || (S.lastCar && S.lastCar.group.parent ? S.lastCar : null);
+      if (!c) S.lastCar = null;
+      if (c && !c.netId) c.netId = Math.random().toString(36).slice(2, 10);
+      const hidden = !!driving || !!S.ride || !!(stop && stop.riding);
+      const car = c ? [c.netId, c.M.id, c.color, r2(c.x), r2(c.z), r3(c.h), r2(c.vx), r2(c.vz), r3(c.steer), c.gear | 0, r2(c.thr || 0),
+        (c.braking ? 1 : 0) | (c.reversing ? 2 : 0) | (c.siren ? 4 : 0) | (c.dead ? 8 : 0) | (c === driving ? 16 : 0), c.blink | 0, Math.round(c.health), r3(c.aim || 0), r1(c.slip || 0)] : 0;
+      return [Math.round(performance.now()), r2(player.x), r2(player.y), r2(player.z), r3(player.rot), r2(player.vx), r2(player.vz),
+        (player.grounded ? 1 : 0) | (hidden ? 2 : 0) | (player.cuffed ? 4 : 0), stars(), S.ride ? S.ride.owner.id : 0, car];
+    }
+    function send() {
+      if (!inRoom()) return;
+      const d = state();
+      if (S.host) broadcast({ t: 's', id: S.myId, d });
+      else if (S.hostConn && S.hostConn.open) try { S.hostConn.send({ t: 's', d }); } catch { /* its close event deals with it */ }
+    }
+    // the horn, the chat, a dent, the tank's gun and new clothes go to everyone at once
+    function event(k, extra) {
+      if (!inRoom()) return;
+      const m = Object.assign({ t: 'e', k }, extra);
+      if (S.host) broadcast(Object.assign(m, { id: S.myId }));
+      else if (S.hostConn && S.hostConn.open) try { S.hostConn.send(m); } catch { /* its close event deals with it */ }
+    }
+    function heard(P, m) {
+      const atWheel = P.car && P.car.occupant === P.ident;
+      if (m.k === 'horn') {
+        const at = atWheel ? P.car : P.person, M = atWheel ? P.car.M : null, s = placeSound(at.x, at.z, 140);
+        if (s.level > 0.01) beep(M && M.moped ? [740] : M && M.bus ? [220, 277] : M && M.sport ? [523, 659] : [392, 494], 0.05 * s.level + 0.004, M && M.moped ? 0.3 : 0.45, s.pan);
+      } else if (m.k === 'chat') {
+        const text = cleanText(m.m);
+        if (text) { chat(P.name, P.look.shirt, text); if (audio && !muted) beep([988, 1319], 0.012, 0.09); }
+      } else if (m.k === 'dent') {
+        const a = m.a;
+        if (P.car && P.car.netId === m.c && Array.isArray(a) && a.length === 8 && a.every((v) => typeof v === 'number' && isFinite(v))) {
+          dentCar(P.car, clamp(a[0], -9, 9), clamp(a[1], -2, 6), clamp(a[2], -9, 9), clamp(a[3], -1, 1), clamp(a[4], -1, 1), clamp(a[5], 0, 0.7), clamp(a[6], 0, 1.5), clamp(a[7], 0, 80));
+        }
+      } else if (m.k === 'fire') {
+        if (atWheel && P.car.M.mil === 'tank') { P.car.aim = num(m.a); fireCannon(P.car, true); }
+      } else if (m.k === 'look') {
+        P.look = cleanLook(m.look); P.ident = makeIdentity(P.look);
+        dress(P.person.model, P.ident);
+        if (atWheel) setOccupant(P.car, P.ident);
+        drawTag(P); renderList();
+      }
+    }
+
+    /* ---------- riding along ---------- */
+    // the seats a passenger can have, beside the driver first, in the car's own frame
+    function seatsOf(c) {
+      const d = c.geo.driver, r = c.geo.rear, M = c.M;
+      if (rides(M)) return [{ x: 0, y: d.y + 0.04, z: d.z - 0.52 }];
+      if (M.bus) return [0, 1, 2, 3, 4, 5, 6].map((i) => ({ x: i % 2 ? d.x : -d.x, y: d.y, z: d.z - 2.4 - Math.floor(i / 2) * 1.5 }));
+      if (Math.abs(d.x) < 0.25) return [{ x: 0, y: d.y, z: d.z - 0.95 }];
+      const s = [{ x: -d.x, y: d.y, z: d.z }];
+      if (r) s.push({ x: -r.x, y: r.y, z: r.z }, { x: r.x, y: r.y, z: r.z });
+      return s;
+    }
+    // the car someone drives (or last drove), as this game sees it
+    function carOf(id) {
+      if (id === S.myId) return driving || (S.lastCar && S.lastCar.group.parent ? S.lastCar : null);
+      const P = S.players.get(id);
+      return P ? P.car : null;
+    }
+    // everyone riding with someone sits in that car: in the order of their ids, so that every game seats them alike
+    function seats() {
+      me.id = S.myId; me.ident = playerId;
+      const all = [me, ...S.players.values()], groups = new Map();
+      for (const R of all) {
+        R.seat = null;
+        const car = R === me ? S.ride : R.st && R.st.ride ? carOf(R.st.ride) : null;
+        if (!car) continue;
+        if (!groups.has(car)) groups.set(car, []);
+        groups.get(car).push(R);
+      }
+      for (const [car, list] of groups) {
+        const spots = seatsOf(car);
+        list.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+        list.forEach((R, i) => { if (spots[i]) R.seat = { car, spot: spots[i], n: i }; });
+      }
+      for (const R of all) {
+        if (!R.seat) { if (R.mesh && R.mesh.parent) R.mesh.parent.remove(R.mesh); continue; }
+        const { car, spot } = R.seat, geo = rides(car.M) ? riderGeometry(R.ident) : R.ident.driverGeo;
+        if (!R.mesh) R.mesh = new THREE.Mesh(geo, personMat);
+        R.mesh.geometry = geo;
+        if (R.mesh.parent !== car.body) car.body.add(R.mesh);
+        R.mesh.position.set(spot.x, spot.y, spot.z);
+      }
+    }
+    // a friend's car with them at the wheel, near enough to get in, and not going too fast to
+    function rideable() {
+      if (driving || S.ride || !started || (stop && stop.locked) || player.y > 1.5) return null;
+      let best = null, bd = Infinity;
+      for (const P of S.players.values()) {
+        const c = P.car;
+        if (!c || c.occupant !== P.ident || Math.hypot(c.vx, c.vz) > 6) continue;
+        const dx = player.x - c.x, dz = player.z - c.z, d = dx * dx + dz * dz;
+        if (d > 100 || d >= bd) continue;
+        const co = Math.cos(c.h), si = Math.sin(c.h), lx = dx * co - dz * si, lz = dx * si + dz * co;
+        if (Math.abs(lx) < c.M.W / 2 + 1.6 && Math.abs(lz) < c.M.L / 2 + 1.2 && (!c.M.boat || player.y < 0.5)) { bd = d; best = c; }
+      }
+      return best;
+    }
+    function ride(c) {
+      const taken = [...S.players.values()].filter((P) => P.st && P.st.ride === c.owner.id).length;
+      if (taken >= seatsOf(c).length) { toast('Det finns ingen plats kvar i ' + c.M.def + '.'); return; }
+      S.ride = c;
+      player.model.group.visible = false;
+      player.vx = player.vz = player.vy = 0;
+      lastLook = -1e9;
+      seats();
+      toast('Du åker med ' + c.owner.name + '.' + (isTouch ? '' : ' E kliver ur.'));
+    }
+    // out on the passenger's side if there is room
+    function rideExit(c) {
+      if (c.M.boat) return boatExitSpot(c);
+      const co = Math.cos(c.h), si = Math.sin(c.h), side = c.geo.driver.x > 0 ? -1 : 1, hw = c.M.W / 2 + 0.8;
+      for (const [lx, lz] of [[side * hw, c.geo.driver.z], [side * hw, 0]]) {
+        const x = c.x + lx * co + lz * si, z = c.z - lx * si + lz * co;
+        if (personFits(x, z) && !blockedAt(x, z, 0.36) && !cars.some((o) => o !== c && byCar(o, x, z, 0.3))) return { x, z };
+      }
+      return exitSpot(c);
+    }
+    function unride(force) {
+      const c = S.ride;
+      if (!c) return true;
+      const out = rideExit(c) || (force ? spotNear(c.x, c.z) : null);
+      if (!out && !force) { toast(c.M.boat ? 'Vänta tills båten ligger vid en kaj, så kan du kliva i land.' : 'Det finns ingen plats att kliva ur här.'); return false; }
+      S.ride = null;
+      seats();
+      player.model.group.visible = true;
+      if (out) { player.x = out.x; player.z = out.z; }
+      const sp = Math.hypot(c.vx, c.vz);
+      player.y = 0; player.rot = c.h; player.vx = c.vx * 0.5; player.vz = c.vz * 0.5; player.vy = 0;
+      if (sp > 5 && !c.M.boat) { player.vy = 4.5; player.grounded = false; player.knockT = 1.2; toast('Du hoppade ur i farten!'); }
+      return true;
+    }
+    function use() {
+      if (S.ride) { unride(false); return true; }
+      if (S.near) { ride(S.near); return true; }
+      return false;
+    }
+    // somewhere to stand near (x, z)
+    function spotNear(x, z) {
+      for (const r of [2.5, 4, 6, 9, 13, 18, 25, 35, 50, 70, 100]) for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * TAU, px = x + Math.sin(a) * r, pz = z + Math.cos(a) * r;
+        if (personFits(px, pz) && !blockedAt(px, pz, 0.4) && !STATION.inside(px, pz) && !cars.some((c) => byCar(c, px, pz, 0.4))) return { x: px, z: pz };
+      }
+      return null;
+    }
+    // straight to a friend: out of your car and onto the pavement beside them
+    function goTo(P) {
+      if (stop && stop.locked) { status('Det går inte nu, du är gripen.', true); return; }
+      if (!P.st) { status(P.name + ' har inte kommit in i spelet än.', true); return; }
+      const at = P.car && P.car.occupant === P.ident ? P.car : (P.st.ride && carOf(P.st.ride)) || P.person;
+      const spot = spotNear(at.x, at.z);
+      if (!spot) { status('Hittade ingen plats bredvid ' + P.name + ' just nu. Försök igen om en stund.', true); return; }
+      if (S.ride) unride(true);
+      if (driving && !exitCar()) { closePanel(); return; }
+      player.x = spot.x; player.z = spot.z; player.y = 0; player.vx = player.vz = player.vy = 0;
+      player.rot = camYaw = Math.atan2(at.x - spot.x, at.z - spot.z);
+      camTarget.set(player.x, 1.6, player.z);
+      closePanel();
+      if (!started) startGame();
+      toast('Du är hos ' + P.name + '.');
+    }
+
+    /* ---------- every frame ---------- */
+    function update(dt) {
+      if (!inRoom()) { S.near = null; return; }
+      const now = performance.now();
+      for (const P of S.players.values()) {
+        if (P.offset === null) continue;
+        // (the clocks drift a little, and the way between you can get slower: let the offset creep up, the next quick message pulls it back)
+        P.offset += dt * 3;
+        const st = sample(P, now - P.offset - DELAY);
+        if (st) place(P, st, dt);
+      }
+      if (S.ride && (!S.ride.group.parent || driving || (stop && stop.locked))) unride(true);
+      seats();
+      S.near = rideable();
+      // a friend standing in your way: you can't walk through them
+      if (!driving && !S.ride) for (const P of S.players.values()) {
+        const p = P.person;
+        if (!p.model.group.visible) continue;
+        const dx = player.x - p.x, dz = player.z - p.z, d2 = dx * dx + dz * dz;
+        if (d2 < 0.49 && d2 > 1e-6 && Math.abs(p.y - player.y) < 1.5) {
+          const d = Math.sqrt(d2), x = player.x + (dx / d) * (0.7 - d), z = player.z + (dz / d) * (0.7 - d);
+          if (personFits(x, z)) { player.x = x; player.z = z; }
+        }
+      }
+      for (const P of S.players.values()) {
+        const t = P.tag, st = P.st;
+        if (!st) { t.visible = false; continue; }
+        const rc = st.ride ? carOf(st.ride) : null, wheel = P.car && P.car.occupant === P.ident ? P.car : null, c = wheel || rc;
+        let x = P.person.x, y = P.person.y + 2.12, z = P.person.z;
+        if (c) { x = c.x; z = c.z; y = (c.M.boat ? WATER_Y + 2.4 : c.parts[c.parts.length - 1].top + 0.75) + (wheel ? 0 : 0.6 * (1 + (P.seat ? P.seat.n : 0))); }
+        else if (st.f & 2) y = P.person.y + 2.6;
+        const d = Math.hypot(x - camera.position.x, z - camera.position.z), k = clamp(1.1 - d / 700, 0.62, 1);
+        t.visible = d < 1200;
+        t.position.set(x, y, z);
+        t.scale.set(0.046 * k * (512 / 96), 0.046 * k, 1);
+      }
+    }
+
+    /* ---------- the chat ---------- */
+    function chat(name, col, text) {
+      for (const box of [E.hudLog, E.chatLog]) {
+        const line = document.createElement('div'), who = document.createElement('span'), dot = document.createElement('i');
+        if (box === E.hudLog) line.className = 'chat-line';
+        who.className = 'chat-name'; dot.style.background = hex(col);
+        who.append(dot, name);
+        line.append(who, text);
+        box.append(line);
+        while (box.children.length > (box === E.hudLog ? 5 : 40)) box.firstChild.remove();
+        if (box === E.hudLog) setTimeout(() => line.remove(), 12000);
+      }
+      E.chatLog.scrollTop = E.chatLog.scrollHeight;
+    }
+    function say(raw) {
+      const text = cleanText(raw);
+      if (!text || !inRoom()) return;
+      chat(S.name, playerId.shirt, text);
+      event('chat', { m: text });
+    }
+    function openChat() {
+      if (!inRoom() || S.chat || paused()) return;
+      S.chat = true; E.bar.hidden = false; E.barInput.value = '';
+      for (const k in keys) keys[k] = false;
+      E.barInput.focus();
+    }
+    function closeChat() {
+      if (!S.chat) return;
+      S.chat = false; E.bar.hidden = true; E.barInput.blur();
+    }
+    E.bar.addEventListener('submit', (e) => { e.preventDefault(); say(E.barInput.value); closeChat(); });
+    E.barInput.addEventListener('blur', () => setTimeout(closeChat, 0));
+    $('mpSay').addEventListener('submit', (e) => { e.preventDefault(); say(E.sayInput.value); E.sayInput.value = ''; });
+
+    /* ---------- the room sign ---------- */
+    COLORS.forEach((col, i) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'swatch'; b.style.background = hex(col); b.dataset.col = String(col);
+      b.setAttribute('role', 'radio'); b.setAttribute('aria-label', COLOR_NAMES[i]);
+      b.addEventListener('click', () => { applyShirt(col); swatches(); });
+      E.colors.append(b);
+    });
+    function swatches() { for (const b of E.colors.children) b.setAttribute('aria-checked', String(Number(b.dataset.col) === playerId.shirt)); }
+    const web = /^https?:$/.test(location.protocol);
+    const link = () => location.origin + location.pathname + '?rum=' + S.code;
+    function showSetup() { E.setup.hidden = false; E.room.hidden = true; E.name.value = S.name; swatches(); }
+    function showRoom() {
+      E.setup.hidden = true; E.room.hidden = false;
+      E.codeBig.textContent = S.code;
+      E.share.hidden = !web;
+      E.codeHint.textContent = S.host ? 'Skicka koden' + (web ? ' eller länken' : '') + ' till dina vänner, så kan de gå med.' : 'Du är med i rummet, och dina vänner ser dig nu.';
+      E.copy.textContent = navigator.share && isTouch ? 'Dela länken' : 'Kopiera länken';
+      E.play.textContent = started ? 'Tillbaka till spelet' : 'Spela';
+      renderList();
+    }
+    function renderList() {
+      E.list.textContent = '';
+      if (!inRoom()) return;
+      const row = (name, col, note, P) => {
+        const li = document.createElement('li'), dot = document.createElement('span'), nm = document.createElement('span');
+        dot.className = 'mp-dot'; dot.style.background = hex(col); nm.textContent = name;
+        li.append(dot, nm);
+        if (note) { const sm = document.createElement('small'); sm.textContent = note; li.append(sm); }
+        if (P) {
+          const b = document.createElement('button');
+          b.type = 'button'; b.className = 'btn-sign small alt'; b.textContent = 'Gå till'; b.setAttribute('aria-label', 'Gå till ' + P.name);
+          b.addEventListener('click', () => goTo(P));
+          li.append(b);
+        }
+        E.list.append(li);
+      };
+      row(S.name, playerId.shirt, S.host ? 'du, har rummet' : 'du', null);
+      for (const P of S.players.values()) row(P.name, P.look.shirt, P.id === S.hostId ? 'har rummet' : '', P);
+    }
+    function hud() {
+      const n = S.players.size + 1;
+      E.tag.textContent = inRoom() ? 'Vänner: rum ' + S.code + ', ' + n + ' spelare' : 'Spela med vänner';
+      E.friends.textContent = inRoom() ? 'Vänner ' + n : 'Vänner';
+    }
+    function openPanel() {
+      if (S.panel) return;
+      if (pickerOpen) closePicker();
+      if (bigmap.open) closeBigmap();
+      closeChat();
+      S.panel = true; E.panel.hidden = false;
+      if (document.pointerLockElement && document.exitPointerLock) document.exitPointerLock();
+      for (const k in keys) keys[k] = false;
+      joy.x = joy.y = 0;
+      if (inRoom()) showRoom(); else showSetup();
+      if (!isTouch) (inRoom() ? E.sayInput : S.name ? E.host : E.name).focus();
+    }
+    function closePanel() {
+      if (!S.panel) return;
+      S.panel = false; E.panel.hidden = true;
+      if (E.panel.contains(document.activeElement)) document.activeElement.blur();
+      if (started) requestLock();
+    }
+    E.host.addEventListener('click', () => hostRoom());
+    $('mpJoinForm').addEventListener('submit', (e) => { e.preventDefault(); joinRoom(E.code.value); });
+    E.code.addEventListener('input', () => { const v = E.code.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4); if (v !== E.code.value) E.code.value = v; });
+    E.name.addEventListener('change', () => { S.name = cleanName(E.name.value); if (S.name) store.set('gubbe-namn', S.name); });
+    E.copy.addEventListener('click', async () => {
+      const url = link();
+      if (navigator.share && isTouch) {
+        try { await navigator.share({ title: 'Gubbe på Vägen', text: 'Spela med mig i Stockholm! Rumskod ' + S.code + '.', url }); return; } catch { /* closed, or not allowed: copy it instead */ }
+      }
+      try { await navigator.clipboard.writeText(url); status('Länken är kopierad. Klistra in den till dina vänner.'); } catch { status('Länken: ' + url); }
+    });
+    E.play.addEventListener('click', () => {
+      closePanel();
+      if (started) return;
+      startGame();
+      // just joined: start beside the one who has the room (placed first, as the game stood still behind the sign)
+      update(0);
+      const H = S.players.get(S.hostId);
+      if (!S.host && H && H.st && Math.hypot(H.st.x - player.x, H.st.z - player.z) > 40) goTo(H);
+    });
+    E.leave.addEventListener('click', () => { leave(); status('Du lämnade rummet.'); });
+    $('mpClose').addEventListener('click', closePanel);
+    E.panel.addEventListener('click', (e) => { if (e.target === E.panel) closePanel(); });
+    $('playFriends').addEventListener('click', openPanel);
+    E.friends.addEventListener('pointerdown', (e) => { e.preventDefault(); openPanel(); });
+    // a link with ?rum=ABCD opens the sign ready to join that room
+    {
+      const want = (params.get('rum') || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
+      if (want.length === 4) {
+        E.code.value = want;
+        openPanel();
+        status('Skriv ditt namn och tryck Gå med, så kommer du in i rum ' + want + '.');
+        if (S.name && !isTouch) E.join.focus();
+      }
+    }
+    // keys while the sign or the chat is open go to them, not to the game
+    function keydown(e) {
+      const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+      if (S.panel) { if (e.code === 'Escape' || (!typing && e.code === 'KeyP')) { e.preventDefault(); closePanel(); } return true; }
+      if (S.chat) { if (e.code === 'Escape') { e.preventDefault(); closeChat(); } return true; }
+      if (typing) return true;
+      if (e.code === 'KeyY' && started && !e.repeat && inRoom() && !paused()) { e.preventDefault(); openChat(); return true; }
+      return false;
+    }
+    hud();
+
+    return {
+      update, use, keydown, openPanel, closePanel, event, unride: () => unride(true),
+      get ride() { return S.ride; }, get panelOpen() { return S.panel; },
+      prompt() { return S.ride ? 'Kliv ur' : S.near ? 'Åk med ' + S.near.owner.name : null; },
+      // a dent in your car, for the others to see
+      dent(c, a) { if (c.netId) event('dent', { c: c.netId, a: a.map(r3) }); },
+      drawMini(g, px, pz, u) {
+        for (const P of S.players.values()) {
+          if (!P.st) continue;
+          const c = P.car && P.car.occupant === P.ident ? P.car : null;
+          let x = c ? c.x : P.person.x, z = c ? c.z : P.person.z;
+          // (further off than the map reaches: on its edge, in their direction)
+          const dx = x - px, dz = z - pz, d = Math.hypot(dx, dz), R = 116;
+          if (d > R) { x = px + (dx / d) * R; z = pz + (dz / d) * R; }
+          g.beginPath(); g.arc(x, z, 6 * u, 0, TAU);
+          g.fillStyle = hex(P.look.shirt); g.fill(); g.lineWidth = 2.2 * u; g.strokeStyle = '#ffffff'; g.stroke();
+        }
+      },
+      drawBig(g, toX, toY, text) {
+        for (const P of S.players.values()) {
+          if (!P.st) continue;
+          const c = P.car && P.car.occupant === P.ident ? P.car : null, X = toX(c ? c.x : P.person.x), Y = toY(c ? c.z : P.person.z);
+          g.beginPath(); g.arc(X, Y, 7.5, 0, TAU);
+          g.fillStyle = hex(P.look.shirt); g.fill(); g.lineWidth = 2.5; g.strokeStyle = '#ffffff'; g.stroke();
+          text(P.name, X, Y - 16, '800 13px Overpass, sans-serif', '#0a5ba8');
+        }
+      },
+      // for the tests
+      debug: { S, get players() { return [...S.players.values()]; }, hostRoom, joinRoom, leave, say, goTo, seatsOf }
+    };
+  })();
+
   /* ================= loop ================= */
   function tick(dt) {
     const inp = readInput();
     if (!paused()) {
       for (const c of cars) c.input = c === driving ? inp : c.bot ? (c.police ? policeThink(c, dt) : botThink(c, dt)) : null;
-      for (const p of persons) if (p !== player && !p.asleep) p.intent = npcThink(p, dt);
+      for (const p of persons) if (p !== player && !p.asleep && !p.remote) p.intent = npcThink(p, dt);
+      MP.update(dt);
       const pIntent = custodyIntent(dt) || playerIntent(inp);
       const steps = Math.max(1, Math.ceil(dt * 120));
       for (let i = 0; i < steps; i++) physicsStep(dt / steps, pIntent);
@@ -11373,7 +12275,7 @@ body.touch .tk-sign .key { display: none; }
 
   // test hooks: step the simulation without relying on animation frames
   window.gubbeTest = {
-    run(seconds, dt = 1 / 60) { const n = Math.round(seconds / dt); for (let i = 0; i < n; i++) tick(dt); POST.render(); return this.state(); },
+    run(seconds, dt = 1 / 60, draw = true) { const n = Math.round(seconds / dt); for (let i = 0; i < n; i++) tick(dt); if (draw) POST.render(); return this.state(); },
     key(code, down) { keys[code] = down; },
     press(code) { keys[code] = true; onKey(code, false); keys[code] = false; },
     start() { startGame(); },
@@ -11434,13 +12336,13 @@ body.touch .tk-sign .key { display: none; }
         return { rms: +Math.sqrt(sum / d.length).toFixed(4), peak: +peak.toFixed(3), centroid: Math.round(num / den), strongest: Math.round(bestF), firing: Math.round((rpm / 60) * (ENGINE_SOUNDS[key].cyl / 2)) };
       });
     },
-    get cars() { return cars; }, boatFits, findBerth, blockedAt: (x, z, r) => blockedAt(x, z, r), obstaclesNear(x, z, r) { const out = []; forNear(x - r, z - r, x + r, z + r, (o) => out.push({ ...o })); return out; }, distTo, get persons() { return persons; }, get player() { return player; }, get driving() { return driving; },
+    mp: MP, get cars() { return cars; }, boatFits, findBerth, blockedAt: (x, z, r) => blockedAt(x, z, r), obstaclesNear(x, z, r) { const out = []; forNear(x - r, z - r, x + r, z + r, (o) => out.push({ ...o })); return out; }, distTo, get persons() { return persons; }, get player() { return player; }, get driving() { return driving; },
     get wanted() { return wanted; }, get heli() { return heli; }, updateStars, get fines() { return fines; }, get audio() { return audio; }, get stop() { return stop; }, footCops, STATION, useKey, walkWaypoint, walkLine, landmarkList, mapSquares, mapGreens, signTicket, beginStop, setCall, resyncBot, get horses() { return horses; }, fireworks(s) { fireworksT = s; },
     nodes, edges, walkable, fitsM, MODEL, driveAccel, limitAt, bridgeTrims, nearestEdgeAt(x, z) { const ne = nearestEdge(x, z); return ne.e && ne.d < ne.e.hw + ne.e.walk + 2 ? ne.e : null; },
     state() {
       const bad = [];
-      for (const c of cars) { if (!isFinite(c.x + c.z + c.h + c.vx + c.vz)) bad.push('nan-car'); else if (!(c.M.boat ? boatFits(c.M, c.x, c.z, c.h) : fitsM(c.M, c.x, c.z, c.h))) bad.push('car-off ' + c.M.id + ' ' + c.x.toFixed(1) + ',' + c.z.toFixed(1)); }
-      for (const p of persons) { if (!isFinite(p.x + p.z + p.y)) bad.push('nan-person'); else if (!walkable(p.x, p.z) && !(p === player && driving && driving.M.boat)) bad.push('person-off ' + p.x.toFixed(1) + ',' + p.z.toFixed(1)); }
+      for (const c of cars) { if (!isFinite(c.x + c.z + c.h + c.vx + c.vz)) bad.push('nan-car'); else if (!c.remote && !(c.M.boat ? boatFits(c.M, c.x, c.z, c.h) : fitsM(c.M, c.x, c.z, c.h))) bad.push('car-off ' + c.M.id + ' ' + c.x.toFixed(1) + ',' + c.z.toFixed(1)); }
+      for (const p of persons) { if (!isFinite(p.x + p.z + p.y)) bad.push('nan-person'); else if (!p.remote && !walkable(p.x, p.z) && !(p === player && (driving || MP.ride) && (driving || MP.ride).M.boat)) bad.push('person-off ' + p.x.toFixed(1) + ',' + p.z.toFixed(1)); }
       const bots = cars.filter((c) => c.bot);
       return {
         player: { x: +player.x.toFixed(2), y: +player.y.toFixed(2), z: +player.z.toFixed(2) },
