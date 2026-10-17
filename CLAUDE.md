@@ -29,7 +29,8 @@ The game is these files, loaded in this order:
 - `src/vehicles/models.js` (about 740 lines): every car, boat, police and military model as data, and the gearbox.
 - `src/vehicles/cars.js` (about 1,490 lines): car materials, body and wheel geometry, `makeCar`.
 - `src/vehicles/physics.js` (about 590 lines): car physics, smoke and sparks, skid marks, damage, people physics.
-- `src/game.js` (about 6,100 lines, roughly 135k tokens): everything else. **Never read it whole.**
+- `src/traffic.js` (about 300 lines): the traffic AI and the pedestrians.
+- `src/game.js` (about 5,800 lines, roughly 130k tokens): everything else. **Never read it whole.**
 
 Each part of the JavaScript starts with a section header comment. Grep for the header (or a name from the table) and read only that range:
 
@@ -52,7 +53,7 @@ Line numbers drift with every change, so search instead of trusting numbers. Eac
 | `src/vehicles/models.js` | `vehicles`, `gearbox and engine` | **All car, boat, police and military models as data**, then the gearbox | `MODELS`, `MODEL`, `PICKABLE`, `SECRET` |
 | `src/vehicles/cars.js` | `car materials` | Car materials, car body, moped, boat and military geometry, wheels, building a car | `carShape`, `wheelGeometry`, `cars`, `makeCar` |
 | `src/vehicles/physics.js` | `car physics`, `particles…`, `skid marks`, `damage`, `people physics` | Driving physics, smoke and sparks, crashes | `crash` |
-| `src/game.js` | `traffic AI`, `pedestrians` | Bot drivers and walkers | `botThink`, `npcThink` |
+| `src/traffic.js` | `traffic AI`, `pedestrians` | Bot drivers and walkers | `botThink`, `npcThink` |
 | `src/game.js` | `police` (and the subsections on the sjöpolis and navy, the helicopter, police on the ground) | Wanted stars, chases, police boats, military, helicopter, arrests and cells | `limitAt`, `startChase`, `endChase`, `policeThink`, `policeUpdate`, `WATER`, `updateHeli` |
 | `src/game.js` | `initial traffic` | Spawns traffic at start | |
 | `src/game.js` | `Högvakten and the Dalahäst hunt`, `jobs and street races`, `ice cream kiosks and balloon sellers` | Side activities | `JOBS`, `VENDORS` |
