@@ -23,40 +23,41 @@ The game is these files, loaded in this order:
 - `lib/three.min.js`: Three.js r128.
 - `src/core.js` (about 580 lines): helpers, seeded random, the Three.js check, renderer and scene, geometry helpers, textures.
 - `src/city/map.js` (about 740 lines): Stockholm's land, water and street graph, where you can stand, the obstacle grid.
-- `src/game.js` (about 11,800 lines, roughly 260k tokens): everything else. **Never read it whole.**
+- `src/city/build.js` (about 1,740 lines): building the city, from the ground and quays to the landmarks and the police station.
+- `src/game.js` (about 10,000 lines, roughly 220k tokens): everything else. **Never read it whole.**
 
 Each part of the JavaScript starts with a section header comment. Grep for the header (or a name from the table) and read only that range:
 
 - Big sections: `/* ================= name ================= */`
 - Subsections: `/* ---------- name ---------- */`
 
-Line numbers drift with every change, so search instead of trusting numbers. Each file in `src/` is a plain script with `'use strict';` at the top and no wrapper function (the code still has its old two-space indent). Top-level names are globals shared by every `<script>` on the page, so a name from one file may be used in any other: grep all of `src/` for a name before renaming or removing it. Code that runs while a file loads can only use what earlier files (or earlier lines) define; functions are hoisted only within their own file. A new top-level name must not clash with a browser global (`top`, `name`, `status`, `stop`, …); that is why the police stop's state is called `policeStop`. If Three.js is missing, the check at the top shows a message and throws, which stops the script.
+Line numbers drift with every change, so search instead of trusting numbers. Each file in `src/` is a plain script with `'use strict';` at the top and no wrapper function (the code still has its old two-space indent). Top-level names are globals shared by every `<script>` on the page, so a name from one file may be used in any other: grep all of `src/` for a name before renaming or removing it. Code that runs while a file loads can only use what earlier files (or earlier lines) define; functions are hoisted only within their own file. So when code moves to a new file, a helper it calls at load time must already be defined in an earlier file (that is why `curve` and `tubeTo` moved to `src/core.js`). A new top-level name must not clash with a browser global (`top`, `name`, `status`, `stop`, …); that is why the police stop's state is called `policeStop`. If Three.js is missing, the check at the top shows a message and throws, which stops the script.
 
-| Section header | What's in it | Key names |
-| --- | --- | --- |
-| *(in `style.css`)* `HUD`, `start sign`, `big map`, `car picker`, `touch controls`, `playing with friends…` | Styles for the overlays | |
-| *(start of `src/core.js`)* | Helpers, seeded random | `$`, `clamp`, `lerp`, `rand`, `pick`, `TAU` |
-| *(in `src/core.js`)* `renderer & scene`, `geometry helpers`, `textures` | Three.js setup, mesh and texture helpers | `renderer`, `scene`, `camera` |
-| *(all of `src/city/map.js`)* `Stockholm: land, water and streets` | Map data: land polygons, the street graph, walkable raster, obstacle grid | `nodes`, `edges` |
-| *(the rest is in `src/game.js`)* | | |
-| `the city: ground, quays, streets` (and its subsections) | Building the city: parks, Gröna Lund, streets, bridges, lamps, car park, buildings, landmarks, boats, signs, Globen | `landmarkList` |
-| `Polisstationen on Stora Nygatan` | The police station building and its logic | `STATION` |
-| `Drakens gränd…` (two subsections) | The yellow house with the three-floor penthouse and the lift | `DRAKEN`, `LIFT` |
-| `people` | Person models and the player | `persons`, `player`, `makePerson` |
-| `vehicles` | **All car, boat, police and military models as data**, then gearbox, materials, car body and wheel geometry | `MODELS`, `MODEL`, `PICKABLE`, `SECRET`, `carShape`, `wheelGeometry`, `cars`, `makeCar` |
-| `car physics`, `particles…`, `skid marks`, `damage`, `people physics` | Driving physics, smoke and sparks, crashes | `crash` |
-| `traffic AI`, `pedestrians` | Bot drivers and walkers | `botThink`, `npcThink` |
-| `police` (and the subsections on the sjöpolis and navy, the helicopter, police on the ground) | Wanted stars, chases, police boats, military, helicopter, arrests and cells | `limitAt`, `startChase`, `endChase`, `policeThink`, `policeUpdate`, `WATER`, `updateHeli` |
-| `initial traffic` | Spawns traffic at start | |
-| `Högvakten and the Dalahäst hunt`, `jobs and street races`, `ice cream kiosks and balloon sellers` | Side activities | `JOBS`, `VENDORS` |
-| `game state`, `car picker`, `traffic upkeep` | Input state, picking a car, keeping traffic around the player | `keys`, `readInput`, `chooseModel`, `manageTraffic` |
-| `simulation step`, `visuals` | One physics step, moving meshes, the camera | `physicsStep`, `animate`, `updateCamera` |
-| `HUD`, `minimap`, `the big map` | On-screen text and both maps | `updateHUD`, `drawMap`, `bigmap`, `drawBigmap` |
-| `sound` | Synthesised engine sounds and effects | `ENGINE_SOUNDS`, `updateAudio` |
-| `input` | Keyboard, touch and the start screen | `startGame` |
-| `post-processing` | Graphics quality levels and effects | `POST` |
-| `playing with friends` | Multiplayer over WebRTC (PeerJS), with MQTT as fallback. Libraries load only when used. | `MP` |
-| `loop` | The main loop, adaptive resolution and the test hooks | `tick`, `frame`, `window.gubbeTest` |
+| File | Section header | What's in it | Key names |
+| --- | --- | --- | --- |
+| `style.css` | `HUD`, `start sign`, `big map`, `car picker`, `touch controls`, `playing with friends…` | Styles for the overlays | |
+| `src/core.js` | *(start of the file)* | Helpers, seeded random | `$`, `clamp`, `lerp`, `rand`, `pick`, `TAU` |
+| `src/core.js` | `renderer & scene`, `geometry helpers`, `textures` | Three.js setup, mesh and texture helpers (also `curve` and `tubeTo`, which the city and the cars both use) | `renderer`, `scene`, `camera`, `Merger` |
+| `src/city/map.js` | `Stockholm: land, water and streets` | Map data: land polygons, the street graph, walkable raster, obstacle grid | `nodes`, `edges` |
+| `src/city/build.js` | `the city: ground, quays, streets` (and its subsections up to `assemble the meshes`) | Building the city: parks, Gröna Lund, streets, bridges, lamps, car park, buildings, landmarks, the layout of the house in Drakens gränd, boats, signs, Globen | `landmarkList`, `DRAKEN` |
+| `src/city/build.js` | `Polisstationen on Stora Nygatan` | The police station building and its logic | `STATION` |
+| `src/game.js` | `Drakens gränd: building the yellow house` | The yellow house with the three-floor penthouse and the lift | `LIFT` |
+| `src/game.js` | `trees and street lamps…` | Instanced trees and lamps | |
+| `src/game.js` | `people` | Person models and the player | `persons`, `player`, `makePerson` |
+| `src/game.js` | `vehicles` | **All car, boat, police and military models as data**, then gearbox, materials, car body and wheel geometry | `MODELS`, `MODEL`, `PICKABLE`, `SECRET`, `carShape`, `wheelGeometry`, `cars`, `makeCar` |
+| `src/game.js` | `car physics`, `particles…`, `skid marks`, `damage`, `people physics` | Driving physics, smoke and sparks, crashes | `crash` |
+| `src/game.js` | `traffic AI`, `pedestrians` | Bot drivers and walkers | `botThink`, `npcThink` |
+| `src/game.js` | `police` (and the subsections on the sjöpolis and navy, the helicopter, police on the ground) | Wanted stars, chases, police boats, military, helicopter, arrests and cells | `limitAt`, `startChase`, `endChase`, `policeThink`, `policeUpdate`, `WATER`, `updateHeli` |
+| `src/game.js` | `initial traffic` | Spawns traffic at start | |
+| `src/game.js` | `Högvakten and the Dalahäst hunt`, `jobs and street races`, `ice cream kiosks and balloon sellers` | Side activities | `JOBS`, `VENDORS` |
+| `src/game.js` | `game state`, `car picker`, `traffic upkeep` | Input state, picking a car, keeping traffic around the player | `keys`, `readInput`, `chooseModel`, `manageTraffic` |
+| `src/game.js` | `simulation step`, `visuals` | One physics step, moving meshes, the camera | `physicsStep`, `animate`, `updateCamera` |
+| `src/game.js` | `HUD`, `minimap`, `the big map` | On-screen text and both maps | `updateHUD`, `drawMap`, `bigmap`, `drawBigmap` |
+| `src/game.js` | `sound` | Synthesised engine sounds and effects | `ENGINE_SOUNDS`, `updateAudio` |
+| `src/game.js` | `input` | Keyboard, touch and the start screen | `startGame` |
+| `src/game.js` | `post-processing` | Graphics quality levels and effects | `POST` |
+| `src/game.js` | `playing with friends` | Multiplayer over WebRTC (PeerJS), with MQTT as fallback. Libraries load only when used. | `MP` |
+| `src/game.js` | `loop` | The main loop, adaptive resolution and the test hooks | `tick`, `frame`, `window.gubbeTest` |
 
 ## How the parts depend on each other
 

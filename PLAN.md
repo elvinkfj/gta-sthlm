@@ -153,7 +153,7 @@ För varje PR: flytta koden oförändrad, kör testet, uppdatera kartan i `CLAUD
 
 - [x] PR 6: `src/core.js`: hjälpfunktioner, renderare och scen, geometrihjälp, texturer
 - [x] PR 7: `src/city/map.js`: Stockholms land, vatten och gator, var man kan stå, hindren
-- [ ] PR 8: `src/city/build.js`: marken, kajerna, parkerna, Gröna Lund, gatorna, broarna, husen, landmärkena, polisstationen
+- [x] PR 8: `src/city/build.js`: marken, kajerna, parkerna, Gröna Lund, gatorna, broarna, husen, landmärkena, polisstationen
 - [ ] PR 9: `src/city/draken.js`: det gula huset i Drakens gränd med takvåningen och hissen, plus träd och gatlampor om de ligger i samma del
 - [ ] PR 10: `src/people.js`: gubbar och folk
 - [ ] PR 11: `src/vehicles/models.js`: alla bil- och båtmodeller, växellådan och bilmaterialen
@@ -182,3 +182,6 @@ För varje PR: flytta koden oförändrad, kör testet, uppdatera kartan i `CLAUD
 - Spelet tar ca 20 sekunder att ladda i en webbläsare utan grafikkort (testet), fast `loadMs` säger ca 3 sekunder. Det kan vara värt att ta reda på vad som är långsamt. (PR 2)
 - Koden i `src/game.js` är fortfarande indragen två steg, som när den låg inuti omslaget. Den kan flyttas ut till vänsterkanten, men se upp med strängar som går över flera rader (`` ` ``), där indraget är en del av texten. (PR 5)
 - Kollen "kunde inte ladda 3D-motorn" stoppar bara sin egen fil. När koden ligger i många filer kommer de andra filerna också att ge fel i konsolen om Three.js saknas. Spelet startar ändå inte, men det kan bli snyggare. (PR 5)
+- `src/city/build.js` blev ca 1 740 rader, alltså mer än målet på ca 1 500. Den kan delas i två, till exempel efter polisstationen. (PR 8)
+- Gröna Lund använder `curve` och `tubeTo`, som ligger bland bilarna. De flyttades till `src/core.js` för att filen ska kunna laddas. Leta efter fler sådana hjälpfunktioner som borde ligga i `core.js`. (PR 8)
+- `src/core.js` använder `CELL_W` och `FLOOR_H` från `src/city/map.js` inuti en funktion. Det fungerar, men ett "kärn"-ställe borde inte bero på kartan. (PR 8)
