@@ -32,7 +32,8 @@ The game is these files, loaded in this order:
 - `src/traffic.js` (about 300 lines): the traffic AI and the pedestrians.
 - `src/police.js` (about 870 lines): wanted stars, chases, the sjöpolis and the navy, the helicopter.
 - `src/police-stops.js` (about 740 lines): police on the ground (stops, arrests, the cells), then the traffic spawned at start.
-- `src/game.js` (about 4,150 lines, roughly 90k tokens): everything else. **Never read it whole.**
+- `src/activities.js` (about 1,170 lines): Högvakten and the Dalahäst hunt, jobs and street races, ice cream kiosks and balloon sellers.
+- `src/game.js` (about 3,000 lines, roughly 65k tokens): everything else. **Never read it whole.**
 
 Each part of the JavaScript starts with a section header comment. Grep for the header (or a name from the table) and read only that range:
 
@@ -59,7 +60,7 @@ Line numbers drift with every change, so search instead of trusting numbers. Eac
 | `src/police.js` | `police`, `the sjöpolis and the navy`, `the police helicopter` | Wanted stars, chases, police boats, military, helicopter | `limitAt`, `startChase`, `endChase`, `policeThink`, `policeUpdate`, `WATER`, `updateHeli` |
 | `src/police-stops.js` | `police on the ground…` | Stops, constables on foot, arrests and the cells | `policeStop`, `beginStop`, `useKey` |
 | `src/police-stops.js` | `initial traffic` | Spawns traffic, police and moored boats at start | |
-| `src/game.js` | `Högvakten and the Dalahäst hunt`, `jobs and street races`, `ice cream kiosks and balloon sellers` | Side activities | `JOBS`, `VENDORS` |
+| `src/activities.js` | `Högvakten and the Dalahäst hunt`, `jobs and street races`, `ice cream kiosks and balloon sellers` | Side activities | `JOBS`, `VENDORS` |
 | `src/game.js` | `game state`, `car picker`, `traffic upkeep` | Input state, picking a car, keeping traffic around the player | `keys`, `readInput`, `chooseModel`, `manageTraffic` |
 | `src/game.js` | `simulation step`, `visuals` | One physics step, moving meshes, the camera | `physicsStep`, `animate`, `updateCamera` |
 | `src/game.js` | `HUD`, `minimap`, `the big map` | On-screen text and both maps | `updateHUD`, `drawMap`, `bigmap`, `drawBigmap` |
