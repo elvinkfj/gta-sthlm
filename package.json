@@ -3,7 +3,8 @@
   "private": true,
   "description": "Gubbe på Vägen: ett GTA-liknande 3D-spel i Stockholm. Öppna index.html för att spela; npm behövs bara för testerna.",
   "scripts": {
-    "test": "playwright test"
+    "test": "playwright test",
+    "baseline": "playwright test baseline --update-snapshots=all"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0"

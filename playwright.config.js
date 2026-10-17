@@ -3,9 +3,12 @@ const { defineConfig } = require('@playwright/test');
 
 module.exports = defineConfig({
   testDir: 'tests',
-  timeout: 60000,
-  workers: 1,
+  timeout: 90000,
+  // one worker per test file: the smoke test and the baseline load the game side by side
+  workers: 2,
   reporter: 'list',
+  // the baseline screenshot lies next to baseline.json
+  snapshotPathTemplate: '{testDir}/{arg}{ext}',
   use: {
     browserName: 'chromium',
     viewport: { width: 1280, height: 720 },
