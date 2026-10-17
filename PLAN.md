@@ -121,7 +121,7 @@ flowchart LR
 
 ## PR 3: Testet körs automatiskt
 
-- [ ] Lägg till en GitHub Action (`.github/workflows/test.yml`) som kör `npm test` på varje pull request.
+- [x] Lägg till en GitHub Action (`.github/workflows/test.yml`) som kör `npm test` på varje pull request.
 - [ ] (Oscar/Elvin, i GitHubs inställningar) Kräv grön bock innan man får merga till `main`.
 
 **Klart när:** en PR visar en grön bock från testet.
