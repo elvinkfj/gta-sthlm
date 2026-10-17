@@ -1,6 +1,6 @@
 # Gubbe på Vägen: notes for Claude
 
-A GTA-style 3D browser game set in central Stockholm, built with Three.js r128. The player walks around, drives over 50 real cars plus boats, jet skis and a moped, runs from the police, does jobs and races, and can play with up to eight friends online. Open `index.html` in a browser to play. There is no build step and no install.
+A GTA-style 3D browser game set in central Stockholm, built with Three.js r128 (loaded from `lib/three.min.js`, so it runs offline). The player walks around, drives over 50 real cars plus boats, jet skis and a moped, runs from the police, does jobs and races, and can play with up to eight friends online. Open `index.html` in a browser to play. There is no build step and no install.
 
 The owner is Elvin (15). He speaks Swedish and is learning to program, so keep explanations to him short, simple and in Swedish.
 
@@ -72,7 +72,7 @@ Then mention the car in `README.md` if it lists similar cars.
 
 `window.gubbeTest` (end of the script) lets code drive the game without a player: `start()`, `run(seconds)`, `key(code, down)`, `press(code)`, `teleport(x, z)`, `choose(id)`, `showroom(ids, x, z, gap)` (builds cars side by side), `shot(...)` (fixed-camera screenshot), `info()` (render stats), `mapProblems()` (landmarks standing on streets; should not grow), `engineSample(...)` (measures an engine sound).
 
-Until the smoke test from PR 2 in `PLAN.md` exists, load the page in a headless browser after each change, call `gubbeTest.start()` and `gubbeTest.run(10)`, and check that the console has no errors.
+**Run `npm test` before every PR, and don't open the PR until it is green.** The first time, run `npm install` and `npx playwright install chromium`. The smoke test (`tests/smoke.spec.js`, Playwright) opens `index.html` from disk in headless Chromium and checks that the page loads without console errors, that `start()` + `run(10)` works, that the player can get into a car and drive it away, that `mapProblems()` doesn't grow, and that every model in `MODELS` builds. It takes under a minute. The game itself never needs `npm install`: `package.json` exists only for the tests.
 
 ## Working rules
 

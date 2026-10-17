@@ -106,16 +106,16 @@ flowchart LR
 
 ## PR 2: Röktest
 
-- [ ] Ladda ner `three.min.js` (r128, samma version som nu) till `lib/three.min.js` och ladda den därifrån i stället för från internet. Då går spelet även att köra utan nätet, och testet blir stabilare.
-- [ ] Lägg till `package.json` med Playwright som enda dev-beroende och skriptet `npm test`. Spelet ska fortfarande fungera utan att någon kör `npm install`.
-- [ ] Skapa `tests/smoke.spec.js` som öppnar `index.html` i en webbläsare utan fönster och kollar att:
-  - [ ] sidan laddar utan fel i konsolen (förutom typsnitt som inte nås),
-  - [ ] `gubbeTest.start()` och `gubbeTest.run(10)` går igenom utan fel,
-  - [ ] gubben kan sätta sig i en bil, gasa i några sekunder och att bilen har flyttat sig,
-  - [ ] `gubbeTest.mapProblems()` är tom (eller inte blivit längre än innan),
-  - [ ] alla bilar i `MODELS` går att bygga med `gubbeTest.showroom(...)` utan fel.
-- [ ] Prova att testet blir **rött** om man med flit lägger in ett fel. Ta bort felet igen.
-- [ ] Skriv i `CLAUDE.md` hur testet körs, och att det ska köras före varje PR.
+- [x] Ladda ner `three.min.js` (r128, samma version som nu) till `lib/three.min.js` och ladda den därifrån i stället för från internet. Då går spelet även att köra utan nätet, och testet blir stabilare.
+- [x] Lägg till `package.json` med Playwright som enda dev-beroende och skriptet `npm test`. Spelet ska fortfarande fungera utan att någon kör `npm install`.
+- [x] Skapa `tests/smoke.spec.js` som öppnar `index.html` i en webbläsare utan fönster och kollar att:
+  - [x] sidan laddar utan fel i konsolen (förutom typsnitt som inte nås),
+  - [x] `gubbeTest.start()` och `gubbeTest.run(10)` går igenom utan fel,
+  - [x] gubben kan sätta sig i en bil, gasa i några sekunder och att bilen har flyttat sig,
+  - [x] `gubbeTest.mapProblems()` är tom (eller inte blivit längre än innan),
+  - [x] alla bilar i `MODELS` går att bygga med `gubbeTest.showroom(...)` utan fel.
+- [x] Prova att testet blir **rött** om man med flit lägger in ett fel. Ta bort felet igen.
+- [x] Skriv i `CLAUDE.md` hur testet körs, och att det ska köras före varje PR.
 
 **Klart när:** `npm test` är grönt och tar under en minut.
 
@@ -178,4 +178,5 @@ För varje PR: flytta koden oförändrad, kör testet, uppdatera kartan i `CLAUD
 
 *(Claude skriver upp saker här som den ser under uppdelningen men inte får ändra.)*
 
--
+- Felmeddelandet "Kunde inte ladda 3D-motorn. Kontrollera internetanslutningen …" stämmer inte längre: Three.js laddas nu från `lib/`, inte från internet. (PR 2)
+- Spelet tar ca 20 sekunder att ladda i en webbläsare utan grafikkort (testet), fast `loadMs` säger ca 3 sekunder. Det kan vara värt att ta reda på vad som är långsamt. (PR 2)
