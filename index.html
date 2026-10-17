@@ -11021,9 +11021,10 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     const first = $('picker').querySelector(on ? '.picker-secret button.model' : 'button.model');
     if (first && pickerOpen) first.focus();
   }
-  function pickerB() {
-    if (pickerOpen) { closePicker(); pickerBClose = performance.now(); return; }
-    const again = performance.now() - pickerBClose < 350, secret = again && !pickerSecret;
+  // (t: when the key went down, so a slow frame between the two presses does not pull them apart)
+  function pickerB(t = performance.now()) {
+    if (pickerOpen) { closePicker(); pickerBClose = t; return; }
+    const again = t - pickerBClose < 350, secret = again && !pickerSecret;
     openPicker();
     if (again && pickerOpen) setPickerSecret(secret);
   }
@@ -12128,14 +12129,14 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
   $('picker').addEventListener('click', (e) => { if (e.target === $('picker')) closePicker(); });
 
   const NO_SCROLL = ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
-  function onKey(code, repeat) {
+  function onKey(code, repeat, t) {
     if (bigmap.open) {
       if (code === 'Escape' || code === 'KeyK') closeBigmap();
       return;
     }
     if (pickerOpen) {
       if (code === 'Escape') closePicker();
-      else if (code === 'KeyB' && !repeat) pickerB();
+      else if (code === 'KeyB' && !repeat) pickerB(t);
       const m = /^Digit(\d)$/.exec(code), list = pickerSecret ? SECRET : PICKABLE;
       if (m) { const i = (Number(m[1]) + 9) % 10; if (list[i]) chooseModel(list[i]); }
       return;
@@ -12151,7 +12152,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     else if (code === 'KeyT') toggleMute();
     else if (code === 'KeyF') { if (!tankFire()) horn(); }
     else if (code === 'KeyR') resetToRoad();
-    else if (code === 'KeyB') pickerB();
+    else if (code === 'KeyB') pickerB(t);
     else if (code === 'KeyM') playerShift(1);
     else if (code === 'KeyN') playerShift(-1);
     else if (code === 'KeyG') toggleGearbox();
@@ -12168,11 +12169,11 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
   window.addEventListener('keydown', (e) => {
     if (MP.keydown(e)) return;
     if (bigmap.open) { if (e.code === 'Escape' || e.code === 'KeyK') { e.preventDefault(); onKey(e.code, e.repeat); } return; }
-    if (pickerOpen) { if (e.code === 'Escape' || e.code === 'KeyB' || /^Digit\d$/.test(e.code)) { e.preventDefault(); onKey(e.code, e.repeat); } return; }
+    if (pickerOpen) { if (e.code === 'Escape' || e.code === 'KeyB' || /^Digit\d$/.test(e.code)) { e.preventDefault(); onKey(e.code, e.repeat, e.timeStamp); } return; }
     // (P opens the friends' sign and focuses a field in it: the key itself must not type a "p" there)
     if (NO_SCROLL.includes(e.code) || (started && e.code === 'KeyP')) e.preventDefault();
     if (started) keys[e.code] = true;
-    onKey(e.code, e.repeat);
+    onKey(e.code, e.repeat, e.timeStamp);
   });
   window.addEventListener('keyup', (e) => { keys[e.code] = false; });
   window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
