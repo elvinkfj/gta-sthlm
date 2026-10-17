@@ -407,7 +407,12 @@ body.touch .tk-sign .key { display: none; }
 }
 body.touch #btnFriends { display: block; }
 body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0px)); max-width: calc(100vw - 150px); }
-@media (max-width: 760px) { body.touch #btnFriends { right: calc(142px + env(safe-area-inset-right, 0px)); } }
+@media (max-width: 760px) {
+  body.touch #btnFriends { right: calc(142px + env(safe-area-inset-right, 0px)); }
+  /* driving, the speed limit sign sits up there: the button goes under the map */
+  body.touch.driving #btnFriends { top: calc(140px + env(safe-area-inset-top, 0px)); right: calc(16px + env(safe-area-inset-right, 0px)); }
+}
+#mpList li > span:nth-child(2) { min-width: 0; overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) { .sign { animation: none; } #hud { transition: none; } #limit.over, #wanted, .beacon, #ticket { animation: none; } #limit.over { box-shadow: inset 0 0 0 7px var(--sign-red), 0 0 0 4px var(--sign-red); } }
 </style>
 </head>
@@ -477,9 +482,10 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     <span class="key">F</span><span>Tuta, eller skjut med kanonen i stridsvagnen</span>
     <span class="key">L</span><span>Blåljus, när du kör en polisbil</span>
     <span class="key">Polis</span><span>Kör in till kanten och stanna, så kommer en konstapel fram. E skriver under boten. 50 km/h för fort eller flykt: du blir gripen och hamnar i cellen på polisstationen i Gamla stan</span>
-    <span class="key">Militär</span><span>Vid fem stjärnor kommer militären: stridsvagn, pansarbilar och en lastbil med soldater</span>
-    <span class="key">Dalahäst</span><span>20 st gömda i stan, 9 i Gamla stan. Gå eller kör in i dem</span>
-    <span class="key">J</span><span>Jobb: taxi i taxin, paket i Sprintern, busslinje i bussen. Vid en gul ljuspelare: starta gatlopp</span>
+    <span class="key">Militär</span><span>Vid fem stjärnor kommer militären: stridsvagnar, pansarbilar och lastbilar med soldater</span>
+    <span class="key">Sjöpolis</span><span>Flyr du ut på vattnet kommer polisbåtar och vattenskotrar, och vid fem stjärnor marinens stridsbåtar. Stannar du bredvid en polisbåt blir du gripen</span>
+    <span class="key">Dalahäst</span><span>20 st gömda i stan, 9 i Gamla stan. Gå eller kör in i dem. 50 kr i hittelön</span>
+    <span class="key">J</span><span>Jobb: taxi i taxin, paket i Sprintern, busslinje i bussen, mat på mopeden, rånare i polisbilen, båttaxi i motorbåtarna. Vid en gul ljuspelare: starta gatlopp. Vid bilskroten i Hammarby hamn: sälj en bil du tagit</span>
     <span class="key">Glass</span><span>Glasskiosk och ballongförsäljare vid Skeppsbron, i Kungsträdgården, på Medborgarplatsen och på Djurgården. Gå fram och tryck E för att köpa</span>
     <span class="key">V</span><span>Släpp en ballong</span>
     <span class="key">R</span><span>Ställ bilen på gatan igen, eller båten ute på öppet vatten</span>
@@ -523,7 +529,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
         <li><span class="k"><span class="key">Z</span><span class="key">X</span></span><span>Blinkers vänster och höger</span></li>
         <li><span class="k"><span class="key">E</span></span><span>Kliv in, eller ta en bil som kör förbi</span></li>
         <li><span class="k"><span class="key">B</span></span><span>Välj bil, eller båt vid en kaj</span></li>
-        <li><span class="k"><span class="key">J</span></span><span>Jobb (taxi, paket, buss) och gatlopp</span></li>
+        <li><span class="k"><span class="key">J</span></span><span>Jobb (taxi, paket, buss, mat, polis, båttaxi) och gatlopp</span></li>
       </ul>
       <ul class="keys only-touch">
         <li><span class="k"><span class="key">Spak</span></span><span>Gå, eller kör</span></li>
@@ -606,7 +612,9 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
         <button id="pickerClose" class="btn-sign picker-close" type="button">Stäng</button>
       </div>
       <div class="picker-group"><h3>Vanliga bilar</h3><div class="grid" id="gridNormal"></div></div>
-      <div class="picker-group group-sport"><h3>Sportbilar <span>Snabbast</span></h3><div class="grid" id="gridSport"></div></div>
+      <div class="picker-group group-sport"><h3>Superbilar <span>Snabbast</span></h3><div class="grid" id="gridSuper"></div></div>
+      <div class="picker-group"><h3>Sportbilar</h3><div class="grid" id="gridSport"></div></div>
+      <div class="picker-group"><h3>Klassiker</h3><div class="grid" id="gridClassic"></div></div>
       <div class="picker-group"><h3>Moped</h3><div class="grid" id="gridMoped"></div></div>
       <div class="picker-group"><h3>På vattnet <span class="pick-note">vid närmaste kaj</span></h3><div class="grid" id="gridBoat"></div></div>
     </div>
@@ -4852,7 +4860,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
         doors: [0.9, -0.55], intake: { y: [0.28, 0.42], x: 0.85, d: 0.12 }, tail: { y: [-0.1, -0.045], x: 0, d: 0.36, rev: [0.22, 0.3] },
         louvre: { z: [-2.0, -1.82], x: 0.42 }, diffuser: 0.4, lamps: [{ type: 'round', x: 0.6, z: 1.93, r: 0.115, tilt: 0.8 }], plate: [0.42, 0.55]
       } },
-    { id: 'superbil', name: 'Lamborghini Huracán', kind: 'Superbil', def: 'Lamborghinin', sport: true, rearEngine: true, W: 1.93, L: 4.52, R: 0.35, wb: 2.62, max: 86, zero: [100, 3.2], brake: 36, rev: 10, mass: 1.3, grip: 1.25,
+    { id: 'superbil', name: 'Lamborghini Huracán', kind: 'Superbil', def: 'Lamborghinin', sport: true, group: 'super', rearEngine: true, W: 1.93, L: 4.52, R: 0.35, wb: 2.62, max: 86, zero: [100, 3.2], brake: 36, rev: 10, mass: 1.3, grip: 1.25,
       colors: [0x7bd23a, 0xe8e8e8, 0xf06a14, 0xf2c80f, 0x6b2bd2], gears: 7, idle: 1050, red: 8800, eng: 'v10', rim: 'black',
       shape: {
         sill: [[-2.26, 0.4], [-2.05, 0.25], [-1.7, 0.2], [1.7, 0.2], [2.0, 0.21], [2.26, 0.25]],
@@ -4909,7 +4917,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
         tail: { y: [-0.1, -0.04], x: 0, d: 0.32, rev: [0.26, 0.33] }, cladding: 0.47, plate: [0.47, 0.68]
       } },
     // Koenigsegg Jesko, the hypercar from Ängelholm: the fastest car in town by far
-    { id: 'jesko', name: 'Koenigsegg Jesko', kind: 'Hyperbil', def: 'Koenigseggen', sport: true, rearEngine: true, W: 2.03, L: 4.61, R: 0.36, wb: 2.7, max: 105, zero: [100, 2.5], brake: 40, rev: 10, mass: 1.4, grip: 1.32,
+    { id: 'jesko', name: 'Koenigsegg Jesko', kind: 'Hyperbil', def: 'Koenigseggen', sport: true, group: 'super', rearEngine: true, W: 2.03, L: 4.61, R: 0.36, wb: 2.7, max: 105, zero: [100, 2.5], brake: 40, rev: 10, mass: 1.4, grip: 1.32,
       colors: [0xf2f2f0, 0xff6a13, 0x1d4fd8, 0x111316, 0x8a1b1b], gears: 9, idle: 1000, red: 8500, eng: 'v8', rim: 'black',
       shape: {
         sill: [[-2.305, 0.38], [-2.1, 0.24], [-1.75, 0.19], [1.75, 0.19], [2.05, 0.2], [2.305, 0.24]],
@@ -5101,7 +5109,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
         tail: { y: [-0.1, -0.04], x: 0, d: 0.34, rev: [0.25, 0.32] }, diffuser: 0.38, plate: [0.4, 0.55]
       } },
     // Ferrari F8 Tributo: the mid-engined V8 Ferrari, louvres over the engine and two round tail lamps a side
-    { id: 'f8', name: 'Ferrari F8 Tributo', kind: 'Superbil', def: 'Ferrarin', sport: true, rearEngine: true, W: 1.98, L: 4.61, R: 0.345, wb: 2.65, max: 94, zero: [100, 2.9], brake: 38, rev: 10, mass: 1.35, grip: 1.28,
+    { id: 'f8', name: 'Ferrari F8 Tributo', kind: 'Superbil', def: 'Ferrarin', sport: true, group: 'super', rearEngine: true, W: 1.98, L: 4.61, R: 0.345, wb: 2.65, max: 94, zero: [100, 2.9], brake: 38, rev: 10, mass: 1.35, grip: 1.28,
       colors: [0xd40000, 0xf6d000, 0xf2f2ee, 0x111214, 0x1d3c7c], gears: 7, idle: 1000, red: 8000, eng: 'v8flat', rim: 'sport',
       shape: {
         sill: [[-2.305, 0.38], [-2.1, 0.24], [-1.75, 0.18], [1.75, 0.18], [2.05, 0.2], [2.305, 0.25]],
@@ -5117,7 +5125,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     // covers at its corners and two NACA ducts in the bonnet, a duct in the rear wing behind each door, the slotted Lexan
     // engine cover, the full-width wing carried on the rear wings, four round lamps in the black mesh of the tail, three
     // pipes in the middle of it and five-spoke Speedline wheels with a centre nut. Red cloth seats inside, five gears.
-    { id: 'f40', name: 'Ferrari F40', kind: 'Superbil', def: 'F40:n', sport: true, rearEngine: true, W: 1.97, L: 4.358, R: 0.325, wb: 2.45, max: 90, zero: [100, 4.1], brake: 34, rev: 10, mass: 1.1, grip: 1.18,
+    { id: 'f40', name: 'Ferrari F40', kind: 'Superbil', def: 'F40:n', sport: true, group: 'super', rearEngine: true, W: 1.97, L: 4.358, R: 0.325, wb: 2.45, max: 90, zero: [100, 4.1], brake: 34, rev: 10, mass: 1.1, grip: 1.18,
       colors: [0xc8100c], gears: 5, idle: 1000, red: 7750, eng: 'f40', rim: 'f40', lag: true,
       shape: {
         sill: [[-2.179, 0.36], [-2.02, 0.24], [-1.65, 0.16], [1.6, 0.15], [1.98, 0.16], [2.179, 0.2]],
@@ -5138,6 +5146,248 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
         shoulder: 0.11, tumble: 0.17, crown: [0.03, 0.035, 0.025], glass: [-2.1, 1.25], pillars: [[0.02, 0.1], [-1.25, 0.12]], trim: 'gloss',
         doors: [1.25, 0.02, -1.25], head: { y: [-0.12, -0.05], x: 0.5, d: 0.3 }, grille: { y: [0.42, -0.06], x: 0.46, d: 0.15 }, badge: { kind: 'rings', y: 0.66 },
         intake: { y: [0.3, 0.42], x: 0.85, d: 0.15 }, tail: { y: [-0.14, -0.04], x: 0, d: 0.25, rev: [0.3, 0.36] }, diffuser: 0.4, rails: true, plate: [0.47, 0.62]
+      } },
+    // Twenty more sports cars, each to the real one's size, wheelbase, weight, power and lines. The supercars first:
+    // Ferrari LaFerrari (2013), the hybrid V12 hypercar from Maranello: 963 hp, its nose sharp and low, its tail a wide
+    // black diffuser under two round lamps a side
+    { id: 'laferrari', name: 'Ferrari LaFerrari', kind: 'Hyperbil', def: 'LaFerrarin', sport: true, group: 'super', rearEngine: true, W: 1.99, L: 4.702, R: 0.345, wb: 2.65, max: 97, zero: [100, 2.4], brake: 40, rev: 10, mass: 1.4, grip: 1.3,
+      colors: [0xc8100c, 0xf6d000, 0x111214, 0xf2f2ee], gears: 7, idle: 1000, red: 9250, eng: 'v12', rim: 'black',
+      shape: {
+        sill: [[-2.351, 0.36], [-2.15, 0.22], [-1.8, 0.17], [1.8, 0.17], [2.1, 0.19], [2.351, 0.24]],
+        belt: [[-2.351, 0.86], [-2.15, 0.95], [-1.25, 0.96], [-0.35, 0.86], [0.45, 0.72], [1.25, 0.6], [1.95, 0.47], [2.351, 0.3]],
+        roof: [[-0.62, 1.06], [-0.3, 1.1], [-0.08, 1.1]], cab: [-1.85, -0.62, -0.08, 1.02], rc: [0.25, 0.55], p: [3, 2.1],
+        shoulder: 0.14, tumble: 0.28, crown: [0.02, -0.01, 0.015], glass: [-0.6, 0.98], trim: 'gloss', rearCol: 'under',
+        doors: [0.98, -0.5], head: { y: [-0.07, -0.02], x: 0.5, d: 0.36 }, intake: { y: [0.22, 0.38], x: 1.0, d: 0.2 },
+        sideIntake: { z: [-1.1, -0.55], y: [0.4, 0.74] }, lamps: [{ type: 'tailRound', xs: [0.62, 0.82], y: 0.78, r: 0.07 }], tail: { y: [-0.1, -0.05], x: 2, d: 0.2 },
+        diffuser: 0.5, pipes: [[-0.1, 0.5], [0.1, 0.5]], plate: [0.3, 0.5]
+      } },
+    // Porsche 911 GT3 RS (992, 2023): the track 911 with 525 hp from a flat six that revs to 9 000, vents on the wings and
+    // a huge wing on swan necks
+    { id: 'gt3rs', name: 'Porsche 911 GT3 RS', kind: 'Banbil', def: 'GT3 RS:en', sport: true, group: 'super', rearEngine: true, W: 1.9, L: 4.572, R: 0.36, wb: 2.457, max: 82, zero: [100, 3.2], brake: 38, rev: 10, mass: 1.3, grip: 1.32,
+      colors: [0x9fcf3a, 0xf2f2ee, 0xd0121b, 0x1e6ec8, 0x111214], gears: 7, idle: 950, red: 9000, eng: 'flat6', rim: 'black',
+      shape: {
+        sill: [[-2.286, 0.4], [-2.07, 0.26], [-1.67, 0.22], [1.57, 0.22], [1.97, 0.24], [2.286, 0.3]],
+        belt: [[-2.286, 0.8], [-2.14, 0.93], [-1.62, 0.97], [-0.6, 0.93], [0.4, 0.86], [1.31, 0.79], [1.87, 0.7], [2.286, 0.5]],
+        roof: [[-0.88, 1.2], [-0.45, 1.29], [0.05, 1.3]], cab: [-1.75, -0.88, 0.05, 0.95], rc: [0.32, 0.5], p: [2.6, 2.2],
+        shoulder: 0.13, tumble: 0.24, crown: [0.04, -0.05, 0.03], glass: [-1.25, 0.9], pillars: [[-0.5, 0.08]], trim: 'gloss',
+        doors: [0.9, -0.55], intake: { y: [0.25, 0.42], x: 0.9, d: 0.12 }, tail: { y: [-0.1, -0.045], x: 0, d: 0.36, rev: [0.22, 0.3] },
+        louvre: { z: [1.15, 1.55], x: 0.55 }, diffuser: 0.42, wing: { h: 0.46, z: 0.34, chord: 0.42, posts: 0.3 },
+        lamps: [{ type: 'round', x: 0.6, z: 1.95, r: 0.115, tilt: 0.8 }], plate: [0.42, 0.55]
+      } },
+    // Lamborghini Aventador (LP 700-4): the V12 wedge, Y-shaped lamps, the big intakes in its flanks, a wing on the tail
+    { id: 'aventador', name: 'Lamborghini Aventador', kind: 'Superbil', def: 'Aventadoren', sport: true, group: 'super', rearEngine: true, W: 2.03, L: 4.78, R: 0.36, wb: 2.7, max: 97, zero: [100, 2.9], brake: 40, rev: 10, mass: 1.55, grip: 1.28,
+      colors: [0xf06a14, 0x7bd23a, 0xf2c80f, 0xe8e8e8, 0x111316], gears: 7, idle: 1000, red: 8500, eng: 'v12', rim: 'black',
+      shape: {
+        sill: [[-2.39, 0.38], [-2.18, 0.24], [-1.8, 0.19], [1.8, 0.19], [2.1, 0.2], [2.39, 0.24]],
+        belt: [[-2.39, 0.88], [-2.15, 0.96], [-1.05, 0.96], [-0.3, 0.86], [0.6, 0.72], [1.45, 0.6], [2.05, 0.47], [2.39, 0.3]],
+        roof: [[-0.6, 1.08], [-0.32, 1.12], [-0.12, 1.12]], cab: [-1.7, -0.6, -0.12, 1.1], rc: [0.25, 0.5], p: [3.2, 2.0],
+        shoulder: 0.12, tumble: 0.28, crown: [0.02, -0.01, 0.015], glass: [-0.55, 1.05], trim: 'gloss', rearCol: 'under',
+        doors: [1.05, -0.5], head: { y: [-0.08, -0.03], x: 0.45, d: 0.36 }, intake: { y: [0.22, 0.4], x: 1.0, d: 0.22 },
+        sideIntake: { z: [-1.2, -0.55], y: [0.42, 0.82] }, tail: { y: [-0.12, -0.05], x: 0.3, d: 0.25, rev: [0.3, 0.38] },
+        louvre: { z: [-1.9, -1.6], x: 0.55 }, diffuser: 0.5, wing: true, pipes: [[0, 0.62]], plate: [0.33, 0.55]
+      } },
+    // McLaren 720S: the twin-turbo V8 from Woking, the lamps set in deep sockets, a teardrop of glass over the cabin
+    { id: 'mclaren720', name: 'McLaren 720S', kind: 'Superbil', def: 'McLarenen', sport: true, group: 'super', rearEngine: true, W: 1.93, L: 4.543, R: 0.35, wb: 2.67, max: 95, zero: [100, 2.9], brake: 40, rev: 10, mass: 1.3, grip: 1.28,
+      colors: [0xf28b1c, 0xb5b8bb, 0x1f4fae, 0xf2f2ee, 0x111316], gears: 7, idle: 950, red: 8200, eng: 'v8flat', rim: 'sport',
+      shape: {
+        sill: [[-2.27, 0.38], [-2.06, 0.23], [-1.75, 0.18], [1.75, 0.18], [2.03, 0.2], [2.27, 0.25]],
+        belt: [[-2.27, 0.86], [-2.06, 0.95], [-1.2, 0.96], [-0.35, 0.86], [0.5, 0.73], [1.3, 0.61], [1.9, 0.49], [2.27, 0.33]],
+        roof: [[-0.75, 1.14], [-0.4, 1.18], [-0.1, 1.18]], cab: [-2.0, -0.75, -0.1, 1.05], rc: [0.28, 0.55], p: [2.8, 2.0],
+        shoulder: 0.16, tumble: 0.3, crown: [0.02, -0.01, 0.02], glass: [-1.2, 1.0], pillars: [[-0.6, 0.1]], trim: 'gloss', rearCol: 'gloss',
+        doors: [1.0, -0.4], head: { y: [-0.09, -0.02], x: 0.55, d: 0.32 }, intake: { y: [0.22, 0.36], x: 0.95, d: 0.2 },
+        sideIntake: { z: [-0.95, -0.5], y: [0.42, 0.7] }, tail: { y: [-0.09, -0.04], x: 0.25, d: 0.22, rev: [0.25, 0.32] }, diffuser: 0.5, plate: [0.3, 0.5]
+      } },
+    // Bugatti Chiron: the W16 with four turbos, 1 500 hp, 420 km/h, the fastest thing in town; the horseshoe grille
+    // in the middle of the nose and a light bar across the whole tail
+    { id: 'chiron', name: 'Bugatti Chiron', kind: 'Hyperbil', def: 'Chironen', sport: true, group: 'super', rearEngine: true, W: 2.04, L: 4.544, R: 0.37, wb: 2.711, max: 117, zero: [100, 2.4], brake: 42, rev: 10, mass: 2.0, grip: 1.3,
+      colors: [0x1d3c7c, 0x111214, 0xf2f2ee, 0x8a1b1b, 0xb5b8bb], gears: 7, idle: 900, red: 6800, eng: 'w16', rim: 'sport',
+      shape: {
+        sill: [[-2.272, 0.4], [-2.06, 0.25], [-1.75, 0.2], [1.75, 0.2], [2.04, 0.22], [2.272, 0.28]],
+        belt: [[-2.272, 0.92], [-2.08, 0.98], [-1.2, 0.99], [-0.4, 0.9], [0.5, 0.78], [1.3, 0.68], [1.9, 0.56], [2.272, 0.42]],
+        roof: [[-0.8, 1.15], [-0.45, 1.19], [-0.1, 1.19]], cab: [-1.65, -0.8, -0.1, 1.0], rc: [0.3, 0.5], p: [2.6, 2.2],
+        shoulder: 0.15, tumble: 0.27, crown: [0.02, 0.0, 0.02], glass: [-0.75, 0.95], trim: 'chrome', rearCol: 'under',
+        doors: [0.95, -0.55], head: { y: [-0.1, -0.03], x: 0.55, d: 0.3 }, grille: { y: [0.62, -0.06], x: 0.22, d: 0.12 },
+        intake: { y: [0.25, 0.45], x: 1.0, d: 0.18 }, sideIntake: { z: [-0.95, -0.5], y: [0.5, 0.85] }, tail: { y: [-0.1, -0.05], x: 0, d: 0.18, rev: [0.2, 0.28] },
+        badge: { kind: 'bar', y: 0.5, w: 0.0001 }, diffuser: 0.5, pipes: [[-0.12, 0.42], [0.12, 0.42], [-0.12, 0.54], [0.12, 0.54]], plate: [0.3, 0.6]
+      } },
+    // Aston Martin DBS Superleggera: the V12 grand tourer, a long bonnet, the wide grille, a short fastback
+    { id: 'dbs', name: 'Aston Martin DBS', kind: 'Sportcoupé', def: 'Aston Martin:en', sport: true, group: 'super', W: 1.97, L: 4.712, R: 0.37, wb: 2.805, max: 94, zero: [100, 3.4], brake: 38, rev: 10, mass: 1.85, grip: 1.18,
+      colors: [0x1f4a37, 0xb5b8bb, 0x111214, 0xf2f2ee, 0x8a1b1b], gears: 8, idle: 800, red: 7000, eng: 'v12t', rim: 'sport',
+      shape: {
+        sill: [[-2.356, 0.42], [-2.15, 0.28], [-1.85, 0.24], [1.8, 0.24], [2.1, 0.26], [2.356, 0.33]],
+        belt: [[-2.356, 0.86], [-2.25, 0.94], [-1.8, 0.97], [-0.8, 0.92], [0.3, 0.86], [1.2, 0.8], [1.9, 0.72], [2.356, 0.55]],
+        roof: [[-0.95, 1.22], [-0.5, 1.26], [-0.1, 1.27]], cab: [-1.75, -0.95, -0.1, 0.65], rc: [0.25, 0.45], p: [3, 2.6],
+        shoulder: 0.13, tumble: 0.24, crown: [0.03, 0.02, 0.02], glass: [-1.15, 0.6], pillars: [[-0.75, 0.06]], trim: 'chrome',
+        doors: [0.6, -0.55], head: { y: [-0.12, -0.05], x: 0.5, d: 0.3 }, grille: { y: [0.55, -0.08], x: 0.5, d: 0.16 },
+        intake: { y: [0.25, 0.4], x: 0.85, d: 0.12 }, tail: { y: [-0.12, -0.04], x: 0.25, d: 0.2, rev: [0.25, 0.32] }, diffuser: 0.4, plate: [0.4, 0.58]
+      } },
+    // Chevrolet Corvette Z06 (C8, 2023): the mid-engined Corvette, a flat-plane V8 of 670 hp, four pipes in the middle
+    { id: 'z06', name: 'Corvette Z06', kind: 'Superbil', def: 'Corvetten', sport: true, group: 'super', rearEngine: true, W: 2.03, L: 4.685, R: 0.36, wb: 2.722, max: 87, zero: [100, 2.6], brake: 38, rev: 10, mass: 1.6, grip: 1.25,
+      colors: [0xc8102e, 0xf2c80f, 0xeeeeea, 0x111316, 0x1f4fae], gears: 8, idle: 900, red: 8600, eng: 'v8flat', rim: 'black',
+      shape: {
+        sill: [[-2.34, 0.4], [-2.13, 0.25], [-1.8, 0.2], [1.8, 0.2], [2.1, 0.21], [2.34, 0.26]],
+        belt: [[-2.34, 0.9], [-2.15, 0.98], [-1.25, 0.98], [-0.35, 0.88], [0.5, 0.76], [1.3, 0.65], [1.95, 0.52], [2.34, 0.36]],
+        roof: [[-0.7, 1.17], [-0.35, 1.21], [-0.08, 1.21]], cab: [-1.7, -0.7, -0.08, 1.0], rc: [0.22, 0.5], p: [3.5, 2.3],
+        shoulder: 0.14, tumble: 0.27, crown: [0.02, -0.01, 0.02], glass: [-0.65, 0.95], trim: 'gloss', rearCol: 'gloss',
+        doors: [0.95, -0.45], head: { y: [-0.08, -0.03], x: 0.5, d: 0.35 }, intake: { y: [0.22, 0.4], x: 0.95, d: 0.2 },
+        sideIntake: { z: [-1.1, -0.5], y: [0.42, 0.78] }, tail: { y: [-0.11, -0.04], x: 0.3, d: 0.22, rev: [0.3, 0.38] }, diffuser: 0.45, wing: true,
+        pipes: [[-0.28, 0.42], [-0.16, 0.42], [0.16, 0.42], [0.28, 0.42]], plate: [0.3, 0.55]
+      } },
+    // Pagani Huayra, my first own pick: the hand-built hypercar with an AMG twin-turbo V12, gullwing doors, round curves, and four pipes in a
+    // cluster in the middle of the tail
+    { id: 'huayra', name: 'Pagani Huayra', kind: 'Hyperbil', def: 'Huayran', sport: true, group: 'super', rearEngine: true, W: 2.04, L: 4.605, R: 0.36, wb: 2.795, max: 106, zero: [100, 3.0], brake: 40, rev: 10, mass: 1.35, grip: 1.3,
+      colors: [0x2b2e33, 0x1d4fd8, 0xb5b8bb, 0xf2f2ee, 0x8a1b1b], gears: 7, idle: 900, red: 6500, eng: 'v12t', rim: 'sport',
+      shape: {
+        sill: [[-2.3, 0.38], [-2.1, 0.24], [-1.8, 0.19], [1.8, 0.19], [2.08, 0.21], [2.3, 0.26]],
+        belt: [[-2.3, 0.88], [-2.1, 0.96], [-1.2, 0.97], [-0.4, 0.88], [0.4, 0.76], [1.2, 0.64], [1.85, 0.52], [2.3, 0.36]],
+        roof: [[-0.75, 1.12], [-0.4, 1.15], [-0.1, 1.15]], cab: [-1.75, -0.75, -0.1, 1.0], rc: [0.3, 0.6], p: [2.6, 1.9], bulge: 0.08,
+        shoulder: 0.16, tumble: 0.3, crown: [0.02, -0.01, 0.02], glass: [-0.7, 0.95], trim: 'chrome', rearCol: 'gloss',
+        doors: [0.95, -0.45], head: { y: [-0.07, -0.02], x: 0.5, d: 0.4 }, intake: { y: [0.22, 0.38], x: 0.9, d: 0.2 },
+        sideIntake: { z: [-1.1, -0.6], y: [0.45, 0.75] }, lamps: [{ type: 'tailRound', xs: [0.75], y: 0.72, r: 0.06 }], tail: { y: [-0.1, -0.05], x: 2, d: 0.2 },
+        diffuser: 0.5, pipes: [[-0.07, 0.58], [0.07, 0.58], [-0.07, 0.7], [0.07, 0.7]], plate: [0.3, 0.45]
+      } },
+    // The classics. Lamborghini Countach (LP5000 QV): the wedge off every bedroom wall of the 1980s, its lamps hidden,
+    // the NACA ducts in its flanks, the slatted engine cover and the big wing
+    { id: 'countach', name: 'Lamborghini Countach', kind: 'Klassiker', def: 'Countachen', sport: true, classic: true, group: 'classic', rearEngine: true, W: 2.0, L: 4.14, R: 0.34, wb: 2.45, max: 82, zero: [100, 4.9], brake: 32, rev: 9, mass: 1.45, grip: 1.12,
+      colors: [0xc8102e, 0xf2f2ee, 0x111316, 0xf2c80f], gears: 5, idle: 950, red: 7600, eng: 'v12', rim: 'sport',
+      shape: {
+        sill: [[-2.07, 0.4], [-1.87, 0.25], [-1.55, 0.2], [1.55, 0.2], [1.85, 0.21], [2.07, 0.24]],
+        belt: [[-2.07, 0.86], [-1.9, 0.94], [-1.0, 0.94], [-0.4, 0.86], [0.4, 0.72], [1.2, 0.58], [1.8, 0.47], [2.07, 0.38]],
+        roof: [[-0.65, 1.03], [-0.35, 1.05], [-0.15, 1.05]], cab: [-1.2, -0.65, -0.15, 1.05], rc: [0.12, 0.22], p: [5, 4],
+        shoulder: 0.16, tumble: 0.32, crown: [0.01, 0.0, 0.01], glass: [-0.6, 1.0], trim: 'gloss', rearCol: 'under',
+        doors: [1.0, -0.4], head: { y: [-0.1, -0.06], x: 0.55, d: 0.15 }, intake: { y: [0.22, 0.32], x: 0.7, d: 0.12 },
+        sideIntake: { z: [-0.55, -0.1], y: [0.5, 0.84] }, tail: { y: [-0.22, -0.08], x: 0.3, d: 0.18, rev: [0.3, 0.4] },
+        louvre: { z: [-1.95, -1.3], x: 0.6 }, wing: { h: 0.3, z: 0.3, chord: 0.4 }, plate: [0.3, 0.45]
+      } },
+    // Porsche 911 Carrera RS 2.7 (1973): the lightweight 911 with the ducktail on its engine lid, upright round lamps on
+    // its wings, Carrera down its sides, five-spoke Fuchs wheels
+    { id: 'rs27', name: 'Porsche 911 Carrera RS 2.7', kind: 'Klassiker', def: 'Carrera RS:en', sport: true, classic: true, group: 'classic', rearEngine: true, W: 1.652, L: 4.147, R: 0.31, wb: 2.271, max: 68, zero: [100, 5.8], brake: 26, rev: 9, mass: 0.98, grip: 1.02,
+      colors: [0xf2f0e6, 0xf2c80f, 0xf06a14, 0xc8102e], gears: 5, idle: 900, red: 7300, eng: 'flat6', rim: 'f40',
+      shape: {
+        sill: [[-2.07, 0.4], [-1.85, 0.29], [-1.5, 0.26], [1.4, 0.26], [1.8, 0.28], [2.07, 0.34]],
+        belt: [[-2.07, 0.84], [-1.98, 0.95], [-1.86, 0.92], [-1.55, 0.96], [-0.6, 0.93], [0.4, 0.86], [1.2, 0.78], [1.7, 0.7], [2.07, 0.52]],
+        roof: [[-0.8, 1.27], [-0.4, 1.31], [0.0, 1.31]], cab: [-1.55, -0.8, 0.0, 0.88], rc: [0.32, 0.5], p: [2.4, 2.2],
+        shoulder: 0.12, tumble: 0.24, crown: [0.04, -0.05, 0.03], glass: [-1.15, 0.85], pillars: [[-0.45, 0.06]], trim: 'chrome',
+        doors: [0.85, -0.5], tail: { y: [-0.12, -0.04], x: 0.35, d: 0.15 }, sideStripe: { y: [0.3, 0.38], z: [-1.2, 0.95], col: 0xc8102e },
+        bumper: { y: [0.4, 0.42], col: 'gloss' }, lamps: [{ type: 'round', x: 0.55, z: 1.72, r: 0.09, tilt: 1.05 }], plate: [0.36, 0.45]
+      } },
+    // Jaguar E-Type (Series 1 coupé, 1961): the one Enzo Ferrari called the most beautiful car in the world; the endless
+    // bonnet, the lamps under glass covers, a little oval mouth, thin chrome bumpers and wire wheels
+    { id: 'etype', name: 'Jaguar E-Type', kind: 'Klassiker', def: 'E-Typen', sport: true, classic: true, group: 'classic', W: 1.657, L: 4.453, R: 0.33, wb: 2.438, max: 67, zero: [100, 7.1], brake: 24, rev: 8, mass: 1.25, grip: 0.98,
+      colors: [0x1f4a37, 0xa31919, 0x8fa3b5, 0xe8dfc6, 0x111316], gears: 4, idle: 750, red: 5500, eng: 'i6', rim: 'wire',
+      shape: {
+        sill: [[-2.2265, 0.36], [-2.0, 0.27], [-1.65, 0.24], [1.65, 0.24], [2.0, 0.26], [2.2265, 0.34]],
+        belt: [[-2.2265, 0.66], [-2.1, 0.74], [-1.8, 0.8], [-1.2, 0.84], [-0.6, 0.84], [0.2, 0.83], [1.0, 0.81], [1.7, 0.74], [2.1, 0.62], [2.2265, 0.52]],
+        roof: [[-1.0, 1.16], [-0.6, 1.21], [-0.3, 1.21]], cab: [-1.95, -1.0, -0.3, 0.18], rc: [0.4, 0.45], p: [2.0, 1.8], bulge: 0.08,
+        shoulder: 0.14, tumble: 0.25, crown: [0.04, 0.06, 0.03], glass: [-1.05, 0.15], trim: 'chrome',
+        doors: [0.15, -0.85], grille: { y: [0.36, 0.5], x: 0.3, d: 0.1 }, tail: { y: [-0.1, -0.04], x: 0.55, d: 0.12 },
+        bumper: { y: [0.4, 0.44], col: 'chrome', w: 0.7 }, lamps: [{ type: 'round', x: 0.5, z: 1.92, r: 0.09, tilt: 0.55 }], plate: [0.42, 0.48]
+      } },
+    // Shelby Cobra 427 (1965): a 7-litre Ford V8 in the little AC roadster from England, open, wide hips, side pipes, the
+    // round lamps either side of its oval mouth and stripes over the top
+    { id: 'cobra', name: 'Shelby Cobra 427', kind: 'Klassisk roadster', def: 'Cobran', sport: true, classic: true, group: 'classic', W: 1.73, L: 3.96, R: 0.34, wb: 2.286, max: 74, zero: [100, 4.2], brake: 26, rev: 8, mass: 1.05, grip: 1.0,
+      colors: [0x1f3d8f, 0x111316, 0xc8102e, 0xb5b8bb], gears: 4, idle: 800, red: 6500, eng: 'v8', rim: 'alloy',
+      shape: {
+        sill: [[-1.98, 0.32], [-1.75, 0.24], [-1.4, 0.22], [1.4, 0.22], [1.75, 0.24], [1.98, 0.3]],
+        belt: [[-1.98, 0.72], [-1.82, 0.82], [-1.5, 0.9], [-1.1, 0.92], [-0.7, 0.88], [0.0, 0.86], [0.7, 0.86], [1.25, 0.88], [1.7, 0.8], [1.98, 0.62]],
+        roof: [[-1.0, 0.95], [0.3, 0.95]], cab: [-1.15, -1.0, 0.25, 0.45], rc: [0.45, 0.5], p: [1.9, 1.8], bulge: 0.1, open: { z: [-1.15, 0.45], screen: 0.3 },
+        shoulder: 0.12, tumble: 0.2, crown: [0.04, 0.05, 0.03], glass: [-1.1, 0.4], trim: 'chrome',
+        doors: [0.4, -0.55], grille: { y: [0.28, 0.48], x: 0.36, d: 0.1 }, tail: { y: [-0.12, -0.05], x: 0.45, d: 0.12 },
+        lamps: [{ type: 'face', x: 0.55, y: 0.62, r: 0.085, ring: 'chrome', ind: true }], stripes: [0.09, 0.22], sidePipes: true,
+        bumper: { y: [0.3, 0.32], col: 'chrome', w: 0.6 }, plate: [0.32, 0.4]
+      } },
+    // Ford GT40 (1966): built to beat Ferrari at Le Mans, and it did; barely a metre tall, the doors cut into the roof
+    { id: 'gt40', name: 'Ford GT40', kind: 'Klassiker', def: 'GT40:n', sport: true, classic: true, group: 'classic', rearEngine: true, W: 1.78, L: 4.18, R: 0.34, wb: 2.42, max: 89, zero: [100, 4.2], brake: 30, rev: 9, mass: 1.0, grip: 1.1,
+      colors: [0x8fc3e6, 0x1f3d8f, 0xc8102e, 0x111316], gears: 5, idle: 900, red: 6500, eng: 'v8', rim: 'sport',
+      shape: {
+        sill: [[-2.09, 0.36], [-1.9, 0.24], [-1.55, 0.2], [1.5, 0.2], [1.85, 0.21], [2.09, 0.26]],
+        belt: [[-2.09, 0.78], [-1.9, 0.86], [-1.0, 0.86], [-0.35, 0.8], [0.4, 0.72], [1.1, 0.64], [1.7, 0.56], [2.09, 0.42]],
+        roof: [[-0.55, 0.98], [-0.25, 1.01], [0.0, 1.01]], cab: [-1.35, -0.55, 0.0, 0.95], rc: [0.2, 0.55], p: [3.5, 2.0],
+        shoulder: 0.18, tumble: 0.32, crown: [0.02, 0.01, 0.015], glass: [-0.4, 0.9], trim: 'gloss', rearCol: 'under',
+        doors: [0.9, -0.35], intake: { y: [0.25, 0.36], x: 0.6, d: 0.1 }, tail: { y: [-0.16, -0.06], x: 0.45, d: 0.12 },
+        lamps: [{ type: 'round', x: 0.62, z: 1.62, r: 0.085, tilt: 0.45 }], stripes: [0.12, 0.26], stripeCol: { [0x8fc3e6]: 0xf06a14 }, plate: [0.32, 0.42]
+      } },
+    // Volvo P1800 (1961), my second own pick: the Swedish sports coupé that The Saint drove, round lamps in chrome rings, the
+    // egg-crate grille with the iron mark, little fins at the back and chrome bumpers
+    { id: 'p1800', name: 'Volvo P1800', kind: 'Klassiker', def: 'P1800:an', sport: true, classic: true, group: 'classic', W: 1.7, L: 4.35, R: 0.31, wb: 2.45, max: 51, zero: [100, 10.5], brake: 22, rev: 8, mass: 1.12, grip: 0.95,
+      colors: [0xeeeeea, 0xa31919, 0x1c2a44, 0xe8dfc6, 0x111316], gears: 4, idle: 750, red: 6000, eng: 'i4', rim: 'alloy',
+      shape: {
+        sill: [[-2.175, 0.4], [-1.95, 0.3], [-1.6, 0.27], [1.6, 0.27], [1.95, 0.29], [2.175, 0.36]],
+        belt: [[-2.175, 0.8], [-2.05, 0.88], [-1.7, 0.92], [-1.2, 0.9], [-0.4, 0.86], [0.4, 0.85], [1.2, 0.84], [1.8, 0.79], [2.175, 0.68]],
+        roof: [[-0.85, 1.24], [-0.45, 1.27], [-0.05, 1.27]], cab: [-1.45, -0.85, -0.05, 0.6], rc: [0.3, 0.4], p: [2.4, 2.4],
+        shoulder: 0.12, tumble: 0.2, crown: [0.04, 0.05, 0.03], glass: [-1.0, 0.55], pillars: [[-0.55, 0.05]], trim: 'chrome',
+        doors: [0.55, -0.6], grille: { y: [0.42, 0.56], x: 0.45, d: 0.1 }, iron: true, tail: { y: [-0.12, -0.04], x: 0.45, d: 0.12 },
+        lamps: [{ type: 'face', x: 0.6, y: 0.62, r: 0.085, ring: 'chrome', ind: true }], bumper: { y: [0.38, 0.4], col: 'chrome' }, plate: [0.3, 0.45]
+      } },
+    // The compact sports cars. Mazda MX-5 (ND): the world's best-selling two-seater, here with the roof down
+    { id: 'mx5', name: 'Mazda MX-5', kind: 'Roadster', def: 'MX-5:an', sport: true, W: 1.735, L: 3.915, R: 0.32, wb: 2.31, max: 61, zero: [100, 6.5], brake: 28, rev: 9, mass: 1.05, grip: 1.08,
+      colors: [0xa1131d, 0xeeeeea, 0x5b6066, 0x1f4f8f, 0x111316], gears: 6, idle: 750, red: 7500, eng: 'i4', rim: 'sport',
+      shape: {
+        sill: [[-1.9575, 0.38], [-1.75, 0.28], [-1.4, 0.25], [1.35, 0.25], [1.7, 0.27], [1.9575, 0.33]],
+        belt: [[-1.9575, 0.78], [-1.82, 0.86], [-1.45, 0.88], [-1.0, 0.86], [-0.5, 0.84], [0.3, 0.82], [1.0, 0.78], [1.6, 0.7], [1.9575, 0.56]],
+        roof: [[-0.8, 0.9], [0.2, 0.9]], cab: [-0.85, -0.8, 0.15, 0.35], rc: [0.35, 0.45], p: [2.4, 2.0], open: { z: [-0.85, 0.35], screen: 0.32, hoop: true },
+        shoulder: 0.12, tumble: 0.2, crown: [0.03, 0.03, 0.02], glass: [-0.8, 0.3], trim: 'gloss',
+        doors: [0.3, -0.75], head: { y: [-0.09, -0.03], x: 0.5, d: 0.3 }, grille: { y: [0.32, 0.46], x: 0.42, d: 0.12 },
+        tail: { y: [-0.09, -0.04], x: 0.45, d: 0.2, rev: [0.45, 0.52] }, plate: [0.36, 0.42]
+      } },
+    // Toyota GR Supra (A90): the Japanese legend back, a BMW straight six, a ducktail and a double-bubble roof
+    { id: 'supra', name: 'Toyota GR Supra', kind: 'Sportcoupé', def: 'Supran', sport: true, W: 1.854, L: 4.379, R: 0.355, wb: 2.47, max: 70, zero: [100, 4.3], brake: 32, rev: 9, mass: 1.5, grip: 1.12,
+      colors: [0xc8102e, 0xeeeeea, 0xf2c80f, 0x111316, 0x5b6066], gears: 8, idle: 750, red: 6500, eng: 'i6', rim: 'black',
+      shape: {
+        sill: [[-2.19, 0.42], [-1.98, 0.28], [-1.65, 0.24], [1.6, 0.24], [1.95, 0.26], [2.19, 0.32]],
+        belt: [[-2.19, 0.86], [-2.08, 0.96], [-1.85, 0.98], [-1.3, 0.94], [-0.4, 0.9], [0.4, 0.84], [1.2, 0.76], [1.8, 0.66], [2.19, 0.5]],
+        roof: [[-0.75, 1.24], [-0.4, 1.28], [-0.05, 1.28]], cab: [-1.45, -0.75, -0.05, 0.75], rc: [0.3, 0.5], p: [2.8, 2.2],
+        shoulder: 0.15, tumble: 0.26, crown: [0.03, -0.02, 0.02], glass: [-1.0, 0.72], trim: 'gloss',
+        doors: [0.72, -0.5], head: { y: [-0.1, -0.03], x: 0.5, d: 0.32 }, intake: { y: [0.24, 0.42], x: 0.75, d: 0.18 },
+        tail: { y: [-0.1, -0.04], x: 0.45, d: 0.2, rev: [0.45, 0.52] }, diffuser: 0.42, plate: [0.32, 0.5]
+      } },
+    // Alpine A110 (2017): the light little Frenchman with its engine behind the seats, four round lamps in its nose
+    { id: 'a110', name: 'Alpine A110', kind: 'Sportbil', def: 'Alpinen', sport: true, rearEngine: true, W: 1.798, L: 4.18, R: 0.33, wb: 2.42, max: 70, zero: [100, 4.5], brake: 32, rev: 9, mass: 1.1, grip: 1.15,
+      colors: [0x1f5fb0, 0xeeeeea, 0x111316, 0xf06a14], gears: 7, idle: 800, red: 6800, eng: 'i4t', rim: 'sport',
+      shape: {
+        sill: [[-2.09, 0.4], [-1.88, 0.27], [-1.55, 0.24], [1.5, 0.24], [1.85, 0.26], [2.09, 0.33]],
+        belt: [[-2.09, 0.82], [-1.95, 0.9], [-1.5, 0.93], [-0.8, 0.9], [0.0, 0.84], [0.8, 0.78], [1.5, 0.7], [1.9, 0.6], [2.09, 0.5]],
+        roof: [[-0.6, 1.21], [-0.3, 1.25], [0.0, 1.25]], cab: [-1.4, -0.6, 0.0, 0.85], rc: [0.3, 0.55], p: [2.6, 2.0],
+        shoulder: 0.15, tumble: 0.27, crown: [0.03, 0.0, 0.02], glass: [-0.65, 0.82], trim: 'gloss',
+        doors: [0.82, -0.45], intake: { y: [0.25, 0.4], x: 0.6, d: 0.15 }, tail: { y: [-0.12, -0.04], x: 0.4, d: 0.2, rev: [0.4, 0.48] }, diffuser: 0.4,
+        lamps: [{ type: 'face', x: 0.6, y: 0.6, r: 0.085, ring: 'gloss', ind: true }, { type: 'face', x: 0.36, y: 0.5, r: 0.055, ring: 'gloss', noInd: true }], plate: [0.3, 0.5]
+      } },
+    // BMW M4 (G82): the 510-horsepower coupé, the tall kidney grille, a carbon roof
+    { id: 'm4', name: 'BMW M4', kind: 'Sportcoupé', def: 'M4:an', sport: true, W: 1.887, L: 4.794, R: 0.36, wb: 2.857, max: 81, zero: [100, 3.9], brake: 34, rev: 9, mass: 1.75, grip: 1.15,
+      colors: [0x1f6b44, 0xe8c700, 0xb3121b, 0xeeeeea, 0x111316], gears: 8, idle: 750, red: 7200, eng: 'i6', rim: 'black',
+      shape: {
+        sill: [[-2.397, 0.44], [-2.17, 0.31], [-1.85, 0.27], [1.85, 0.27], [2.15, 0.29], [2.397, 0.36]],
+        belt: [[-2.397, 0.9], [-2.3, 0.98], [-2.0, 1.0], [-0.5, 0.97], [0.6, 0.94], [1.5, 0.88], [2.05, 0.79], [2.397, 0.66]],
+        roof: [[-0.95, 1.34], [-0.4, 1.38], [0.15, 1.38]], cab: [-1.8, -0.95, 0.15, 0.95], rc: [0.22, 0.42], p: [3.4, 2.8],
+        shoulder: 0.12, tumble: 0.2, crown: [0.03, 0.03, 0.025], glass: [-1.4, 0.92], pillars: [[-0.15, 0.1]], trim: 'gloss', roofTone: 0x15171a,
+        doors: [0.92, -0.4], head: { y: [-0.12, -0.05], x: 0.5, d: 0.3 }, intake: { y: [0.28, 0.42], x: 0.85, d: 0.15 },
+        kidney: { x0: 0.04, x1: 0.3, y0: 0.4, y1: 0.78 }, tail: { y: [-0.13, -0.04], x: 0.35, d: 0.25, rev: [0.35, 0.42] }, diffuser: 0.42,
+        pipes: [[-0.62, 0.36], [-0.5, 0.36], [0.5, 0.36], [0.62, 0.36]], plate: [0.34, 0.55]
+      } },
+    // Nissan GT-R (R35), "Godzilla": the twin-turbo V6 and four-wheel drive that beat far dearer cars, four round tail
+    // lamps and a wing on the boot
+    { id: 'gtr', name: 'Nissan GT-R', kind: 'Sportcoupé', def: 'GT-R:en', sport: true, W: 1.895, L: 4.71, R: 0.36, wb: 2.78, max: 87, zero: [100, 2.8], brake: 36, rev: 9, mass: 1.75, grip: 1.25,
+      colors: [0xb5b8bb, 0xeeeeea, 0x111316, 0xf06a14, 0x1f4fae], gears: 6, idle: 800, red: 7100, eng: 'v6', rim: 'black',
+      shape: {
+        sill: [[-2.355, 0.44], [-2.13, 0.3], [-1.8, 0.27], [1.8, 0.27], [2.1, 0.29], [2.355, 0.35]],
+        belt: [[-2.355, 0.92], [-2.25, 1.0], [-1.95, 1.01], [-0.6, 0.98], [0.5, 0.93], [1.4, 0.86], [2.0, 0.76], [2.355, 0.6]],
+        roof: [[-0.95, 1.31], [-0.45, 1.36], [0.1, 1.36]], cab: [-1.7, -0.95, 0.1, 0.9], rc: [0.22, 0.42], p: [3.6, 2.6],
+        shoulder: 0.13, tumble: 0.2, crown: [0.03, 0.02, 0.025], glass: [-1.3, 0.88], pillars: [[-0.3, 0.12]], trim: 'gloss',
+        doors: [0.88, -0.45], head: { y: [-0.12, -0.04], x: 0.5, d: 0.32 }, grille: { y: [0.38, 0.6], x: 0.4, d: 0.15 },
+        intake: { y: [0.25, 0.38], x: 0.85, d: 0.15 }, lamps: [{ type: 'tailRound', xs: [0.5, 0.72], y: 0.86, r: 0.08 }], tail: { y: [-0.1, -0.04], x: 2, d: 0.2 },
+        diffuser: 0.42, wing: { h: 0.2, z: 0.3 }, plate: [0.36, 0.5]
+      } },
+    // Lotus Elise (S2): "simplify, then add lightness", 860 kg, the engine behind the seats, the roof off and a hoop
+    { id: 'elise', name: 'Lotus Elise', kind: 'Roadster', def: 'Elisen', sport: true, rearEngine: true, W: 1.719, L: 3.785, R: 0.31, wb: 2.3, max: 65, zero: [100, 4.6], brake: 32, rev: 9, mass: 0.9, grip: 1.18,
+      colors: [0xf2c80f, 0x1f6b44, 0xeeeeea, 0x111316, 0xf06a14], gears: 6, idle: 900, red: 7800, eng: 'i4', rim: 'sport',
+      shape: {
+        sill: [[-1.8925, 0.36], [-1.7, 0.24], [-1.4, 0.2], [1.35, 0.2], [1.68, 0.22], [1.8925, 0.28]],
+        belt: [[-1.8925, 0.76], [-1.75, 0.85], [-1.3, 0.86], [-0.85, 0.82], [-0.3, 0.78], [0.4, 0.74], [1.0, 0.68], [1.55, 0.6], [1.8925, 0.48]],
+        roof: [[-0.7, 0.8], [0.3, 0.8]], cab: [-0.75, -0.7, 0.25, 0.45], rc: [0.3, 0.55], p: [2.4, 1.9], open: { z: [-0.75, 0.45], screen: 0.3, hoop: true },
+        shoulder: 0.12, tumble: 0.22, crown: [0.02, 0.02, 0.02], glass: [-0.7, 0.4], trim: 'gloss',
+        doors: [0.4, -0.55], head: { y: [-0.08, -0.02], x: 0.45, d: 0.32 }, intake: { y: [0.22, 0.34], x: 0.55, d: 0.12 },
+        sideIntake: { z: [-0.95, -0.6], y: [0.36, 0.6] }, lamps: [{ type: 'tailRound', xs: [0.48, 0.65], y: 0.66, r: 0.06 }], tail: { y: [-0.1, -0.05], x: 2, d: 0.2 },
+        diffuser: 0.36, plate: [0.3, 0.45]
       } },
     // Gilera Stalker (2003): the naked 50 cc scooter in grey, its frame tube out in the open, twin headlamps under a
     // little screen and the exhaust curling up on the right. A two-stroke with a variator, 45 km/h like every class I
@@ -5164,17 +5414,30 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       shape: Object.assign({}, S, { glass: [-2.75, 2.18], pillars: [[0.62, 0.12], [-0.62, 0.1], [-1.82, 0.1]], glassLevels: [1.45, 2.05], doors: [2.18, 0.62, -0.62],
         livery: { rows: [0.62, 0.88, 1.12], z: [-2.85, 2.55], block: 0.5 }, police: true, rearWin: { d: 0.1, y: [1.45, 2.05], x: [0.08, 0.86] } }) });
   }
+  const MODEL_JET_HULL = [[-1.63, 0.56, -0.2, 0.36], [-1.2, 0.62, -0.28, 0.4], [-0.3, 0.635, -0.32, 0.44], [0.5, 0.6, -0.3, 0.48], [1.1, 0.47, -0.2, 0.5], [1.45, 0.28, -0.05, 0.48], [1.63, 0.06, 0.12, 0.42]];
   // On the water: the Sea-Doo RXP-X jet ski (supercharged three-cylinder, 300 hp, 108 km/h), an Anytec 622 SPD, the
   // aluminium boat from Kristinehamn that half of Stockholm drives, with a 250 hp V8 outboard, and the Riva Aquarama,
   // the varnished mahogany runabout with two V8s. They are driven like the cars, stay on the water and go under the
   // bridges, and are boarded from a quay. (Their shapes are their own: see boatGeometry)
   MODELS.push(
-    { id: 'jetski', name: 'Sea-Doo RXP-X', kind: 'Vattenskoter', def: 'vattenskotern', boat: 'jetski', engine: 'Kompressor, 300 hk', hull: [[-1.63, 0.56, -0.2, 0.36], [-1.2, 0.62, -0.28, 0.4], [-0.3, 0.635, -0.32, 0.44], [0.5, 0.6, -0.3, 0.48], [1.1, 0.47, -0.2, 0.5], [1.45, 0.28, -0.05, 0.48], [1.63, 0.06, 0.12, 0.42]], W: 1.27, L: 3.27, R: 0.3, wb: 2, max: 30, zero: [50, 2.4], brake: 7, rev: 3, mass: 0.45, grip: 1,
+    { id: 'jetski', name: 'Sea-Doo RXP-X', kind: 'Vattenskoter', def: 'vattenskotern', boat: 'jetski', engine: 'Kompressor, 300 hk', hull: MODEL_JET_HULL, W: 1.27, L: 3.27, R: 0.3, wb: 2, max: 30, zero: [50, 2.4], brake: 7, rev: 3, mass: 0.45, grip: 1,
       colors: [0xf2c200, 0x1d1f22, 0xe8e8e4, 0xd8203a, 0x1f6bd8], gears: 1, idle: 1500, red: 8000, eng: 'jetski', shape: {} },
     { id: 'anytec', name: 'Anytec 622 SPD', kind: 'Motorbåt', def: 'Anytec-båten', boat: 'console', engine: 'Utombordare, 250 hk', hull: [[-3.11, 1.1, -0.36, 0.7], [-2.2, 1.17, -0.42, 0.72], [-0.6, 1.175, -0.46, 0.76], [0.9, 1.12, -0.45, 0.82], [2.0, 0.86, -0.32, 0.9], [2.7, 0.5, -0.1, 0.96], [3.11, 0.06, 0.24, 0.98]], W: 2.35, L: 6.22, R: 0.3, wb: 4, max: 24, zero: [50, 4.6], brake: 4.5, rev: 3, mass: 1.6, grip: 1,
       colors: [0x8d9297, 0x2a2d31, 0xe8e8e4], gears: 1, idle: 700, red: 6000, eng: 'outboard', shape: {} },
     { id: 'riva', name: 'Riva Aquarama', kind: 'Motorbåt', def: 'Rivan', boat: 'riva', engine: 'Två V8, 2 × 350 hk', hull: [[-4.01, 1.15, -0.32, 0.6], [-3.0, 1.27, -0.4, 0.64], [-1.0, 1.3, -0.48, 0.7], [1.0, 1.22, -0.48, 0.76], [2.5, 0.92, -0.33, 0.82], [3.5, 0.5, -0.08, 0.84], [4.01, 0.06, 0.24, 0.8]], W: 2.6, L: 8.02, R: 0.3, wb: 5, max: 22, zero: [50, 5.8], brake: 3.5, rev: 2.5, mass: 2.4, grip: 1,
       colors: [0x7a3b1c], gears: 1, idle: 650, red: 4800, eng: 'v8', shape: {} }
+  );
+  // The sjöpolis, out after you when you run from the police on the water: a white patrol boat with a wheelhouse, the blue
+  // and yellow checks down its sides and blue lights on the roof, and a Sea-Doo in the same colours. At five stars the
+  // navy sends Stridsbåt 90 (CB90), the 16-metre combat boat on two water jets with a heavy machine gun on its wheelhouse.
+  // Not in the car picker, and they can't be taken. (Their shapes are in boatGeometry)
+  MODELS.push(
+    { id: 'polisbat', name: 'Polisbåt', kind: 'Targa 31', def: 'polisbåten', boat: 'patrol', police: true, engine: 'Två dieslar, 2 × 370 hk', hull: [[-4.7, 1.45, -0.45, 0.95], [-3.4, 1.5, -0.55, 0.98], [-1.0, 1.5, -0.6, 1.03], [1.4, 1.44, -0.58, 1.1], [3.0, 1.12, -0.42, 1.2], [4.1, 0.66, -0.14, 1.28], [4.7, 0.08, 0.3, 1.3]], W: 3.0, L: 9.4, R: 0.3, wb: 6, max: 23, zero: [50, 6], brake: 4.5, rev: 3, mass: 5, grip: 1,
+      colors: [0xf4f5f2], gears: 1, idle: 650, red: 3800, eng: 'outboard', shape: {} },
+    { id: 'polisjet', name: 'Polisens vattenskoter', kind: 'Sea-Doo GTX', def: 'polisvattenskotern', boat: 'jetski', police: true, engine: 'Kompressor, 300 hk', hull: MODEL_JET_HULL, W: 1.27, L: 3.27, R: 0.3, wb: 2, max: 29, zero: [50, 2.6], brake: 7, rev: 3, mass: 0.5, grip: 1,
+      colors: [0xf4f5f2], gears: 1, idle: 1500, red: 8000, eng: 'jetski', shape: {} },
+    { id: 'strb90', name: 'Stridsbåt 90', kind: 'Stridsbåt 90 H', def: 'stridsbåten', boat: 'cb90', mil: 'boat', engine: 'Två dieslar med vattenjet, 2 × 625 hk', hull: [[-7.95, 1.85, -0.55, 1.25], [-6.0, 1.9, -0.65, 1.3], [-2.0, 1.9, -0.72, 1.33], [2.0, 1.88, -0.7, 1.36], [5.0, 1.62, -0.52, 1.42], [6.9, 1.2, -0.22, 1.5], [7.95, 0.72, 0.28, 1.55]], W: 3.8, L: 15.9, R: 0.3, wb: 10, max: 20.5, zero: [50, 9], brake: 5, rev: 3, mass: 20, grip: 1.1,
+      colors: [0x5b6b45], gears: 1, idle: 600, red: 2300, eng: 'bus', shape: {} }
   );
   // Försvarsmakten, called in at five stars: Stridsvagn 122 (the Swedish Leopard 2A5, 62 tonnes, 72 km/h, the arrowhead
   // armour on the turret and the long 120 mm gun), Pansarterrängbil 360 (Patria AMV, eight wheels, a remote weapon
@@ -5448,8 +5711,9 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       for (const az of [wz, -wz]) { const dz = z - az; if (Math.abs(dz) < rA) y = Math.max(y, cA + Math.sqrt(rA * rA - dz * dz)); }
       return Math.min(y, belt(z) - 0.075);
     };
+    // (an open car, a roadster, has no glasshouse: the body runs at the waist line all along, open over the cockpit)
     const topAt = (z) => {
-      if (z < r0 - 1e-6 || z > r3 + 1e-6) return belt(z);
+      if (S.open || z < r0 - 1e-6 || z > r3 + 1e-6) return belt(z);
       let t;
       if (z < r1) t = lerp(belt(r0), roof(r1), (z - r0) / (r1 - r0));
       else if (z > r2) t = lerp(roof(r2), belt(r3), (z - r2) / (r3 - r2));
@@ -5462,6 +5726,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     for (const k of ['head', 'tail', 'grille', 'intake']) if (S[k]) sideLv.push(...S[k].y);
     if (S.sideIntake) sideLv.push(...S.sideIntake.y);
     if (S.livery) sideLv.push(...S.livery.rows);
+    if (S.sideStripe) sideLv.push(...S.sideStripe.y);
     if (S.cladding) sideLv.push(S.cladding);
     if (S.diffuser) sideLv.push(S.diffuser);
     const glassLv = S.glassLevels || [], topXs = S.stripes ? [S.stripes[1], S.stripes[0]] : [];
@@ -5483,6 +5748,8 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     if (S.rearWin) zs.push(-hl + S.rearWin.d);
     if (S.sign) zs.push(hl - S.sign.d);
     if (S.sideIntake) zs.push(...S.sideIntake.z);
+    if (S.sideStripe) zs.push(...S.sideStripe.z);
+    if (S.open) zs.push(...S.open.z);
     if (S.louvre) zs.push(...S.louvre.z);
     for (const [bz, bw] of S.roofBars || []) zs.push(bz - bw / 2, bz + bw / 2);
     for (const [a, b] of S.busDoors || []) zs.push(a, b, (a + b) / 2 - 0.02, (a + b) / 2 + 0.02);
@@ -5558,6 +5825,8 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
         return (i + (y > S.livery.rows[1] ? 1 : 0)) % 2 ? COL.polBlue : COL.polYellow;
       }
       for (const d of S.doors || []) if (Math.abs(z - d) < 0.009 && y > q.yb + 0.04 && y < yt - 0.03) return q.seam;
+      // a stripe down the side (the 911 RS's Carrera script)
+      if (S.sideStripe && z > S.sideStripe.z[0] && z < S.sideStripe.z[1] && y > S.sideStripe.y[0] && y < S.sideStripe.y[1]) return S.sideStripe.col;
       if (tag === 'ledge' && z > S.glass[0] && z < S.glass[1] && q.h > 0.08) return TRIM[S.trim || 'gloss'];
       return paint;
     }
@@ -5573,8 +5842,8 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       return paint;
     }
     if (tag === 'rail') return q.roofTone !== null && z > sh.r1 && z < sh.r2 ? q.roofTone : paint;
-    // the top: bonnet, windscreen, roof, rear window, boot
-    const zn = sh.zone(z);
+    // the top: bonnet, windscreen, roof, rear window, boot (an open car has none of the glass; see its windscreen)
+    const zn = S.open ? 'hood' : sh.zone(z);
     if (zn === 'wind') return CAR_GLASS;
     if (zn === 'back') return S.rearCol ? TRIM[S.rearCol] : CAR_GLASS;
     if (zn === 'roof' && q.roofTone !== null) return q.roofTone;
@@ -5613,7 +5882,10 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     const light = (paint >> 16 & 255) + (paint >> 8 & 255) + (paint & 255) > 560;
     // (a contrasting roof: white over a dark car, black over a light one, or always the colour given)
     const roofTone = M.shape.roofTone === 'contrast' ? (light ? 0x15171a : 0xf2f2ef) : M.shape.roofTone ?? null;
-    const q = { tag: '', z: 0, x: 0, y: 0, yt: 0, yb: 0, h: 0, side: 1, seam: shade(paint, 0.45), stripe: light ? 0x15171a : STRIPE, grilleBody: shade(paint, 0.78), roofTone };
+    // (the racing stripes: black on a light car, white on a dark one, or the colour the model gives for this paint)
+    const stripe = (M.shape.stripeCol && M.shape.stripeCol[paint]) ?? (light ? 0x15171a : STRIPE);
+    const q = { tag: '', z: 0, x: 0, y: 0, yt: 0, yb: 0, h: 0, side: 1, seam: shade(paint, 0.45), stripe, grilleBody: shade(paint, 0.78), roofTone };
+    const open = M.shape.open, cockpit = (tag, z) => open && z > open.z[0] && z < open.z[1] && (tag === 'rail' || tag === 'roof' || tag === 'end');
     const pt = (o) => [P[o], P[o + 1], P[o + 2]], nm = (o) => [NN[o], NN[o + 1], NN[o + 2]];
     const area2 = (a, b, c) => {
       const ux = P[b] - P[a], uy = P[b + 1] - P[a + 1], uz = P[b + 2] - P[a + 2], wx = P[c] - P[a], wy = P[c + 1] - P[a + 1], wz = P[c + 2] - P[a + 2];
@@ -5626,6 +5898,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
         const a0 = vi(i, s), b0 = vi(i, s + 1), b1 = vi(i + 1, s + 1), a1 = vi(i + 1, s);
         const mx = (P[a0] + P[b0] + P[b1] + P[a1]) / 4;
         q.tag = tagOf(s); q.side = s < H - 1 ? 1 : -1; q.x = Math.abs(mx);
+        if (cockpit(q.tag, q.z)) continue;
         q.y = (P[a0 + 1] + P[b0 + 1] + P[b1 + 1] + P[a1 + 1]) / 4;
         const col = bodyColour(sh, q, paint), tgt = col === CAR_GLASS ? gl : mg, cc = col === CAR_GLASS ? 0xffffff : col;
         if (area2(a0, b0, b1) > 1e-7) tgt.triN(pt(a0), pt(b0), pt(b1), nm(a0), nm(b0), nm(b1), cc);
@@ -5803,7 +6076,22 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
   function boatGeometry(M, paint) {
     const mg = new Merger(carSurf(paint)), gl = new Merger(), front = new Merger(carSurf(paint));
     const BLACK = 0x1c1d20, GREY = 0x3a3d41, WHITE = 0xeeeeea, SEAT = 0x16171a;
-    let driver, head = null, rake = 0, frontGeo = null, parts;
+    let driver, head = null, rake = 0, frontGeo = null, parts, flashers = null, decal = null;
+    // the hull's half width and rail height at z, between its stations
+    const hullAt = (z) => {
+      const st = M.hull;
+      let i = 0;
+      while (i < st.length - 2 && z > st[i + 1][0]) i++;
+      const t = clamp((z - st[i][0]) / (st[i + 1][0] - st[i][0]), 0, 1);
+      return { w: lerp(st[i][1], st[i + 1][1], t), top: lerp(st[i][3], st[i + 1][3], t) };
+    };
+    // the police's blue and yellow checks, a row of them down each side just under the rail
+    const checks = (z0, z1, n, h, below) => {
+      for (let i = 0; i < n; i++) {
+        const za = lerp(z0, z1, i / n), zb = lerp(z0, z1, (i + 1) / n), H = hullAt((za + zb) / 2), y = H.top - below - h / 2;
+        for (const s of [1, -1]) mg.box(0.02, h, zb - za, i % 2 ? COL.polYellow : COL.polBlue, s * (H.w + 0.012), y, (za + zb) / 2);
+      }
+    };
     if (M.boat === 'jetski') {
       // Sea-Doo RXP-X: a deep-vee hull in white, the deck and hood in the colour, a black saddle for one, the handlebars
       // on a column in front of it, the jet nozzle under the stern, footwells either side
@@ -5828,6 +6116,15 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       frontGeo = front.build(); frontGeo.applyMatrix4(toHead); frontGeo.computeBoundingSphere();
       driver = { x: 0, y: 0.86, z: -0.48, rider: true };
       parts = [{ cz: 0, hw: M.W / 2, hl: M.L / 2, top: 0.9 }];
+      if (M.police) {
+        // the police's: the checks down the sides, and blue lights on a short mast behind the saddle
+        checks(-1.15, 0.55, 6, 0.1, 0.02);
+        tubeTo(mg, [0, 0.42, -1.42], [0, 1.12, -1.5], 0.022, BLACK);
+        mg.box(0.44, 0.06, 0.1, BLACK, 0, 1.14, -1.5);
+        mg.box(0.18, 0.07, 0.09, COL.blueL, -0.11, 1.2, -1.5);
+        mg.box(0.18, 0.07, 0.09, COL.blueR, 0.11, 1.2, -1.5);
+        flashers = [[-0.11, 1.25, -1.5], [0.11, 1.25, -1.5]];
+      }
     } else if (M.boat === 'console') {
       // Anytec 622 SPD: a grey aluminium deep vee with a black rail, open from bow to stern round a centre console with a
       // screen and a wheel, a leaning post behind it, cushions in the bow, the big black outboard on the transom
@@ -5847,6 +6144,84 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       mg.box(0.5, 0.06, 0.3, BLACK, 0, -0.18, -3.45);
       driver = { x: 0, y: 0.6, z: -0.35 };
       parts = [{ cz: 0, hw: M.W / 2, hl: M.L / 2, top: 1.0 }];
+    } else if (M.boat === 'patrol') {
+      // Polisen's patrol boat: a white deep vee with a dark bottom, the blue and yellow checks down its sides, a wheelhouse
+      // with windows all round and POLIS on its sides, the blue light bar, a radar dome and a searchlight on its roof
+      hullLoft(mg, M.hull, { bottom: 0x2e3338, side: 0x2e3338, rail: paint, inner: 0xdadde0, floor: 0x3a3f44, deck: 0x3a3f44 }, 0.3);
+      checks(-4.2, 3.6, 18, 0.2, 0.08);
+      const z0 = -0.95, z1 = 1.5, zt = 1.12, w = 1.05, top = 2.25;
+      mg.box(2 * w, 0.92, z1 - z0, paint, 0, 0.76, (z0 + z1) / 2);
+      // the frame round the windows: corner posts, the slanted front ones, and the roof
+      for (const sx of [1, -1]) {
+        mg.box(0.08, top - 1.22, 0.08, paint, sx * (w - 0.04), (top + 1.22) / 2, z0 + 0.04);
+        tubeTo(mg, [sx * (w - 0.05), 1.22, z1 - 0.05], [sx * (w - 0.08), top, zt], 0.045, paint);
+        mg.box(0.06, top - 1.22, 0.06, paint, sx * (w - 0.04), (top + 1.22) / 2, (z0 + zt) / 2);
+      }
+      mg.box(2 * w + 0.1, 0.1, zt - z0 + 0.25, paint, 0, top + 0.05, (z0 + zt) / 2 + 0.05);
+      // the windows: down both sides, at the back, and the screen leaning back at the front
+      for (const sx of [1, -1]) gl.box(0.02, top - 1.25, zt - z0 - 0.1, 0xffffff, sx * (w - 0.02), (top + 1.25) / 2, (z0 + zt) / 2);
+      gl.box(2 * w - 0.12, top - 1.3, 0.02, 0xffffff, 0, (top + 1.3) / 2, z0 + 0.02);
+      gl.hexa([[-w + 0.08, 1.22, z1 - 0.06], [w - 0.08, 1.22, z1 - 0.06], [w - 0.08, 1.22, z1 - 0.03], [-w + 0.08, 1.22, z1 - 0.03], [-w + 0.1, top - 0.02, zt - 0.02], [w - 0.1, top - 0.02, zt - 0.02], [w - 0.1, top - 0.02, zt + 0.01], [-w + 0.1, top - 0.02, zt + 0.01]], 0xffffff);
+      // inside: the helm on the right, a seat behind it, a bench for the other constable
+      mg.box(0.7, 0.55, 0.3, GREY, 0.45, 0.85, z1 - 0.35);
+      mg.add(new THREE.TorusGeometry(0.17, 0.022, 6, 18), BLACK, 0.45, 1.25, z1 - 0.52, -0.9, 0, 0);
+      mg.box(0.5, 0.45, 0.5, SEAT, 0.45, 0.52, 0.3);
+      mg.box(0.5, 0.45, 0.5, SEAT, -0.45, 0.52, 0.3);
+      // on the roof: the light bar, the radar dome, the searchlight and the aerials
+      mg.box(1.1, 0.07, 0.3, BLACK, 0, top + 0.13, 0.6);
+      mg.box(0.48, 0.1, 0.26, COL.blueL, -0.3, top + 0.21, 0.6);
+      mg.box(0.48, 0.1, 0.26, COL.blueR, 0.3, top + 0.21, 0.6);
+      flashers = [[-0.3, top + 0.28, 0.6], [0.3, top + 0.28, 0.6]];
+      mg.add(new THREE.CylinderGeometry(0.28, 0.3, 0.2, 18), WHITE, 0, top + 0.2, -0.4);
+      mg.add(new THREE.CylinderGeometry(0.1, 0.1, 0.16, 14), CHROME, 0.75, top + 0.16, 0.9, Math.PI / 2, 0, 0);
+      for (const sx of [0.85, -0.85]) tubeTo(mg, [sx, top + 0.1, -0.7], [sx * 1.05, top + 1.4, -0.85], 0.012, BLACK);
+      // the swim platform across the transom, and the rubbing strake round the hull
+      mg.box(2.6, 0.08, 0.6, 0x3a3f44, 0, 0.32, -M.L / 2 - 0.25);
+      for (const sx of [1, -1]) for (let z = -4.3; z < 3.9; z += 0.6) { const H = hullAt(z + 0.3); mg.box(0.06, 0.06, 0.62, BLACK, sx * (H.w + 0.03), H.top - 0.02, z + 0.3); }
+      // POLIS on both sides of the wheelhouse
+      const db = new Builder(), POL = [[0, 0.5], [1, 0.5], [1, 1], [0, 1]], zf = 1.25, zr = -0.55, y0 = 0.58, y1 = 1.02, X = w + 0.006;
+      db.quad([X, y0, zf], [X, y0, zr], [X, y1, zr], [X, y1, zf], 0xffffff, POL, [1, 0, 0]);
+      db.quad([-X, y0, zr], [-X, y0, zf], [-X, y1, zf], [-X, y1, zr], 0xffffff, POL, [-1, 0, 0]);
+      decal = db.build();
+      driver = { x: 0.45, y: 0.72, z: 0.3 };
+      parts = [{ cz: 0, hw: M.W / 2, hl: M.L / 2, top: top + 0.1 }];
+    } else if (M.boat === 'cb90') {
+      // Stridsbåt 90 H: 16 metres of aluminium on two water jets, a low troop deck forward that ends in the bow ramp, the
+      // angular wheelhouse with its band of windows, the radar mast, and the heavy machine gun on a ring on the roof,
+      // which turns on its own (front, about head). All in the navy's camouflage
+      const DARK = 0x2a2c2e, DECK = 0x4a5240;
+      hullLoft(mg, M.hull, { bottom: 0x2f3330, side: paint, rail: DARK, deck: DECK });
+      const hx = (y, x0, x1, y0, y1) => lerp(x0, x1, (y - y0) / (y1 - y0));
+      // the troop deck's roof, sloping down to the bow ramp
+      mg.hexa([[-1.55, 1.36, 1.5], [1.55, 1.36, 1.5], [1.4, 1.42, 6.4], [-1.4, 1.42, 6.4], [-1.38, 1.98, 1.65], [1.38, 1.98, 1.65], [1.15, 1.72, 6.1], [-1.15, 1.72, 6.1]], paint);
+      mg.hexa([[-0.95, 1.5, 6.4], [0.95, 1.5, 6.4], [0.62, 1.56, 7.85], [-0.62, 1.56, 7.85], [-0.92, 1.62, 6.4], [0.92, 1.62, 6.4], [0.6, 1.62, 7.85], [-0.6, 1.62, 7.85]], DECK);
+      // the wheelhouse: slanted all round
+      const yb = 1.36, yt = 3.0;
+      mg.hexa([[-1.62, yb, -1.7], [1.62, yb, -1.7], [1.62, yb, 1.6], [-1.62, yb, 1.6], [-1.25, yt, -1.45], [1.25, yt, -1.45], [1.25, yt, 0.92], [-1.25, yt, 0.92]], paint);
+      // its windows: a band across the front and down the sides, leaning in with the walls
+      const fz = (y) => hx(y, 1.6, 0.92, yb, yt) + 0.02, sxw = (y) => hx(y, 1.62, 1.25, yb, yt) + 0.02;
+      const ya = 2.3, yc = 2.78;
+      gl.hexa([[-sxw(ya) + 0.12, ya, fz(ya) - 0.02], [sxw(ya) - 0.12, ya, fz(ya) - 0.02], [sxw(ya) - 0.12, ya, fz(ya) + 0.01], [-sxw(ya) + 0.12, ya, fz(ya) + 0.01], [-sxw(yc) + 0.12, yc, fz(yc) - 0.02], [sxw(yc) - 0.12, yc, fz(yc) - 0.02], [sxw(yc) - 0.12, yc, fz(yc) + 0.01], [-sxw(yc) + 0.12, yc, fz(yc) + 0.01]], 0xffffff);
+      for (const s of [1, -1]) gl.hexa([[s * sxw(ya), ya, -1.2], [s * (sxw(ya) + 0.02), ya, -1.2], [s * (sxw(ya) + 0.02), ya, 1.0], [s * sxw(ya), ya, 1.0], [s * sxw(yc), yc, -1.05], [s * (sxw(yc) + 0.02), yc, -1.05], [s * (sxw(yc) + 0.02), yc, 0.75], [s * sxw(yc), yc, 0.75]], 0xffffff);
+      // the radar mast and its aerials, the engine deck aft with its grilles, the two jets in the transom
+      tubeTo(mg, [0, yt, -0.8], [0, yt + 1.5, -0.95], 0.06, DARK);
+      mg.box(1.3, 0.09, 0.22, DARK, 0, yt + 1.45, -0.95);
+      for (const sx of [0.9, -0.9]) tubeTo(mg, [sx, yt, -1.2], [sx * 1.1, yt + 2.0, -1.35], 0.015, DARK);
+      for (let i = 0; i < 4; i++) mg.box(2.2, 0.04, 0.5, DARK, 0, 1.37, -3.0 - i * 0.9);
+      for (const sx of [0.8, -0.8]) mg.add(new THREE.CylinderGeometry(0.3, 0.34, 0.5, 14), DARK, sx, 0.1, -M.L / 2 - 0.1, Math.PI / 2, 0, 0);
+      // the navy's red and green sidelights on the wheelhouse
+      mg.box(0.05, 0.1, 0.18, 0xb3121b, 1.5, 1.9, 1.2); mg.box(0.05, 0.1, 0.18, 0x1f8a3a, -1.5, 1.9, 1.2);
+      // the gun: a ring on the roof, a shield and the 12.7 mm barrel
+      head = [0, yt, 0.25];
+      front.add(new THREE.CylinderGeometry(0.42, 0.45, 0.14, 16), paint, 0, 0.07, 0);
+      front.box(0.75, 0.42, 0.06, paint, 0, 0.4, 0.32);
+      front.box(0.2, 0.2, 0.5, DARK, 0.06, 0.38, 0.1);
+      front.add(new THREE.CylinderGeometry(0.03, 0.035, 1.3, 8), DARK, 0.06, 0.4, 0.85, Math.PI / 2, 0, 0);
+      camouflage(front, paint);
+      frontGeo = front.build(); frontGeo.computeBoundingSphere();
+      camouflage(mg, paint);
+      driver = { x: 0.6, y: 1.75, z: 0.75 };
+      parts = [{ cz: 0, hw: M.W / 2, hl: M.L / 2, top: yt + 0.1 }];
     } else {
       // Riva Aquarama: the varnished mahogany hull and deck with pale seams between the planks, a white bottom, the
       // chrome-framed screen, two rows of aquamarine leather seats and the sun pad over the engines
@@ -5870,7 +6245,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       driver = { x: -0.45, y: 0.62, z: 0.1 };
       parts = [{ cz: 0, hw: M.W / 2, hl: M.L / 2, top: 1.0 }];
     }
-    return { body: mg.build(), glass: gl.build(), front: frontGeo, decal: null, plates: new Builder().build(), flashers: null, head, rake, frontAxle: null, driver, rear: null, parts };
+    return { body: mg.build(), glass: gl.build(), front: frontGeo, decal, plates: new Builder().build(), flashers, head, rake, frontAxle: null, driver, rear: null, parts };
   }
   // The army's vehicles, in their own frame (z forwards, y up from the road, +x the driver's left), painted in M90: the
   // Swedish splinter camouflage of light and dark green, black and pale green in sharp-edged patches. The tank's turret
@@ -6063,7 +6438,8 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       }
       return { x: best.x, y: y - best.d, z };
     };
-    if (!M.bus) Object.assign(driver, fitSeat(driver.x, driver.y, driver.z, 0.22));
+    if (S.open) driver.y = sh.belt(seatZ) - 0.4;
+    else if (!M.bus) Object.assign(driver, fitSeat(driver.x, driver.y, driver.z, 0.22));
     // the back seat, where an arrested driver is put (behind the driver, as the police do)
     const rear = M.sport || M.bus ? null : fitSeat(driver.x, driver.y, seatZ - 0.88, 0.2);
     {
@@ -6137,7 +6513,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
         const z = sh.endZ(Math.min(L.x + L.r, hw - 0.02), 1) - 0.012;
         mg.add(new THREE.CylinderGeometry(L.r + 0.024, L.r + 0.024, 0.05, 24), L.ring === 'paint' ? paint : L.ring === 'gloss' ? GLOSS : CHROME, s * L.x, L.y, z, Math.PI / 2, 0, 0);
         mg.add(new THREE.CylinderGeometry(L.r, L.r * 0.92, 0.06, 24), COL.head, s * L.x, L.y, z + 0.012, Math.PI / 2, 0, 0);
-        if (L.ind || !S.lamps.some((K) => K.type === 'pod')) mg.box(0.07, 0.05, 0.03, IND(s), s * (L.x + L.r + 0.08), L.y - L.r * 0.5, sh.endZ(L.x + L.r + 0.08, 1) - 0.005);
+        if (!L.noInd && (L.ind || !S.lamps.some((K) => K.type === 'pod'))) mg.box(0.07, 0.05, 0.03, IND(s), s * (L.x + L.r + 0.08), L.y - L.r * 0.5, sh.endZ(L.x + L.r + 0.08, 1) - 0.005);
       } else if (L.type === 'pod') for (const s of [1, -1]) mg.box(0.08, 0.055, 0.13, IND(s), s * L.x, sh.belt(L.z) + 0.026, L.z);
       else if (L.type === 'pixel') for (const [end, R, col] of [[1, L.front, COL.head], [-1, L.rear, COL.tail]]) {
         // square "pixels" in a grid, as on the Hyundai Ioniq 5
@@ -6240,7 +6616,12 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     // exhausts: twin pipes in the middle on the sports cars, one at the side on the rest, none on the electric ones
     if (!M.ev) {
       const zr = -hl + 0.06, yb = sh.sill(-hl + 0.3) + 0.06;
-      const pipes = S.sidePipes || S.f40 ? [] : M.sport ? [-0.2, 0.2] : M.bus ? [-hw + 0.4] : [-hw + 0.45];
+      const pipes = S.sidePipes || S.f40 || S.pipes ? [] : M.sport ? [-0.2, 0.2] : M.bus ? [-hw + 0.4] : [-hw + 0.45];
+      // (pipes of its own: the Huayra's cluster of four in the middle of the tail, the Corvette's two pairs)
+      for (const [x, y] of S.pipes || []) {
+        mg.add(new THREE.CylinderGeometry(0.045, 0.045, 0.22, 12), CHROME, x, y, zr, Math.PI / 2, 0, 0);
+        mg.add(new THREE.CylinderGeometry(0.034, 0.034, 0.01, 12), UNDER, x, y, zr - 0.112, Math.PI / 2, 0, 0);
+      }
       // (the G 63's come out at the sides, in front of the rear wheels)
       if (S.sidePipes) for (const s of [1, -1]) for (const dz of [0, 0.11]) mg.add(new THREE.CylinderGeometry(0.04, 0.04, 0.16, 12), CHROME, s * (hw - 0.03), sh.sill(-M.wb / 2 + 0.6) + 0.05, -M.wb / 2 + 0.55 + dz, 0, 0, Math.PI / 2);
       for (const x of pipes) {
@@ -6291,10 +6672,31 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       flashers = [[-0.33, y + 0.15, z], [0.33, y + 0.15, z]];
     }
     if (S.wing) {
-      const wz = -hl + 0.32, wy = sh.belt(wz);
-      for (const s of [-1, 1]) mg.box(0.05, 0.28, 0.12, GLOSS, s * 0.55, wy + 0.13, wz);
-      mg.box(M.W - 0.2, 0.04, 0.36, GLOSS, 0, wy + 0.29, wz - 0.04);
-      for (const s of [-1, 1]) mg.box(0.03, 0.16, 0.42, GLOSS, s * (M.W / 2 - 0.12), wy + 0.27, wz - 0.04);
+      // the rear wing on two posts: h high above the tail, z in from the end, w across, chord deep
+      const Wg = S.wing === true ? {} : S.wing, wz = -hl + (Wg.z ?? 0.32), wy = sh.belt(wz), h = Wg.h ?? 0.28, span = Wg.w ?? M.W - 0.2, ch = Wg.chord ?? 0.36;
+      for (const s of [-1, 1]) mg.box(0.05, h, 0.12, GLOSS, s * (Wg.posts ?? 0.55), wy + h / 2 - 0.01, wz);
+      mg.box(span, 0.04, ch, GLOSS, 0, wy + h + 0.01, wz - 0.04);
+      for (const s of [-1, 1]) mg.box(0.03, 0.16, ch + 0.06, GLOSS, s * (span / 2 - 0.02), wy + h - 0.01, wz - 0.04);
+    }
+    if (S.open) {
+      // an open car: the windscreen leaning back from the front of the cockpit in a thin frame, and roll hoops behind the seats
+      const zf = S.open.z[1], yb = sh.belt(zf), ws = S.open.screen ?? 0.3, back = ws * 0.55, w = sh.ring(zf).gB - 0.03, frame = M.classic ? CHROME : GLOSS;
+      gl.hexa([[-w, yb, zf - 0.02], [w, yb, zf - 0.02], [w, yb, zf + 0.005], [-w, yb, zf + 0.005], [-w + 0.05, yb + ws, zf - back - 0.02], [w - 0.05, yb + ws, zf - back - 0.02], [w - 0.05, yb + ws, zf - back + 0.005], [-w + 0.05, yb + ws, zf - back + 0.005]], 0xffffff);
+      for (const s of [1, -1]) tubeTo(mg, [s * w, yb, zf - 0.01], [s * (w - 0.05), yb + ws, zf - back - 0.01], 0.016, frame);
+      tubeTo(mg, [-(w - 0.05), yb + ws, zf - back - 0.01], [w - 0.05, yb + ws, zf - back - 0.01], 0.016, frame);
+      if (S.open.hoop) {
+        const hz = seatZ - 0.55, hy = sh.belt(hz), hx = Math.min(hw - S.shoulder - 0.08, driver.x + 0.28);
+        tubePath(mg, [[-hx, hy - 0.05, hz], [-hx + 0.05, hy + 0.32, hz], [hx - 0.05, hy + 0.32, hz], [hx, hy - 0.05, hz]], 0.028, GLOSS);
+      }
+    }
+    // chrome (or black) bumper bars round the nose and the tail, following the curve of the ends
+    if (S.bumper) {
+      const B = S.bumper, col = TRIM[B.col || 'chrome'], xm = hw * (B.w || 0.86), n = 8;
+      for (const [end, y] of [[1, B.y[0]], [-1, B.y[1]]]) for (let i = 0; i < n; i++) {
+        const xa = -xm + (2 * xm * i) / n, xb = -xm + (2 * xm * (i + 1)) / n;
+        const za = sh.endZ(Math.abs(xa), end) + end * 0.035, zb = sh.endZ(Math.abs(xb), end) + end * 0.035, len = Math.hypot(xb - xa, zb - za);
+        mg.add(new THREE.BoxGeometry(len + 0.012, 0.065, 0.05), col, (xa + xb) / 2, y, (za + zb) / 2, 0, -Math.atan2(zb - za, xb - xa), 0);
+      }
     }
     if (S.f40) {
       const F = S.f40, up = [0, 1, 0];
@@ -6428,7 +6830,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       return g;
     }
     const m = new Merger(carSurf(-1)), big = style === 'sport' || style === 'black' || style === 'f40', tw = style === 'steel' ? 0.3 : big ? 0.3 : 0.27;
-    const rim = R * (big ? 0.74 : style === 'steel' ? 0.6 : 0.68), face = style === 'black' ? COL.rimDark : style === 'aero' ? COL.aero : style === 'steel' ? 0x6a6e73 : style === 'f40' ? COL.rimLight : COL.rim;
+    const rim = R * (big ? 0.74 : style === 'steel' ? 0.6 : 0.68), face = style === 'black' ? COL.rimDark : style === 'aero' ? COL.aero : style === 'steel' ? 0x6a6e73 : style === 'f40' ? COL.rimLight : style === 'wire' ? CHROME : COL.rim;
     m.add(new THREE.CylinderGeometry(R, R, tw * 0.84, 30, 1, true), COL.tyre, 0, 0, 0, 0, 0, Math.PI / 2);
     m.add(new THREE.CylinderGeometry(R * 0.95, R * 0.95, tw, 30), COL.tyre, 0, 0, 0, 0, 0, Math.PI / 2);
     m.add(new THREE.CylinderGeometry(rim, rim, tw + 0.004, 24, 1, false), COL.hub, 0, 0, 0, 0, 0, Math.PI / 2);
@@ -6443,6 +6845,11 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       } else if (style === 'steel') {
         m.add(new THREE.CylinderGeometry(rim - 0.03, rim * 0.5, 0.03, 18), face, fx, 0, 0, 0, 0, Math.PI / 2);
         for (let k = 0; k < 8; k++) { const a = (k / 8) * TAU; m.add(new THREE.CylinderGeometry(0.035, 0.035, 0.04, 6), COL.hub, fx, Math.cos(a) * rim * 0.68, Math.sin(a) * rim * 0.68, 0, 0, Math.PI / 2); }
+      } else if (style === 'wire') {
+        // wire wheels: forty spokes laced from the hub to the chrome rim, crossing, and the eared knock-off in the middle
+        for (let k = 0; k < 20; k++) { const a = (k / 20) * TAU; m.add(new THREE.CylinderGeometry(0.0045, 0.0045, rim * 0.9, 4), CHROME, fx, Math.cos(a) * rim * 0.47, Math.sin(a) * rim * 0.47, a + (k % 2 ? 0.12 : -0.12), 0, 0); }
+        m.add(new THREE.CylinderGeometry(rim * 0.2, rim * 0.24, 0.05, 12), CHROME, fx + sx * 0.01, 0, 0, 0, 0, Math.PI / 2);
+        for (const a of [0.4, 0.4 + Math.PI / 2]) m.add(new THREE.BoxGeometry(0.025, rim * 0.6, 0.03), CHROME, fx + sx * 0.04, 0, 0, a, 0, 0);
       } else if (style === 'f40') {
         // Speedline's five-spoke star, each spoke broad at the hub and narrowing out to the rim, and the centre-lock nut
         for (let k = 0; k < 5; k++) {
@@ -6461,7 +6868,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
           else m.add(new THREE.BoxGeometry(0.02, rim * 0.95, wdt), face, fx, Math.cos(a) * rim * 0.48, Math.sin(a) * rim * 0.48, a, 0, 0);
         }
       }
-      if (style !== 'f40') m.add(new THREE.CylinderGeometry(rim * 0.2, rim * 0.2, 0.024, 8), style === 'black' ? COL.rimDark : CHROME, fx + sx * 0.004, 0, 0, 0, 0, Math.PI / 2);
+      if (style !== 'f40' && style !== 'wire') m.add(new THREE.CylinderGeometry(rim * 0.2, rim * 0.2, 0.024, 8), style === 'black' ? COL.rimDark : CHROME, fx + sx * 0.004, 0, 0, 0, 0, Math.PI / 2);
     }
     const g = m.build();
     wheelCache.set(key, g);
@@ -6819,8 +7226,9 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       const lim = (a.M.L + b.M.L) / 2 + 0.5, ddx = a.x - b.x, ddz = a.z - b.z;
       if (ddx * ddx + ddz * ddz > lim * lim) continue;
       const afx = Math.sin(a.h), afz = Math.cos(a.h), bfx = Math.sin(b.h), bfz = Math.cos(b.h);
-      // a friend's car is where their game says it is: it can't be shoved, only bounced off
-      const ia = a.remote ? 0 : 1 / a.M.mass, ib = b.remote ? 0 : 1 / b.M.mass;
+      // A friend's car is where their game says it is: it can't be shoved, only bounced off. (ia, ib push the cars apart,
+      // ma, mb share out the knock by the real masses, so each game gives its own car what a local crash would)
+      const ma = 1 / a.M.mass, mb = 1 / b.M.mass, ia = a.remote ? 0 : ma, ib = b.remote ? 0 : mb;
       for (const oa of a.offs) for (const ob of b.offs) {
         const ax = a.x + afx * oa, az = a.z + afz * oa, bx = b.x + bfx * ob, bz = b.z + bfz * ob;
         const dx = ax - bx, dz = az - bz, rr2 = a.r + b.r, d2 = dx * dx + dz * dz;
@@ -6830,14 +7238,16 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
         a.x += nx * pen * wa; a.z += nz * pen * wa; b.x -= nx * pen * wb; b.z -= nz * pen * wb;
         const vr = (a.vx - b.vx) * nx + (a.vz - b.vz) * nz;
         if (vr < 0) {
+          const ka = ma / (ma + mb), kb = mb / (ma + mb);
           if (-vr > 2) {
             // each car takes the share of the change in speed that the other's mass forces on it
             const cx = ax - nx * a.r, cz = az - nz * a.r;
-            crash(a, cx, cz, nx, nz, -vr * wa, b);
-            crash(b, cx, cz, -nx, -nz, -vr * wb, a);
+            crash(a, cx, cz, nx, nz, -vr * ka, b);
+            crash(b, cx, cz, -nx, -nz, -vr * kb, a);
           }
-          const jimp = (-1.3 * vr) / (ia + ib);
-          a.vx += jimp * ia * nx; a.vz += jimp * ia * nz; b.vx -= jimp * ib * nx; b.vz -= jimp * ib * nz;
+          const jimp = (-1.3 * vr) / (ma + mb);
+          if (!a.remote) { a.vx += jimp * ma * nx; a.vz += jimp * ma * nz; }
+          if (!b.remote) { b.vx -= jimp * mb * nx; b.vz -= jimp * mb * nz; }
           if ((a === driving || b === driving) && -vr > 2) bump(-vr);
         }
       }
@@ -7253,7 +7663,8 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     if (emerg && all.includes(from) && cost(from) + 60 < cost(best)) return from;
     return best;
   }
-  const onBlueLights = (c) => !!(c.police && !c.military && (c.police.state === 'chase' || c.police.state === 'call'));
+  // (the army on a hunt goes everywhere the police can: lanes, squares, the wrong side)
+  const onBlueLights = (c) => !!(c.police && (c.police.state === 'chase' || c.police.state === 'call'));
   function startTurn(b) {
     const e1 = edgeFrame(b.from, b.to), e2 = edgeFrame(b.to, b.next), B = e1.B, off = B.r + 4;
     b.P0 = [B.x - e1.ux * off + e1.rx * e1.lane, B.z - e1.uz * off + e1.rz * e1.lane];
@@ -7279,9 +7690,10 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     const vf = c.vx * fx + c.vz * fz, look = 5 + Math.abs(vf) * 0.55;
     let vT = b.cruise, tx = c.x + fx * look, tz = c.z + fz * look;
     b.passT -= dt; b.ignoreT -= dt; b.honkT -= dt;
-    // make way for blue lights coming up behind or towards you: pull in to the kerb and slow right down
+    // make way for blue lights coming up behind or towards you: pull in to the kerb and slow right down (a robber
+    // getting away doesn't, of course)
     let yieldTo = false;
-    if (!c.police) for (const o of sirenCars) {
+    if (!c.police && !c.getaway) for (const o of sirenCars) {
       if (o === c) continue;
       const dx = o.x - c.x, dz = o.z - c.z, ah = dx * fx + dz * fz, lat = dx * lxv + dz * lzv;
       if ((ah > -45 && ah < 10 && Math.abs(lat) < 7) || (ah >= 10 && ah < 55 && Math.abs(lat) < 9 && Math.cos(o.h - c.h) < -0.5)) { yieldTo = true; break; }
@@ -7301,16 +7713,17 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
         if (d < bd) { bd = d; bt = t; }
       }
       b.t = bt;
-      if (b.t >= 0.96 || b.turnAge > 9) { b.from = b.to; b.to = b.next; b.next = chooseNext(b.from, b.to, b.goal, onBlueLights(c)); b.phase = 'edge'; }
+      if (b.t >= 0.96 || b.turnAge > 9) { b.from = b.to; b.to = b.next; b.next = chooseNext(b.from, b.to, b.goal, onBlueLights(c) || !!c.getaway); b.phase = 'edge'; }
     }
     if (b.phase === 'edge') {
       const e = edgeFrame(b.from, b.to);
       const s = (c.x - e.A.x) * e.ux + (c.z - e.A.z) * e.uz, remain = e.len - (e.B.r + 4) - s;
       if (remain < 20) b.passT = Math.min(b.passT, 0);
-      const chasing = onBlueLights(c);
+      // (blue lights, and a robber on the run, ignore the speed limits and drive on the crown of the road)
+      const chasing = onBlueLights(c) || !!c.getaway;
       // traffic keeps to the speed limit; police on blue lights don't, but even they slow down in the narrow lanes
       if (!chasing && !(c.military && c.police.state === 'chase')) vT = Math.min(vT, (e.e.limit / 3.6) * 1.08);
-      else if (!e.e.drive) vT = Math.min(vT, e.e.hw < 2.2 ? 8 : 12);
+      else if (!e.e.drive) vT = Math.min(vT, e.e.hw < 2.2 ? 11 : 17);
       // police on blue lights drive on the crown of the road, straddling the solid line, and swing right over into
       // the oncoming lane to get past; in a lane they keep to the middle
       const narrow = !e.e.drive || e.e.hw < 4.5;
@@ -7330,7 +7743,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       b.sig = b.turnDir || 0;
     }
     // (blue lights and the army don't bother with indicators)
-    c.blink = onBlueLights(c) || c.military ? 0 : b.sig || 0;
+    c.blink = onBlueLights(c) || c.military || c.getaway ? 0 : b.sig || 0;
 
     // look for anything in the way: cars, the player, pedestrians
     let gap = Infinity, blocker = null;
@@ -7367,13 +7780,14 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       b.blocker = blocker; // what it is waiting for (the tests read it)
     }
     // with blue lights on the police go round whatever is in the way at once, oncoming traffic pulls over for them
-    const urgent = c.police && c.police.state !== 'patrol' && c.siren;
+    const urgent = (c.police && c.police.state !== 'patrol' && c.siren) || !!c.getaway;
     if (b.passT > 0 && !urgent && blocker && blocker.M && Math.cos(blocker.h - c.h) < -0.3) b.passT = 0;
     const slow = Math.abs(vf) < 0.7;
     if (blocker && slow) b.waitT += dt; else b.waitT = Math.max(0, b.waitT - dt * 2);
     if (blocker === player && slow && b.waitT > 1.2 && b.honkT <= 0) { honkAt(c.x, c.z); b.honkT = 3.5; }
     // police closing in on you stay behind you instead of overtaking or pushing through
-    const holdBehind = c.police && c.police.state === 'chase' && (blocker === driving || blocker === player);
+    // (from two stars they don't wait behind you any more)
+    const holdBehind = c.police && c.police.state === 'chase' && stars() < 2 && (blocker === driving || blocker === player);
     const urgentPass = urgent && !holdBehind && blocker && b.phase === 'edge' && gap < 40 && b.passT <= 0 && (!blocker.M || Math.hypot(blocker.vx, blocker.vz) < vf - 2 || slow);
     if (urgentPass) { b.passT = 5; if (gap < 4.5 && slow) b.revT = 0.8; }
     else if (blocker && slow && b.waitT > 2.5 && b.passT <= 0 && b.phase === 'edge' && !holdBehind) {
@@ -7536,7 +7950,8 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
   }
   // the army: driven like the police in a chase, but with soldiers aboard, no blue lights, and it rams
   let armySpawnT = 0;
-  const armyTarget = () => (wanted && wanted.stars >= 5 && !stop ? 4 : 0);
+  // at five stars the army comes in force: two tanks, two trucks full of soldiers and five armoured cars on the streets
+  const armyTarget = () => (wanted && wanted.stars >= 5 && !stop ? 9 : 0);
   function makeArmy(c) {
     makePolice(c);
     c.military = true; c.police.callIn = Infinity; c.aim = 0; c.fireT = 4 + Math.random() * 4;
@@ -7563,7 +7978,9 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     let hx = mx + fx * 160, hz = mz + fz * 160;
     for (let d = 1; d <= 160; d += 1.5) {
       const x = mx + fx * d, z = mz + fz * d;
-      if (blockedAt(x, z, 0.3) || cars.some((o) => o !== c && Math.hypot(o.x - x, o.z - z) < Math.min(o.M.W, o.M.L) / 2 + 0.3) || persons.some((p) => p !== player && !p.asleep && Math.hypot(p.x - x, p.z - z) < 0.7)) { hx = x; hz = z; break; }
+      // (a friend's shell can hit you, on foot)
+      const you = (p) => p === player && !(c.remote && !driving && !MP.ride && !(stop && stop.riding));
+      if (blockedAt(x, z, 0.3) || cars.some((o) => o !== c && Math.hypot(o.x - x, o.z - z) < Math.min(o.M.W, o.M.L) / 2 + 0.3) || persons.some((p) => !you(p) && !p.asleep && Math.hypot(p.x - x, p.z - z) < 0.7)) { hx = x; hz = z; break; }
     }
     explode(hx, hz, walkable(hx, hz) ? 0.6 : WATER_Y + 0.3);
     // (a cannon going off in town: every police car hears it, unless it was a friend's tank: then they are after them)
@@ -7709,7 +8126,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     if (!P || !b || P.out || P.state === 'wait' || P.state === 'stop' || P.state === 'transport') return;
     P.state = on ? 'chase' : 'patrol';
     c.siren = on && !c.military; c.yelp = false;
-    b.cruise = on ? chaseSpeed() : PATROL_SPEED; b.turnV = on ? 8.5 : 5.5; b.goal = null; b.passT = 0; P.goalNode = -1;
+    b.cruise = on ? chaseSpeed() : PATROL_SPEED; b.turnV = on ? 11 : 5.5; b.goal = null; b.passT = 0; P.goalNode = -1; P.cut = null;
     if (P.direct) { P.direct = false; resyncBot(c); }
     if (!on) b.next = chooseNext(b.from, b.to, null);
   }
@@ -7777,24 +8194,68 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     const T = playerTarget(), d = Math.hypot(T.x - c.x, T.z - c.z);
     c.yelp = d < 70;
     if (P.banT > 0) P.banT -= dt;
+    // (banT: how long they keep to the streets after getting stuck going straight; nothing set means no ban)
+    const free = !(P.banT > 0);
     // in sight and nothing in the way: straight for you, across pavements, squares and the wrong side of the road
-    if (d < 80 && P.banT <= 0 && clearView(c.x, c.z, T.x, T.z) && drivableLine(c.x, c.z, T.x, T.z, c, driving)) { P.direct = true; return policeDirect(c, dt, T, d); }
-    if (P.direct) { P.direct = false; resyncBot(c); }
-    // along the streets: full speed while far away, easing off to pull up a few metres from you
-    c.bot.cruise = d < 45 ? clamp((d - 10) * 0.9, 0, chaseSpeed()) : chaseSpeed();
+    if (d < 140 && free && clearView(c.x, c.z, T.x, T.z) && drivableLine(c.x, c.z, T.x, T.z, c, driving)) { P.cut = null; P.direct = true; return policeDirect(c, dt, T, d); }
     // out of sight they head for where you were last seen; while any of them can see you, the radio keeps them updated
     const G = wanted && !wanted.inSight ? wanted.seen : T, gn = nearestNode(G.x, G.z);
     c.bot.goal = { node: gn, x: G.x, z: G.z };
+    // On the way they cut every corner they can: the furthest point of the way ahead that can be reached in a straight
+    // line, over a square, a park, the pavement or the wrong side of the road, and they go straight for it flat out
+    if (P.cut && (Math.hypot(P.cut.x - c.x, P.cut.z - c.z) < 9 || !free)) P.cut = null;
+    if (!P.cut && free && (P.cutT = (P.cutT || 0) - dt) <= 0) { P.cutT = 0.5; P.cut = shortcut(c, c.bot.goal); }
+    // (stuck on the way: back to the streets for a few seconds)
+    if (P.cut && c.bot.revT > 0) { P.cut = null; P.cutT = 4; }
+    if (P.cut) { P.direct = true; return rush(c, dt, P.cut.x, P.cut.z, chaseSpeed()); }
+    if (P.direct) { P.direct = false; resyncBot(c); }
+    // along the streets: full speed while far away, easing off to pull up a few metres from you
+    c.bot.cruise = d < 45 ? clamp((d - 10) * 0.9, 0, chaseSpeed()) : chaseSpeed();
     if (gn !== P.goalNode && c.bot.phase === 'edge') { c.bot.next = chooseNext(c.bot.from, c.bot.to, c.bot.goal, true); P.goalNode = gn; }
     return botThink(c, dt);
   }
-  // in sight: drive straight for the target, aiming a little ahead of it, and stop beside it once it stops
+  // the next junctions on the way to the goal for blue lights, about 250 m of them
+  function aheadPath(c, goal) {
+    const b = c.bot, D = distTo(goal.node, true), pts = [nodes[b.to]];
+    let prev = b.from, n = b.to, len = Math.hypot(nodes[n].x - c.x, nodes[n].z - c.z);
+    for (let k = 0; k < 8 && n !== goal.node && len < 260; k++) {
+      let best = -1, bv = Infinity;
+      for (const m of nodes[n].nbE) {
+        if (m === prev) continue;
+        const v = D[m] + Math.hypot(nodes[m].x - nodes[n].x, nodes[m].z - nodes[n].z);
+        if (v < bv) { bv = v; best = m; }
+      }
+      if (best < 0) break;
+      len += Math.hypot(nodes[best].x - nodes[n].x, nodes[best].z - nodes[n].z);
+      prev = n; n = best; pts.push(nodes[n]);
+    }
+    if (n === goal.node) pts.push({ x: goal.x, z: goal.z });
+    return pts;
+  }
+  // the furthest of them (past the next junction at least) there is a clear straight line to, or nothing
+  function shortcut(c, goal) {
+    if (c.bot.phase !== 'edge') return null;
+    const pts = aheadPath(c, goal);
+    for (let i = pts.length - 1; i >= 1; i--) {
+      // (only somewhere more or less ahead: a sharp turn would sweep the car into whatever is beside the line)
+      const p = pts[i], d = Math.hypot(p.x - c.x, p.z - c.z);
+      if (d > 25 && d < 240 && Math.abs(wrapAngle(Math.atan2(p.x - c.x, p.z - c.z) - c.h)) < 0.6 && drivableLine(c.x, c.z, p.x, p.z, c, driving)) return { x: p.x, z: p.z };
+    }
+    return null;
+  }
+  // in sight: drive straight for the target, aiming a little ahead of it, and stop beside it once it stops. From three
+  // stars (and the army always) they don't pull up alongside while you are on the move: they ram you
   function policeDirect(c, dt, T, d) {
-    const M = c.M, b = c.bot, fx = Math.sin(c.h), fz = Math.cos(c.h), lxv = Math.cos(c.h), lzv = -Math.sin(c.h);
-    const vf = c.vx * fx + c.vz * fz, tsp = Math.hypot(T.vx, T.vz), lead = Math.min(1.2, d / 20);
-    const tx = T.x + T.vx * lead, tz = T.z + T.vz * lead;
-    let vT = clamp((d - 8) * 1.1 + tsp * 1.1, 0, chaseSpeed());
+    const tsp = Math.hypot(T.vx, T.vz), ram = (c.military || stars() >= 3) && tsp > 5, lead = Math.min(1.2, d / 20) * (ram ? 0.6 : 1);
+    let vT = ram ? chaseSpeed() : clamp((d - 8) * 1.1 + tsp * 1.1, 0, chaseSpeed());
     if (d < 11 && tsp < 2) vT = c.military ? Math.min(chaseSpeed(), 9) : 0;
+    return rush(c, dt, T.x + T.vx * lead, T.z + T.vz * lead, vT);
+  }
+  // straight for (tx, tz) at vT, whatever is in between; backs off and tries again when stuck, and after two goes takes
+  // the streets for a while
+  function rush(c, dt, tx, tz, vT) {
+    const M = c.M, b = c.bot, fx = Math.sin(c.h), fz = Math.cos(c.h), lxv = Math.cos(c.h), lzv = -Math.sin(c.h);
+    const vf = c.vx * fx + c.vz * fz;
     const dx = tx - c.x, dz = tz - c.z, lz = dx * fx + dz * fz, lx = dx * lxv + dz * lzv;
     const maxSteer = 0.6 / (1 + Math.abs(vf) * 0.03);
     const delta = lz < 0.3 ? Math.sign(lx || 1) * maxSteer : Math.atan((2 * M.wb * lx) / (lx * lx + lz * lz));
@@ -7828,6 +8289,14 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     for (const c of cars) {
       if (!c.police || c.dead) continue;
       const st = c.police.state, d = Math.hypot(T.x - c.x, T.z - c.z);
+      // (the boats on the water are steered by WATER: here they only count for keeping you in sight)
+      if (c.water) {
+        if (c.water.leave) continue;
+        chasers++;
+        if (d < nearest && !c.military) nearest = d;
+        if (!inSight && d < 160 && clearView(c.x, c.z, T.x, T.z)) inSight = true;
+        continue;
+      }
       if (st === 'wait' || st === 'transport' || st === 'stop') continue;
       if (st !== 'chase') { if (d < chaseRadius()) setChase(c, true); else continue; }
       chasers++;
@@ -7896,6 +8365,223 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     driving.siren = !driving.siren; driving.yelp = false;
     toast(driving.siren ? 'Blåljus och siren på. Trafiken väjer för dig.' : 'Blåljus av.');
   }
+
+  /* ---------- the sjöpolis and the navy ---------- */
+  // Run from the police out on the water and the sjöpolis comes after you: patrol boats from one star, a jet ski too from
+  // three, and at five stars the navy's Stridsbåt 90, which fires warning bursts from its machine gun. They find their way
+  // round the islands and under the bridges by a map of the water in 10-metre squares: from where you are, how many
+  // squares away every square of water is (worked out again as you move), and each boat heads downhill along it, cutting
+  // straight across to the furthest square it can see over open water. Stop with a police boat alongside and you are
+  // caught: a fine, or, if it is bad enough to be arrested for, a trip to the cell. Once the chase is over, or you have
+  // been ashore for a while, they go back where they came from.
+  const WATER = (() => {
+    const CELL = 10, GX = Math.ceil((BOUNDS.x1 - BOUNDS.x0) / CELL), GZ = Math.ceil((BOUNDS.z1 - BOUNDS.z0) / CELL), FAR = 65535;
+    let wet = null, dist = null, queue = null, fieldCell = -1, fieldT = 0;
+    let spawnT = 0, offT = 99, said = { police: false, army: false, fire: false };
+    const cellOf = (x, z) => clamp(Math.floor((z - BOUNDS.z0) / CELL), 0, GZ - 1) * GX + clamp(Math.floor((x - BOUNDS.x0) / CELL), 0, GX - 1);
+    const centre = (k) => ({ x: BOUNDS.x0 + ((k % GX) + 0.5) * CELL, z: BOUNDS.z0 + (Math.floor(k / GX) + 0.5) * CELL });
+    const water = (x, z) => !(groundAt(x, z) & 1);
+    // the squares a boat can be in: open water at the middle and 3 m round it, not too near the edge of the map
+    function grid() {
+      if (wet) return;
+      wet = new Uint8Array(GX * GZ); dist = new Uint16Array(GX * GZ); queue = new Int32Array(GX * GZ);
+      for (let j = 3; j < GZ - 3; j++) for (let i = 3; i < GX - 3; i++) {
+        const x = BOUNDS.x0 + (i + 0.5) * CELL, z = BOUNDS.z0 + (j + 0.5) * CELL;
+        wet[j * GX + i] = water(x, z) && water(x - 3, z) && water(x + 3, z) && water(x, z - 3) && water(x, z + 3) ? 1 : 0;
+      }
+    }
+    // how far, in squares, every square of water is from the one nearest (x, z)
+    function flood(x, z) {
+      let s = cellOf(x, z);
+      if (!wet[s]) {
+        let best = -1, bd = Infinity;
+        const ci = s % GX, cj = Math.floor(s / GX);
+        for (let dj = -8; dj <= 8; dj++) for (let di = -8; di <= 8; di++) {
+          const i = ci + di, j = cj + dj;
+          if (i < 0 || j < 0 || i >= GX || j >= GZ || !wet[j * GX + i]) continue;
+          const d = di * di + dj * dj;
+          if (d < bd) { bd = d; best = j * GX + i; }
+        }
+        if (best < 0) return false;
+        s = best;
+      }
+      if (s === fieldCell) return true;
+      fieldCell = s;
+      dist.fill(FAR);
+      let head = 0, tail = 0;
+      dist[s] = 0; queue[tail++] = s;
+      while (head < tail) {
+        const k = queue[head++], d = dist[k] + 1, i = k % GX;
+        if (i > 0 && wet[k - 1] && dist[k - 1] === FAR) { dist[k - 1] = d; queue[tail++] = k - 1; }
+        if (i < GX - 1 && wet[k + 1] && dist[k + 1] === FAR) { dist[k + 1] = d; queue[tail++] = k + 1; }
+        if (k >= GX && wet[k - GX] && dist[k - GX] === FAR) { dist[k - GX] = d; queue[tail++] = k - GX; }
+        if (k < GX * (GZ - 1) && wet[k + GX] && dist[k + GX] === FAR) { dist[k + GX] = d; queue[tail++] = k + GX; }
+      }
+      return true;
+    }
+    // open water all the way from a to b, r metres either side, and nothing in the way at the waterline (bridge piers)
+    function waterLine(ax, az, bx, bz, r) {
+      const len = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(len / 3)), ux = (bx - ax) / (len || 1), uz = (bz - az) / (len || 1);
+      for (let i = 1; i <= n; i++) {
+        const x = lerp(ax, bx, i / n), z = lerp(az, bz, i / n);
+        if (!water(x, z) || !water(x - uz * r, z + ux * r) || !water(x + uz * r, z - ux * r)) return false;
+        if (i % 2 === 0 && resolveWorld(x, z, r * 0.6, WATER_Y).hit) return false;
+      }
+      return true;
+    }
+    // the way towards you: downhill on the map of the water, as far along it as there is open water in a straight line
+    function waypoint(c) {
+      let k = cellOf(c.x, c.z);
+      if (dist[k] === FAR) {
+        // (not on a square of the map: the nearest one that is)
+        let best = -1, bd = FAR;
+        for (const o of [-1, 1, -GX, GX, -GX - 1, -GX + 1, GX - 1, GX + 1]) if (dist[k + o] < bd) { bd = dist[k + o]; best = k + o; }
+        if (best < 0) return null;
+        return centre(best);
+      }
+      const path = [];
+      for (let n = 0; n < 18 && dist[k] > 0; n++) {
+        let best = -1, bd = dist[k];
+        for (const o of [-1, 1, -GX, GX, -GX - 1, -GX + 1, GX - 1, GX + 1]) { const m = k + o; if (m >= 0 && m < dist.length && dist[m] < bd) { bd = dist[m]; best = m; } }
+        if (best < 0) break;
+        k = best; path.push(k);
+      }
+      const r = c.M.W / 2 + 0.6;
+      for (let i = path.length - 1; i >= 0; i--) { const p = centre(path[i]); if (waterLine(c.x, c.z, p.x, p.z, r)) return p; }
+      return path.length ? centre(path[0]) : null;
+    }
+    // where you are: in your boat, in a friend's, or on foot by the water
+    const onWater = () => !!(driving && driving.M.boat) || !!(MP.ride && MP.ride.M.boat);
+    function target() {
+      const b = driving || MP.ride;
+      return b ? { x: b.x, z: b.z, vx: b.vx, vz: b.vz, L: b.M.L } : { x: player.x, z: player.z, vx: player.vx, vz: player.vz, L: 1 };
+    }
+    const units = () => cars.filter((c) => c.water);
+    function spawn(M, role) {
+      const T = target();
+      for (let tries = 0; tries < 80; tries++) {
+        const a = Math.random() * TAU, r = 160 + Math.random() * 240, x = T.x + Math.sin(a) * r, z = T.z + Math.cos(a) * r, k = cellOf(x, z);
+        if (!wet[k] || dist[k] === FAR || dist[k] * CELL > 700) continue;
+        // (out of sight where possible: behind the camera, or far off)
+        const cx = x - camera.position.x, cz = z - camera.position.z, fw = new THREE.Vector3(); camera.getWorldDirection(fw);
+        if (tries < 50 && (cx * fw.x + cz * fw.z) / (Math.hypot(cx, cz) || 1) > 0.5 && r < 300) continue;
+        const p = centre(k), h = Math.atan2(T.x - p.x, T.z - p.z);
+        if (!boatFree(M, p.x, p.z, h)) continue;
+        const c = makeCar(M, M.colors[0]);
+        Object.assign(c, { x: p.x, z: p.z, h, keep: true, vx: Math.sin(h) * 8, vz: Math.cos(h) * 8 });
+        c.water = { role, stuckT: 0, revT: 0, fireT: 4 + Math.random() * 3, caughtT: 0, leave: false, leaveT: 0, home: { x: p.x, z: p.z } };
+        c.police = { state: 'chase', direct: false, goalNode: -1, callIn: Infinity };
+        if (role === 'army') { c.military = true; setOccupant(c, makeIdentity(SOLDIER)); c.siren = false; }
+        else { setOccupant(c, makeIdentity(OFFICER)); c.siren = true; c.yelp = false; }
+        return c;
+      }
+      return null;
+    }
+    function think(c, dt) {
+      const W = c.water, M = c.M, T = target(), fx = Math.sin(c.h), fz = Math.cos(c.h), lxv = Math.cos(c.h), lzv = -Math.sin(c.h);
+      const vf = c.vx * fx + c.vz * fz, d = Math.hypot(T.x - c.x, T.z - c.z), tsp = Math.hypot(T.vx, T.vz), wet = onWater();
+      let gx = T.x, gz = T.z, vT = M.max * 0.95;
+      if (W.leave) {
+        // going home: back where it came from, out of your way
+        gx = W.home.x; gz = W.home.z;
+        if (!waterLine(c.x, c.z, gx, gz, M.W / 2 + 0.6)) { const a = Math.atan2(c.x - T.x, c.z - T.z); gx = c.x + Math.sin(a) * 60; gz = c.z + Math.cos(a) * 60; }
+        vT = M.max * 0.7;
+      } else {
+        const r = M.W / 2 + 0.6, ram = W.role === 'police' && stars() >= 3 && tsp > 5;
+        if (d < 240 && waterLine(c.x, c.z, T.x, T.z, r)) {
+          const lead = Math.min(1.2, d / 25) * (ram ? 0.5 : 1);
+          gx = T.x + T.vx * lead; gz = T.z + T.vz * lead;
+        } else { const p = waypoint(c); if (p) { gx = p.x; gz = p.z; } }
+        // the police come alongside and keep pace (from three stars they ram you), the navy stays off at gun range
+        if (!wet) vT = d > 30 ? M.max : 0;
+        else if (W.role === 'army') vT = d > 60 ? M.max : clamp(tsp * 1.05 + (d - 35) * 0.3, 1.5, M.max);
+        else vT = ram ? M.max : d > 35 ? M.max : clamp(tsp * 1.15 + (d - (T.L + M.L) / 2 - 2) * 0.7, 0, M.max);
+      }
+      const dx = gx - c.x, dz = gz - c.z, err = Math.atan2(dx * lxv + dz * lzv, dx * fx + dz * fz);
+      const right = -clamp(err * 2.2, -1, 1);
+      let fwd = clamp((vT - vf) * 0.35, -1, 1);
+      if (Math.abs(err) > 1.3 && vf > 6) fwd = Math.min(fwd, 0.15);
+      if (W.revT > 0) { W.revT -= dt; return { fwd: -0.8, right: -right, brake: false }; }
+      if (fwd > 0.3 && Math.abs(vf) < 0.6) { if ((W.stuckT += dt) > 1.5) { W.revT = 1.6; W.stuckT = 0; } } else W.stuckT = 0;
+      return { fwd, right, brake: false };
+    }
+    // the navy's warning: a burst from the machine gun into the water just short of you
+    function burst(c, T) {
+      const co = Math.cos(c.h), si = Math.sin(c.h), hd = c.geo.head, gx = c.x + hd[0] * co + hd[2] * si, gz = c.z - hd[0] * si + hd[2] * co, gy = c.body.position.y + hd[1] + 0.4;
+      const a = Math.atan2(T.x - gx, T.z - gz), short = 9 + Math.random() * 6;
+      for (let i = 0; i < 8; i++) {
+        const sa = a + (Math.random() - 0.5) * 0.12, dd = Math.max(8, Math.hypot(T.x - gx, T.z - gz) - short + (Math.random() - 0.5) * 8);
+        const hx = gx + Math.sin(sa) * dd, hz = gz + Math.cos(sa) * dd, tt = 0.25 + i * 0.03;
+        sparkFx.spawn({ x: gx, y: gy, z: gz, vx: (hx - gx) / tt, vy: (WATER_Y - gy) / tt, vz: (hz - gz) / tt, life: tt, size: [0.5, 0.25], alpha: 1, c: SPARK_COL, drag: 0 });
+        for (let k = 0; k < 6; k++) foamFx.spawn({ x: hx + (Math.random() - 0.5) * 0.6, y: WATER_Y + 0.1, z: hz + (Math.random() - 0.5) * 0.6, vx: (Math.random() - 0.5) * 2, vy: 3 + Math.random() * 4, vz: (Math.random() - 0.5) * 2, life: 0.8 + Math.random() * 0.5, size: [0.3, 0.9], alpha: 0.85, c: FOAM_COL, grav: 9, drag: 0.6 });
+      }
+      if (audio && !muted) {
+        const s = placeSound(gx, gz, 400), t = audio.ctx.currentTime;
+        for (let k = 0; k < 9; k++) noiseBurst(t + k * 0.085, 0.07, 0.28 * s.level + 0.01, 'bandpass', 700 + Math.random() * 300, 1.1, s.pan, 0.002);
+      }
+      if (c.aim !== undefined) c.pitch -= 0.01;
+    }
+    // caught on the water by the sjöpolis
+    function caught() {
+      if (!arrestable(wanted)) { endChase(true); return; }
+      // arrested: the boat is left where it lies, and they take you to the station
+      const boat = driving;
+      if (boat) { setOccupant(boat, null); boat.vx = boat.vz = 0; driving = null; }
+      if (MP.ride) MP.unride();
+      player.model.group.visible = false; player.vx = player.vz = 0;
+      stop = { car: null, mode: 'arrest', phase: 'water', t: 0, at: { x: player.x, z: player.z }, officer: null, crew: null, name: rpick(CONSTABLES), title: 'Konstapel',
+        ticket: null, nav: {}, pnav: {}, locked: true, spot: null, door: null, vehicle: boat ? boat.M.name : 'Gående' };
+      toast('Sjöpolisen griper dig. Du förs till polisstationen.');
+      fadeThen(jailDirect);
+    }
+    function update(dt) {
+      const list = units(), wet = onWater();
+      offT = wet ? 0 : offT + dt;
+      const hunting = !!wanted && !stop && offT < 25;
+      if (!list.length && !(hunting && wet)) return;
+      grid();
+      const T = target();
+      if ((fieldT -= dt) <= 0 || !list.length) { fieldT = 0.7; flood(T.x, T.z); }
+      // how many of each: more police boats with more stars, the jet ski from three, the navy at five
+      const n = (id) => list.filter((c) => c.M.id === id && !c.water.leave).length, s = stars();
+      if (hunting && wet && (spawnT -= dt) <= 0) {
+        spawnT = 2.5;
+        const want = [['polisbat', [0, 1, 2, 2, 3, 3][s], 'police'], ['polisjet', [0, 0, 0, 1, 1, 2][s], 'police'], ['strb90', s >= 5 ? 2 : 0, 'army']];
+        for (const [id, k, role] of want) if (n(id) < k && spawn(MODEL[id], role)) {
+          if (role === 'army' && !said.army) { said.army = true; toast('Marinen skickar stridsbåtar efter dig!'); }
+          else if (role === 'police' && !said.police) { said.police = true; toast('Sjöpolisen är på väg!'); }
+          break;
+        }
+      }
+      if (!wanted) said = { police: false, army: false, fire: false };
+      for (const c of list) {
+        const W = c.water, d = Math.hypot(T.x - c.x, T.z - c.z);
+        if (!hunting || c.dead) W.leave = true;
+        if (W.leave) {
+          c.siren = false;
+          if ((W.leaveT += dt) > 40 || d > 320) removeCar(c);
+          continue;
+        }
+        // stuck somewhere far off (a pier, a narrow sound): gone, and another comes in its place
+        if (Math.hypot(c.vx, c.vz) < 1.2 && d > 80) { if ((W.stuckTotal = (W.stuckTotal || 0) + dt) > 8) { removeCar(c); continue; } }
+        else W.stuckTotal = 0;
+        // caught: you stopped with a police boat alongside, in plain view
+        if (W.role === 'police' && driving && driving.M.boat) {
+          const sp = Math.hypot(driving.vx, driving.vz);
+          if (d < (c.M.L + driving.M.L) / 2 + 3 && sp < 2.2 && clearView(c.x, c.z, T.x, T.z)) {
+            if ((W.caughtT += dt) > 1.4) { caught(); return; }
+          } else W.caughtT = Math.max(0, W.caughtT - dt);
+        }
+        // the navy: warning bursts from the gun when it has you in its sights
+        if (W.role === 'army' && wet && d < 160 && (W.fireT -= dt) <= 0 && Math.abs(wrapAngle(Math.atan2(T.x - c.x, T.z - c.z) - c.h - (c.aim || 0))) < 0.15 && clearView(c.x, c.z, T.x, T.z)) {
+          W.fireT = 6 + Math.random() * 4;
+          burst(c, T);
+          if (!said.fire) { said.fire = true; toast('Stridsbåten skjuter varningsskott! Stanna, eller kör för livet.'); }
+        }
+      }
+    }
+    return { update, think, units, get wet() { return wet; }, flood, waypoint };
+  })();
 
   /* ---------- the police helicopter ---------- */
   // From three stars Polisflyget's helicopter joins the chase: a Bell 429, blue on top and white underneath, with the
@@ -8727,8 +9413,8 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     c.police.out = fc; c.beacon = !c.military; c.siren = false; c.yelp = false;
     footCops.push(fc);
     // the truck has a squad in the back: they jump down and spread out after you
-    if (c.M.mil === 'truck') for (let i = 0; i < 3; i++) {
-      const co = Math.cos(c.h), si = Math.sin(c.h), lx = (i - 1) * 1.1, lz = -c.M.L / 2 - 1.0, x = c.x + lx * co + lz * si, z = c.z - lx * si + lz * co;
+    if (c.M.mil === 'truck') for (let i = 0; i < 5; i++) {
+      const co = Math.cos(c.h), si = Math.sin(c.h), lx = ((i % 3) - 1) * 1.1, lz = -c.M.L / 2 - 1.0 - Math.floor(i / 3) * 1.1, x = c.x + lx * co + lz * si, z = c.z - lx * si + lz * co;
       if (!personFits(x, z)) continue;
       const sq = { p: null, car: c, crew: makeIdentity(SOLDIER), door: { x, z }, mode: 'chase', retT: 0 };
       sq.p = makePerson(sq.crew, x, z, { state: 'cop', role: 'foot', fc: sq, nav: {}, dodgeT: 0 });
@@ -8805,7 +9491,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       spawnParked(M, color, ...at(b.s, d), Math.atan2(wx * out, wz * out), true);
     };
     const bays = LOT.bays.slice().sort((a, b) => Math.abs(a.s - SPAWN.s + 8) - Math.abs(b.s - SPAWN.s + 8));
-    const first = ['f40', 'x5', 'mg5', 'stalker', 'jesko', 'superbil', 'sport', 'muskel', 'halvkombi', 'sedan', 'polestar', 'kombi', 'v240', 'saab', 'taxi', 'suv', 'skapbil'];
+    const first = ['f40', 'chiron', 'x5', 'laferrari', 'mg5', 'stalker', 'countach', 'jesko', 'cobra', 'superbil', 'gt3rs', 'sport', 'muskel', 'halvkombi', 'sedan', 'polestar', 'kombi', 'v240', 'saab', 'taxi', 'suv', 'skapbil'];
     const show = first.concat(PICKABLE.filter((M) => !M.bus && !M.boat && !first.includes(M.id)).map((M) => M.id));
     show.forEach((id, i) => inBay(MODEL[id], MODEL[id].colors[0], bays[i], true));
     for (const b of bays.slice(show.length)) {
@@ -8951,7 +9637,9 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     if (n >= HORSES.length) {
       goldCars = true; fireworksT = 60;
       toast('Alla ' + HORSES.length + ' dalahästar hittade! Fyrverkeri över Strömmen, och nu finns alla bilar i guld (tryck B).');
-    } else toast('Dalahäst ' + n + ' av ' + HORSES.length + ': ' + h.name + '. ' + h.fact);
+    } else toast('Dalahäst ' + n + ' av ' + HORSES.length + ': ' + h.name + '. ' + h.fact + ' Hittelön 50 kr.');
+    // a finder's fee for every one
+    JOBS.reward(50);
   }
   function updateSurprises(dt) {
     const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z, reach = driving ? 3.4 : 1.7;
@@ -8996,6 +9684,13 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       ['Skanstull', 125, 1955], ['Odenplan', -795, -1425], ['KTH', 195, -1690], ['DN-skrapan', -2212, -440]
     ];
     const SAYS = ['Hej! Till {p}, tack.', 'Till {p}, och gärna lite fort, jag är sen!', 'Kan du köra mig till {p}?', '{p}, tack. Ta det lugnt i kurvorna.', 'Hej hej! {p} blir bra.'];
+    // the moped's food runs: from a restaurant to someone's door
+    const RESTAURANTS = ['Pizzeria Napoli', 'Sushibaren', 'Thaiköket', 'Burgerbaren', 'Falafelkungen', 'Pastabaren', 'Dumplinghuset', 'Kebabhuset', 'Tacobaren', 'Ramen-baren', 'Indiska köket', 'Pokébaren'];
+    // the boat taxi's piers, the quays where the boats lie moored round town
+    const PIER_SPOTS = [['Skeppsbron', ...LOT.at(66, 34)], ['Strandvägen', 735, -606], ['Gröna Lund', 1480, 650], ['Hammarby sjöstad', 600, 1965], ['Norr Mälarstrand', -1250, -45],
+      ['Långholmen', -1560, 695], ['Marieberg', -2300, -95], ['Nacka strand', 2600, 1120], ['Lilla Värtan', 3000, -1300], ['Hammarby kaj', 400, 1972]];
+    // the scrapyard in Hammarby hamn, where cars taken off the street are bought (not the ones you choose with B)
+    const SCRAP = (() => { const k = kerbNear(1000, 2195); return { x: k.x, z: k.z, k, name: 'Bilskroten i Hammarby hamn' }; })();
     // the street races: a route of named junctions; every junction after the start is a checkpoint
     const RACES = [
       { id: 'gamla', name: 'Gamla stan runt', route: 'SK1 SK2 SK3 SK4 SL0 KH MB3 MB2 MB1 RT gRHN MT LB SBs SK1' },
@@ -9024,6 +9719,11 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     // parcels waiting at the kerb, and bus stop poles with the SL sign
     const parcelGeo = (() => { const m = new Merger(); m.box(0.6, 0.45, 0.5, 0xa77c4f, 0, 0.225, 0); m.box(0.5, 0.4, 0.45, 0xb98d5c, 0.1, 0.65, 0.05); m.box(0.4, 0.3, 0.4, 0x9c7147, -0.05, 1.0, 0); m.box(0.62, 0.04, 0.06, 0xd8c9a0, 0, 0.46, 0); return m.build(); })();
     const parcels = new THREE.Mesh(parcelGeo, personMat); parcels.visible = false; parcels.castShadow = true; scene.add(parcels);
+    // a paper bag of takeaway on a crate by the kerb
+    const bagGeo = (() => { const m = new Merger(); m.box(0.5, 0.42, 0.4, 0x6b5a45, 0, 0.21, 0); m.box(0.32, 0.38, 0.2, 0xc9a36a, 0, 0.61, 0); m.box(0.33, 0.08, 0.21, 0xc8102e, 0, 0.66, 0); m.box(0.2, 0.06, 0.02, 0xc9a36a, 0, 0.84, 0); return m.build(); })();
+    const bag = new THREE.Mesh(bagGeo, personMat); bag.visible = false; bag.castShadow = true; scene.add(bag);
+    const scrapBeam = beam(0x4cc26a, 2.6, 60);
+    scrapBeam.position.set(SCRAP.x, 0, SCRAP.z); scrapBeam.visible = true;
     const slTex = canvasTex(128, 128, (g, w) => {
       g.fillStyle = '#ffffff'; g.fillRect(0, 0, w, w);
       g.fillStyle = '#1f5fae'; roundRect(g, 8, 8, w - 16, w - 16, 14); g.fill();
@@ -9092,16 +9792,20 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     const routeLen = (p) => { let L = 0; for (let i = 1; i < p.length; i++) L += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]); return L; };
 
     /* the job */
-    let job = null, nearRace = null, bigT = 0, hinted = false;
+    let job = null, nearRace = null, bigT = 0;
+    const hinted = {};
     const el2 = { job: $('job'), icon: $('jobIcon'), title: $('jobTitle'), hint: $('jobHint'), clock: $('jobClock'), big: $('bigText'), cash: $('cash'), cashTag: $('cashTag') };
     function big(text, sub, t = 2.2) { el2.big.textContent = text; if (sub) { const s = document.createElement('small'); s.textContent = sub; el2.big.append(s); } el2.big.hidden = false; bigT = t; }
     function pay(kr, why) { earned += kr; save(); beep([660, 880, 1320], 0.03, 0.3); toast(why + ' +' + fmtKr(kr)); }
     const speed = () => (driving ? Math.hypot(driving.vx, driving.vz) : 0);
-    const kindOf = (c) => (!c ? null : c.M.shape.taxi ? 'taxi' : c.M.id === 'skapbil' ? 'paket' : c.M.bus ? 'buss' : null);
+    const kindOf = (c) => (!c ? null : c.M.shape.taxi ? 'taxi' : c.M.id === 'skapbil' ? 'paket' : c.M.bus ? 'buss' : c.M.moped ? 'mat'
+      : c.M.police && !c.M.boat ? 'polis' : c.M.boat === 'console' || c.M.boat === 'riva' ? 'battaxi' : null);
     function target() { return !job ? null : job.kind === 'race' ? job.race.pts[job.i] : job.goal; }
     function setGoal(k, name) { job.goal = { x: k.x, z: k.z, name, k }; route = routeTo(driving ? driving.x : player.x, driving ? driving.z : player.z, k.x, k.z); routeT = 1.5; }
     function cleanup() {
-      goalBeam.visible = nextBeam.visible = false; parcels.visible = false; route = null;
+      goalBeam.visible = nextBeam.visible = false; parcels.visible = false; bag.visible = false; route = null;
+      // a robber still out there drives on as ordinary traffic
+      if (job && job.robber && cars.includes(job.robber)) { const r = job.robber; r.getaway = false; r.keep = false; if (r.bot) r.bot.cruise = 14; }
       if (job && job.npcs) for (const p of job.npcs) { if (persons.includes(p)) { p.keep = false; p.ai = { state: 'wander', wx: Math.random() - 0.5, wz: Math.random() - 0.5, t: 15, dodgeT: 0 }; } }
       if (job && job.rider && job.car && job.car.rearSeat) job.car.rearSeat.visible = false;
       while (stopMeshes.length) scene.remove(stopMeshes.pop());
@@ -9157,9 +9861,72 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       setGoal(stops[0], 'Hållplats 1 av ' + stops.length);
       toast('Busslinje med ' + stops.length + ' hållplatser. Stanna vid varje så kliver resenärerna på.');
     }
+    // food on the moped: pick it up at a restaurant, take it to someone's door while it's hot
+    function newFood() {
+      const k = randomKerb(driving.x, driving.z, 80, 350);
+      if (!k) { end('Ingen restaurang har något att köra ut just nu.'); return; }
+      bag.position.set(k.walkX, 0, k.walkZ); bag.rotation.y = k.h; bag.visible = true;
+      Object.assign(job, { phase: 'find', t: 0, place: rpick(RESTAURANTS) });
+      setGoal(k, job.place + ', ' + k.e.name);
+      toast('Maten är klar på ' + job.place + ' på ' + k.e.name + '. Hämta den!');
+    }
+    // the police car's job: a robber getting away in a fast car somewhere near. Catch them: stop their car, or wreck it
+    function newRobber() {
+      const c = spawnBot(170, rpick(SPORTS.filter((M) => !M.police)), 420);
+      if (!c) { end('Inga larm just nu. Försök igen om en stund.'); return; }
+      c.keep = true; c.getaway = true; c.bot.cruise = 24; c.bot.turnV = 9;
+      Object.assign(job, { phase: 'chase', t: 0, robber: c, par: 150, heldT: 0, fleeT: 0 });
+      job.goal = { x: c.x, z: c.z, name: c.M.name };
+      toast('Larm! En rånare flyr i ' + c.M.def + '. Kör ikapp och stoppa bilen. L slår på blåljuset.');
+    }
+    // the boat taxi: someone waiting on a pier, wanting to go to another one
+    let piers = null;
+    function pierList() {
+      if (piers) return piers;
+      piers = PIER_SPOTS.map(([name, x, z]) => {
+        const b = findBerth(MODEL.anytec, x, z, 60);
+        if (!b) return null;
+        // where the passenger waits: the nearest bit of quay to the berth
+        let best = null, bd = Infinity;
+        for (let r = 2; r <= 16 && !best; r += 2) for (let i = 0; i < 16; i++) {
+          const a = (i / 16) * TAU, px = b.x + Math.sin(a) * r, pz = b.z + Math.cos(a) * r;
+          if (personFits(px, pz) && !blockedAt(px, pz, 0.4) && Math.hypot(px - b.x, pz - b.z) < bd) { bd = Math.hypot(px - b.x, pz - b.z); best = { x: px, z: pz }; }
+        }
+        return best ? { name, x: b.x, z: b.z, walk: best } : null;
+      }).filter(Boolean);
+      return piers;
+    }
+    function newBoatFare() {
+      const c = driving, list = pierList().filter((p) => { const d = Math.hypot(p.x - c.x, p.z - c.z); return d > 200 && d < 2200; });
+      if (!list.length) { end('Inga resenärer väntar just nu.'); return; }
+      const pier = rpick(list), w = pier.walk;
+      const p = makePerson(makeIdentity(), w.x, w.z, { state: 'idle', face: Math.atan2(pier.x - w.x, pier.z - w.z), dodgeT: 0 });
+      p.keep = true; p.rot = Math.atan2(pier.x - w.x, pier.z - w.z);
+      Object.assign(job, { phase: 'find', npcs: [p], who: p, t: 0, pier, bt: 0 });
+      job.goal = { x: pier.x, z: pier.z, name: pier.name }; route = null;
+      toast('En resenär väntar på bryggan vid ' + pier.name + '. Lägg till där.');
+    }
     function start(kind) {
       job = { kind, car: driving, t: 0, done: 0, offT: 0 };
-      if (kind === 'taxi') newFare(); else if (kind === 'paket') newParcel(); else newRoute();
+      if (kind === 'taxi') newFare(); else if (kind === 'paket') newParcel(); else if (kind === 'mat') newFood();
+      else if (kind === 'polis') newRobber(); else if (kind === 'battaxi') newBoatFare(); else newRoute();
+    }
+    // the scrapyard's price: a sports car is worth a lot, a dented one less
+    function priceOf(c) {
+      const M = c.M, base = M.moped ? 150 : M.sport ? 900 + M.max * 14 : 250 + M.max * 5;
+      return Math.round((base * (M.classic ? 1.4 : 1) * clamp(c.health / 100, 0.2, 1)) / 10) * 10;
+    }
+    let nearScrap = false;
+    function sell() {
+      const c = driving, M = c.M;
+      if (c === spawnedCar) { toast('Bilen du valde med B kan du inte sälja. Ta en bil ute i trafiken och kom tillbaka med den.'); return; }
+      if (M.police || M.mil) { toast('Bilskroten: Den köper vi inte! Ska vi åka fast allihop?'); return; }
+      if (M.bus) { toast('Bilskroten: En SL-buss? Nej tack, den vill SL ha tillbaka.'); return; }
+      if (Math.hypot(c.vx, c.vz) > 1.3) { toast('Stanna bilen först.'); return; }
+      const kr = priceOf(c);
+      if (!exitCar()) return;
+      removeCar(c);
+      pay(kr, 'Bilskroten köpte ' + M.def + '.');
     }
     function startRace(r) {
       job = { kind: 'race', race: r, car: driving, i: 1, t: -3.5, offT: 0 };
@@ -9171,11 +9938,12 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     function key() {
       if (stop && stop.locked) return;
       if (job) { end(job.kind === 'race' ? 'Gatloppet avbrutet.' : 'Du slutade jobba.'); return; }
-      if (!driving) { toast('Jobben görs med bil: taxin, Sprintern eller bussen. Gatloppen startar vid de gula ljuspelarna.'); return; }
+      if (!driving) { toast('Jobben görs med fordon: taxin, Sprintern, bussen, mopeden, polisbilen och motorbåtarna. Gatloppen startar vid de gula ljuspelarna, och bilar säljer du på bilskroten i Hammarby hamn.'); return; }
+      if (nearScrap) { sell(); return; }
       if (nearRace) { startRace(nearRace); return; }
       const kind = kindOf(driving);
       if (kind) start(kind);
-      else toast('Med ' + driving.M.def + ' kan du köra gatlopp vid de gula ljuspelarna. Taxin, Sprintern och bussen har egna jobb.');
+      else toast('Med ' + driving.M.def + ' kan du köra gatlopp vid de gula ljuspelarna, eller sälja den på bilskroten i Hammarby hamn. Taxin, Sprintern, bussen, mopeden, polisbilen och motorbåtarna har egna jobb.');
     }
 
     function update(dt) {
@@ -9186,6 +9954,10 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       if (nearRace && nearRace !== update.lastNear) toast('Gatlopp: ' + nearRace.name + (records[nearRace.id] ? ', rekord ' + fmtTime(records[nearRace.id]) : '') + '. Tryck J för att starta.');
       update.lastNear = nearRace;
       for (const b of startBeams) b.visible = !job || job.kind !== 'race';
+      // pulled in at the scrapyard: what they would give for this one
+      nearScrap = !!driving && !job && !driving.M.boat && Math.hypot(SCRAP.x - driving.x, SCRAP.z - driving.z) < 12;
+      if (nearScrap && !update.atScrap) toast(driving === spawnedCar || driving.M.police || driving.M.mil || driving.M.bus ? 'Bilskroten: Den här köper vi inte.' : 'Bilskroten: Vi ger ' + fmtKr(priceOf(driving)) + ' för ' + driving.M.def + '. Stanna och tryck J för att sälja.');
+      update.atScrap = nearScrap;
       if (!job) return;
       job.t += dt;
       // the car is gone, wrecked or left behind, or you were arrested
@@ -9198,7 +9970,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
         goalBeam.position.set(T.x, 0, T.z); goalBeam.visible = true;
         goalBeam.children[1].scale.setScalar(1 + 0.06 * Math.sin(clock * 5));
       }
-      if (job.kind !== 'race' && (routeT -= dt) <= 0 && T && driving) { route = routeTo(driving.x, driving.z, T.x, T.z); routeT = 1.5; }
+      if (job.kind !== 'race' && job.kind !== 'battaxi' && (routeT -= dt) <= 0 && T && driving) { route = routeTo(driving.x, driving.z, T.x, T.z); routeT = 1.5; }
       const c = job.car, d = T ? Math.hypot(T.x - c.x, T.z - c.z) : Infinity, still = speed() < 1.3 && driving === c;
       if (job.kind === 'race') {
         const R = job.race;
@@ -9289,6 +10061,93 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
         } else job.lt = 0;
         return;
       }
+      if (job.kind === 'mat') {
+        if (job.phase === 'find' && d < 9 && still) {
+          job.lt = (job.lt || 0) + dt;
+          if (job.lt > 1) {
+            job.lt = 0; bag.visible = false;
+            const k = randomKerb(c.x, c.z, 250, 900);
+            if (!k) { end('Ingen adress att köra till härifrån.'); return; }
+            setGoal(k, k.e.name + ' ' + (1 + Math.floor(Math.random() * 60)));
+            const L = routeLen(route);
+            Object.assign(job, { phase: 'deliver', t: 0, par: L / 9 + 25, len: L });
+            toast('Maten är i boxen. Kör den till ' + job.goal.name + ' medan den är varm!');
+          }
+        } else if (job.phase === 'deliver' && d < 11 && still) {
+          job.lt = (job.lt || 0) + dt;
+          if (job.lt > 1) {
+            job.lt = 0;
+            const late = job.t > job.par, quick = job.t < job.par * 0.75;
+            const kr = Math.max(25, Math.round((60 + job.len * 0.22) * (late ? 0.7 : quick ? 1.35 : 1)));
+            job.done++;
+            pay(kr, late ? 'Maten kom fram, men den hann kallna.' : quick ? 'Varm och god! Kunden ger dricks.' : 'Maten är levererad.');
+            newFood();
+          }
+        } else job.lt = 0;
+        return;
+      }
+      if (job.kind === 'polis') {
+        const r = job.robber;
+        if (!r || !cars.includes(r)) { end('Rånaren kom undan.'); return; }
+        job.goal = { x: r.x, z: r.z, name: r.M.name };
+        // the robber runs from you: now and then a new place to get to, well away from you
+        if (r.bot && (job.fleeT -= dt) <= 0) {
+          job.fleeT = 3;
+          const ax = r.x - c.x, az = r.z - c.z, al = Math.hypot(ax, az) || 1;
+          let best = -1, bv = -Infinity;
+          for (let i = 0; i < 40; i++) {
+            const n = Math.floor(Math.random() * nodes.length), N = nodes[n];
+            if (!N.nb.length) continue;
+            const dd = Math.hypot(N.x - r.x, N.z - r.z), v = ((N.x - r.x) * ax + (N.z - r.z) * az) / al - Math.abs(dd - 450) * 0.3;
+            if (dd > 200 && v > bv) { bv = v; best = n; }
+          }
+          if (best >= 0) { r.bot.goal = { node: best, x: nodes[best].x, z: nodes[best].z }; if (r.bot.phase === 'edge') r.bot.next = chooseNext(r.bot.from, r.bot.to, r.bot.goal, true); }
+        }
+        // caught: the getaway car wrecked, or stopped with you right on it
+        const rs = Math.hypot(r.vx, r.vz), close = Math.hypot(r.x - c.x, r.z - c.z) < (r.M.L + c.M.L) / 2 + 3;
+        job.heldT = rs < 1.5 && close ? job.heldT + dt : 0;
+        if (r.dead || job.heldT > 2) {
+          const kr = Math.round(300 + Math.max(0, job.par - job.t) * 4);
+          const spot = exitSpot(r);
+          if (spot && r.occupant) { const p = makePerson(r.occupant, spot.x, spot.z, { state: 'idle', face: r.h, dodgeT: 0 }); p.cuffed = true; p.rot = r.h; }
+          setOccupant(r, null); r.bot = null; r.getaway = false; r.keep = false; job.robber = null;
+          job.done++;
+          pay(kr, 'Rånaren är gripen!');
+          end();
+          return;
+        }
+        if (job.t > job.par || Math.hypot(r.x - c.x, r.z - c.z) > 700) { end('Rånaren kom undan.'); return; }
+        return;
+      }
+      if (job.kind === 'battaxi') {
+        const P = job.pier;
+        if (job.phase === 'find') {
+          if (d < 16 && still) {
+            job.bt += dt;
+            const p = job.who;
+            if (persons.includes(p)) { p.ai = { state: 'board', car: c, dodgeT: 0 }; }
+            if (job.bt > 1.5 || !persons.includes(p) || Math.hypot(p.x - c.x, p.z - c.z) < c.M.W / 2 + 1.5) {
+              if (persons.includes(p)) removePerson(p);
+              job.npcs = []; job.rider = p.id;
+              const list = pierList().filter((q) => q !== P && Math.hypot(q.x - c.x, q.z - c.z) > 450);
+              if (!list.length) { end('Ingen brygga att åka till härifrån.'); return; }
+              const to = rpick(list), L = Math.hypot(to.x - c.x, to.z - c.z) * 1.35;
+              Object.assign(job, { phase: 'ride', t: 0, pier: to, par: L / 12 + 30, len: L, hp: c.health });
+              job.goal = { x: to.x, z: to.z, name: to.name };
+              toast('Resenären: Till ' + to.name + ', tack!');
+            }
+          } else job.bt = 0;
+        } else if (job.phase === 'ride' && d < 16 && still) {
+          const late = job.t > job.par, dmg = Math.max(0, job.hp - c.health);
+          const kr = Math.max(40, Math.round((140 + job.len * 0.3) * (job.t < job.par * 0.8 ? 1.3 : late ? 0.75 : 1) - dmg * 4));
+          const w = P.walk, p = makePerson(job.rider, w.x, w.z, { state: 'wander', wx: Math.random() - 0.5, wz: Math.random() - 0.5, t: 20, dodgeT: 0 });
+          p.rot = c.h; job.rider = null;
+          job.done++;
+          pay(kr, late ? 'Resenären betalar, men tyckte det tog lång tid.' : job.t < job.par * 0.8 ? 'Snabbt! Resenären ger dricks.' : 'Resenären betalar.');
+          newBoatFare();
+        }
+        return;
+      }
       if (job.kind === 'buss') {
         if (d < 12 && still) {
           job.lt = (job.lt || 0) + dt;
@@ -9332,6 +10191,18 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
         icon = '▣'; title = job.phase === 'deliver' ? 'Leverera till ' + job.goal.name : 'Hämta paketen';
         hint = fmtDist(d) + ' · ' + (job.phase === 'deliver' ? 'stanna vid adressen' : job.goal.name) + ' · ' + job.done + ' levererade';
         if (job.phase === 'deliver') clockTxt = fmtTime(Math.max(0, job.par - job.t));
+      } else if (job.kind === 'mat') {
+        icon = 'M'; title = job.phase === 'deliver' ? 'Leverera maten till ' + job.goal.name : 'Hämta maten på ' + job.place;
+        hint = fmtDist(d) + ' · ' + (job.phase === 'deliver' ? 'stanna vid adressen' : 'stanna vid restaurangen') + ' · ' + job.done + ' levererade';
+        if (job.phase === 'deliver') clockTxt = fmtTime(Math.max(0, job.par - job.t));
+      } else if (job.kind === 'polis') {
+        icon = '★'; title = 'Polisuppdrag: stoppa rånaren';
+        hint = fmtDist(d) + ' · ' + job.goal.name + ' · kör ikapp och stoppa bilen';
+        clockTxt = fmtTime(Math.max(0, job.par - job.t));
+      } else if (job.kind === 'battaxi') {
+        icon = '⚓'; title = job.phase === 'ride' ? 'Båttaxi till ' + job.goal.name : 'Båttaxi: hämta vid ' + job.goal.name;
+        hint = fmtDist(d) + ' · lägg till vid bryggan · ' + job.done + ' körda';
+        if (job.phase === 'ride') clockTxt = fmtTime(Math.max(0, job.par - job.t));
       } else {
         icon = 'SL'; title = 'Busslinje: ' + job.goal.name;
         hint = fmtDist(d) + ' · stanna vid hållplatsen · ' + job.done + ' resenärer';
@@ -9357,6 +10228,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
         g.beginPath(); g.moveTo(ex + ux * 9 * u, ez + uz * 9 * u); g.lineTo(ex - uz * 6 * u, ez + ux * 6 * u); g.lineTo(ex + uz * 6 * u, ez - ux * 6 * u); g.closePath(); g.fill(); g.stroke();
       };
       if (!job || job.kind !== 'race') for (const r of RACES) if (Math.hypot(r.pts[0].x - px, r.pts[0].z - pz) < 105) mark(r.pts[0].x, r.pts[0].z, '#ffe14a', 4.5);
+      if (Math.hypot(SCRAP.x - px, SCRAP.z - pz) < 105) mark(SCRAP.x, SCRAP.z, '#4cc26a', 5);
       if (T) mark(T.x, T.z, job.kind === 'race' ? '#ff7a1a' : '#ffc21a', 6);
     }
     function drawBig(g, toX, toY, k) {
@@ -9374,18 +10246,32 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
         g.beginPath(); g.moveTo(X, Y + 7); g.lineTo(X, Y - 11); g.lineTo(X + 11, Y - 7); g.lineTo(X, Y - 3); g.stroke(); g.fill();
         if (k > 0.3) { g.font = '800 11px Overpass, sans-serif'; g.textAlign = 'left'; g.textBaseline = 'middle'; g.lineWidth = 3; g.strokeStyle = 'rgba(255,255,255,.85)'; g.strokeText(r.name, X + 13, Y - 6); g.fillStyle = '#7a5600'; g.fillText(r.name, X + 13, Y - 6); }
       }
+      {
+        // the scrapyard: a green square with a krona sign
+        const X = toX(SCRAP.x), Y = toY(SCRAP.z);
+        g.fillStyle = '#4cc26a'; g.strokeStyle = '#ffffff'; g.lineWidth = 2; g.fillRect(X - 7, Y - 7, 14, 14); g.strokeRect(X - 7, Y - 7, 14, 14);
+        g.fillStyle = '#ffffff'; g.font = '900 10px Overpass, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('kr', X, Y + 0.5);
+        if (k > 0.3) { g.font = '800 11px Overpass, sans-serif'; g.textAlign = 'left'; g.lineWidth = 3; g.strokeStyle = 'rgba(255,255,255,.85)'; g.strokeText('Bilskroten', X + 11, Y); g.fillStyle = '#1f6b2f'; g.fillText('Bilskroten', X + 11, Y); }
+      }
       const T = target();
       if (T) { g.fillStyle = '#ffc21a'; g.strokeStyle = '#ffffff'; g.lineWidth = 2.5; g.beginPath(); g.arc(toX(T.x), toY(T.z), 7, 0, TAU); g.fill(); g.stroke(); }
     }
     // say what J does the first time you sit in a car that has a job
     function entered(c) {
       const k = kindOf(c);
-      if (k && !job && !hinted) { hinted = true; setTimeout(() => toast(k === 'taxi' ? 'Tryck J för att köra taxi.' : k === 'paket' ? 'Tryck J för att köra ut paket.' : 'Tryck J för att köra en busslinje.'), 2600); }
+      if (k && !job && !(hinted[k])) {
+        hinted[k] = true;
+        setTimeout(() => toast({ taxi: 'Tryck J för att köra taxi.', paket: 'Tryck J för att köra ut paket.', buss: 'Tryck J för att köra en busslinje.', mat: 'Tryck J för att köra ut mat.',
+          polis: 'Tryck J för ett polisuppdrag: stoppa en rånare.', battaxi: 'Tryck J för att köra båttaxi mellan bryggorna.' }[k]), 2600);
+      }
     }
     return {
       key, update, hud, drawMini, drawBig, entered, RACES, PLACES,
       // paying out of the Kassa: false (and nothing taken) when there is not enough
       spend(kr) { if (earned < kr) return false; earned -= kr; save(); return true; },
+      // money from elsewhere (the Dalahästar's finder's fee), without a word of its own
+      reward(kr) { earned += kr; save(); },
+      SCRAP, priceOf,
       get job() { return job; }, get earned() { return earned; }, get route() { return route; },
       // test hooks: hold the race countdown short, skip to a checkpoint
       _skipCountdown() { if (job && job.kind === 'race') job.t = 0; }
@@ -9654,7 +10540,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
 
     /* buying */
     let near = null;
-    const broke = (what, kr) => toast(what + ' kostar ' + fmtKr(kr) + ', men du har bara ' + fmtKr(JOBS.earned) + '. Tjäna pengar på ett jobb: ta taxin, Sprintern eller SL-bussen och tryck J.');
+    const broke = (what, kr) => toast(what + ' kostar ' + fmtKr(kr) + ', men du har bara ' + fmtKr(JOBS.earned) + '. Tjäna pengar på ett jobb: ta taxin, Sprintern, SL-bussen, mopeden, en polisbil eller en motorbåt och tryck J, eller sälj en bil på bilskroten i Hammarby hamn.');
     function buyIce(k) {
       if (ice) { toast('Du har redan en glass. Ät upp den först!'); return; }
       if (!JOBS.spend(ICE_PRICE)) { broke('En strut', ICE_PRICE); return; }
@@ -9831,8 +10717,8 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     if (driving || MP.ride || !started || (stop && stop.locked)) return null;
     let best = null, bd = Infinity;
     for (const c of cars) {
-      // (a friend's car you can only ride along in)
-      if (c.remote) continue;
+      // (a friend's car you can only ride along in, and the sjöpolis's and the navy's boats can't be taken)
+      if (c.remote || c.water) continue;
       const dx = player.x - c.x, dz = player.z - c.z;
       if (dx * dx + dz * dz > 100) continue;
       const co = Math.cos(c.h), si = Math.sin(c.h), lx = dx * co - dz * si, lz = dx * si + dz * co;
@@ -10030,7 +10916,12 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       poly([...win.map(([z, y0]) => [z, y0]), ...win.slice().reverse().map(([z, , y1]) => [z, y1])], '#23384b');
       for (const [pz, pw] of S.pillars || []) { const r = sh.ring(pz); poly([[pz - pw / 2, r.yt], [pz + pw / 2, r.yt], [pz + pw / 2, r.top], [pz - pw / 2, r.top]], '#1d2024'); }
     }
-    if (S.wing) { const wz = -hl + 0.32, wy = sh.belt(wz); poly([[wz - 0.22, wy + 0.27], [wz + 0.14, wy + 0.27], [wz + 0.14, wy + 0.31], [wz - 0.22, wy + 0.31]], '#1f2226'); }
+    if (S.wing) {
+      const Wg = S.wing === true ? {} : S.wing, wz = -hl + (Wg.z ?? 0.32), wy = sh.belt(wz), h = Wg.h ?? 0.28;
+      poly([[wz - 0.04, wy], [wz + 0.04, wy], [wz + 0.04, wy + h], [wz - 0.04, wy + h]], '#1f2226');
+      poly([[wz - 0.22, wy + h - 0.01], [wz + 0.14, wy + h - 0.01], [wz + 0.14, wy + h + 0.03], [wz - 0.22, wy + h + 0.03]], '#1f2226');
+    }
+    if (S.open) { const zf = S.open.z[1], yb = sh.belt(zf), ws = S.open.screen ?? 0.3; poly([[zf, yb], [zf - ws * 0.55, yb + ws], [zf - ws * 0.55 - 0.05, yb + ws], [zf - 0.06, yb]], '#23384b'); }
     // the F40's wing on its swept-up rear wings
     if (S.f40) { const wy = S.f40.wingY, wa = -hl + 0.03, wb = -hl + 0.4; poly([[wa, sh.belt(wa) - 0.03], [-1.55, sh.belt(-1.55) - 0.03], [wb, wy - 0.02], [wb, wy + 0.01], [wa, wy + 0.03]], hex(shade(M.colors[0], 0.78))); }
     for (const z of [M.wb / 2, -M.wb / 2]) {
@@ -10054,7 +10945,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       stats.textContent = M.kind + '\nToppfart ' + Math.round(M.max * 3.6) + ' km/h\n0–' + M.sprint.kmh + ' på ' + M.sprint.t.toFixed(1).replace('.', ',') + ' s\n' + (M.boat ? M.engine : M.ev ? 'Elmotor, en växel' : M.cvt ? 'Tvåtakt, variator' : M.gears + ' växlar');
       btn.append(cv, title, stats);
       btn.addEventListener('click', () => chooseModel(M));
-      (M.boat ? $('gridBoat') : M.moped ? $('gridMoped') : M.sport ? $('gridSport') : $('gridNormal')).appendChild(btn);
+      (M.boat ? $('gridBoat') : M.moped ? $('gridMoped') : M.group === 'super' ? $('gridSuper') : M.group === 'classic' ? $('gridClassic') : M.sport ? $('gridSport') : $('gridNormal')).appendChild(btn);
     });
   }
   function openPicker() {
@@ -10125,8 +11016,16 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
   function chooseModel(M) {
     closePicker();
     if (stop && stop.locked) return;
-    if (MP.ride) MP.unride();
     let spot = null;
+    // riding in a friend's boat out on the water: a car has to wait for a quay, a boat is put beside theirs
+    if (MP.ride) {
+      const r = MP.ride;
+      if (r.M.boat && !boatExitSpot(r)) {
+        if (!M.boat) { toast('Vänta tills båten ligger vid en kaj, så kan du kliva i land.'); return; }
+        spot = findBerth(M, r.x, r.z, 80);
+      }
+      MP.unride();
+    }
     if (driving && driving.M.boat && !exitSpot(driving)) {
       // out on the water: another boat takes this one's place, but a car has to wait for dry land
       if (!M.boat) { toast('Kör fram till en kaj först, så att du kan kliva i land.'); return; }
@@ -10152,14 +11051,16 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
   function manageTraffic(dt) {
     botSpawnT -= dt;
     let bots = 0, police = 0, army = 0;
-    for (const c of cars) { if (c.military) army++; else if (c.police) police++; else if (c.bot) bots++; }
-    // five stars: the army is called in, a tank, armoured cars and a truck of soldiers, from further off than the police
+    // (the boats on the water are counted on their own, see WATER)
+    for (const c of cars) { if (c.water) continue; if (c.military) army++; else if (c.police) police++; else if (c.bot) bots++; }
+    // five stars: the army is called in, tanks, armoured cars and trucks of soldiers, from further off than the police
     const at = armyTarget();
     if (army < at && (armySpawnT -= dt) <= 0) {
-      const kinds = cars.filter((c) => c.military).map((c) => c.M.mil), M = !kinds.includes('tank') ? MODEL.strv122 : !kinds.includes('truck') ? MODEL.miltruck : MODEL.patgb360;
+      const kinds = cars.filter((c) => c.military && !c.water).map((c) => c.M.mil), n = (k) => kinds.filter((m) => m === k).length;
+      const M = n('tank') < 2 ? MODEL.strv122 : n('truck') < 2 ? MODEL.miltruck : MODEL.patgb360;
       const c = spawnBot(230, M, 520);
       if (c) makeArmy(c);
-      armySpawnT = 3;
+      armySpawnT = 2;
     }
     if (bots < BOT_TARGET && botSpawnT <= 0) { spawnBot(130); botSpawnT = 0.5; }
     policeSpawnT -= dt;
@@ -10269,7 +11170,8 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
         c.roll += (clamp(-Math.atan2(vf * turn, 9.81) * (jet ? 0.9 : 0.35), -0.55, 0.55) + Math.sin(t * 1.3) * 0.025 - c.roll) * k;
         c.pitch += (-0.09 * hump * (c.throttle > 0.1 ? 1 : 0.5) - 0.025 * clamp(av / 15, 0, 1) + Math.sin(t * 1.7) * 0.02 - c.pitch) * k;
         c.body.position.y = WATER_Y + Math.sin(t * 1.1) * 0.05 + 0.1 * clamp(av / 14, 0, 1);
-        if (c.steerGroup) c.steerGroup.rotation.y = c.steer;
+        // (the jet ski's handlebars turn with the steering; the combat boat's gun is aimed, see aimTurret)
+        if (c.steerGroup && !c.M.mil) c.steerGroup.rotation.y = c.steer;
         boatWake(c, dt);
       } else if (c.M.moped) {
         // a moped leans into the turn as far as the turn needs; parked it leans on its stand, knocked over it lies flat
@@ -10472,7 +11374,8 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       const hint = stop ? (ph === 'approach' || ph === 'parked' ? 'Sitt kvar, polisen parkerar' : ph === 'walk' ? 'Konstapeln kommer fram till dig'
         : ph === 'talk' ? 'Tryck E för att skriva under boten' : ph === 'flee' ? 'Du smet! Konstapeln springer tillbaka'
         : ph === 'order' ? 'Kliv ur bilen, du är gripen' : ph === 'cuff' ? 'Du får handbojor på dig' : ph === 'escort' || ph === 'board' ? 'Konstapeln för dig till polisbilen'
-        : ph === 'transport' || ph === 'park' ? 'På väg till polisstationen. E hoppar fram' : ph === 'walkin' || ph === 'incell' ? 'Du förs in på polisstationen' : 'Polisen kör snart vidare')
+        : ph === 'transport' || ph === 'park' ? 'På väg till polisstationen. E hoppar fram' : ph === 'walkin' || ph === 'incell' ? 'Du förs in på polisstationen'
+        : ph === 'water' ? 'Sjöpolisen tar dig till polisstationen' : 'Polisen kör snart vidare')
         : wanted.stopT > 0.2 ? 'Stå still …' : driving ? 'Kör in till kanten och stanna' : footCops.some((f) => f.mode === 'chase') ? 'Polisen springer efter dig!' : 'Polisen letar efter dig';
       if (hint !== lastHint) { el.wantedHint.textContent = hint; el.wantedTitle.textContent = title; lastHint = hint; }
       el.wanted.classList.toggle('calm', !!stop);
@@ -10786,7 +11689,15 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     jetski: { cyl: 3, saw: 0.5, sub: 0.22, harm: 0.42, harmWave: 'sawtooth', harmRatio: 1.5, noise: 0.22, clatter: 0, lope: 0.04, drive: 2.8, cut: 520, open: 3.4, q: 1.4, turbo: 1.1, pops: 0, vol: 0.85 },
     // a big V8 outboard: a deep burble through the water at idle that turns into a growl
     outboard: { cyl: 8, saw: 0.5, sub: 0.6, subRatio: 0.25, harm: 0.15, noise: 0.16, clatter: 0, lope: 0.4, lopeRatio: 0.5, drive: 3.2, cut: 240, open: 2.6, q: 1.7, turbo: 0, pops: 0.25, vol: 1.0 },
-    twostroke: { cyl: 2, saw: 0.7, sub: 0.12, harm: 0.5, harmWave: 'square', harmRatio: 2, noise: 0.2, clatter: 0, lope: 0.22, lopeRatio: 1, drive: 3.2, cut: 950, open: 2.8, q: 3.8, turbo: 0, pops: 0.35, vol: 0.62 }
+    twostroke: { cyl: 2, saw: 0.7, sub: 0.12, harm: 0.5, harmWave: 'square', harmRatio: 2, noise: 0.2, clatter: 0, lope: 0.22, lopeRatio: 1, drive: 3.2, cut: 950, open: 2.8, q: 3.8, turbo: 0, pops: 0.35, vol: 0.62 },
+    // a V12 without turbos (the Aventador's, the LaFerrari's, the Countach's): smooth, and a high scream at the top
+    v12: { cyl: 12, saw: 0.55, sub: 0.2, harm: 0.6, harmWave: 'sawtooth', harmRatio: 2, noise: 0.05, clatter: 0, lope: 0.02, drive: 3.6, cut: 760, open: 6.5, q: 3.2, turbo: 0, pops: 0.6, vol: 1.0 },
+    // a V12 with turbos (the Huayra's AMG, the DBS's): deeper, rounder, the turbos hissing over it
+    v12t: { cyl: 12, saw: 0.55, sub: 0.35, harm: 0.45, harmWave: 'sawtooth', harmRatio: 2, noise: 0.07, clatter: 0, lope: 0.03, drive: 3.4, cut: 520, open: 5, q: 2.6, turbo: 0.75, pops: 0.6, flutter: 0.4, vol: 1.05 },
+    // the Chiron's W16 with four turbos: a deep, heavy roar, and a rush of air and whistles from the turbos
+    w16: { cyl: 16, saw: 0.5, sub: 0.55, subRatio: 0.5, harm: 0.3, harmWave: 'sawtooth', harmRatio: 1.5, noise: 0.12, clatter: 0, lope: 0.05, drive: 3.2, cut: 380, open: 3.8, q: 1.8, turbo: 1.4, pops: 0.3, flutter: 0.6, vol: 1.1 },
+    // the GT-R's V6 with two turbos: a hard, hissing growl
+    v6: { cyl: 6, saw: 0.58, sub: 0.3, harm: 0.3, harmWave: 'sawtooth', harmRatio: 1.5, noise: 0.08, clatter: 0, lope: 0.08, drive: 3, cut: 320, open: 3.6, q: 1.6, turbo: 0.9, pops: 0.5, vol: 0.95 }
   };
   const TRAFFIC_VOICES = 3;
   let audio = null, muted = false;
@@ -11181,7 +12092,8 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     if (MP.keydown(e)) return;
     if (bigmap.open) { if (e.code === 'Escape' || e.code === 'KeyK') { e.preventDefault(); onKey(e.code, e.repeat); } return; }
     if (pickerOpen) { if (e.code === 'Escape' || e.code === 'KeyB' || /^Digit\d$/.test(e.code)) { e.preventDefault(); onKey(e.code, e.repeat); } return; }
-    if (NO_SCROLL.includes(e.code)) e.preventDefault();
+    // (P opens the friends' sign and focuses a field in it: the key itself must not type a "p" there)
+    if (NO_SCROLL.includes(e.code) || (started && e.code === 'KeyP')) e.preventDefault();
     if (started) keys[e.code] = true;
     onKey(e.code, e.repeat);
   });
@@ -11645,6 +12557,149 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     }
 
     /* ---------- connecting ---------- */
+    const ICE = [
+      { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] },
+      { urls: 'stun:stun.cloudflare.com:3478' },
+      { urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478'], username: 'peerjs', credential: 'peerjsp' },
+      { urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp'], username: 'openrelayproject', credential: 'openrelayproject' }
+    ];
+    // the line to the server, kept up while you are in a room: it can drop when the phone sleeps or the tab is in the background,
+    // and while it is down nobody new can find the room. Called up again until it is back
+    function keepLine() {
+      const peer = S.peer;
+      if (!peer || peer.destroyed || !peer.disconnected || !inRoom()) return;
+      try { peer.reconnect(); } catch { /* tried again in a moment */ }
+    }
+    setInterval(keepLine, 4000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) keepLine(); });
+    window.addEventListener('online', keepLine);
+
+    /* ---------- the second way through ---------- */
+    // some networks won't let a direct connection through, and the free TURN servers often don't answer. Then the game's
+    // messages go via a free, open MQTT broker instead: a little slower, but it gets through almost everywhere.
+    // The room listens on several brokers at once; whoever joins uses the first one that answers. ?relay=wss://… picks another
+    const RELAY_SRC = ['https://cdn.jsdelivr.net/npm/mqtt@5.10.4/dist/mqtt.min.js', 'https://unpkg.com/mqtt@5.10.4/dist/mqtt.min.js'];
+    const BROKERS = params.get('relay') ? [params.get('relay')] : ['wss://broker.hivemq.com:8884/mqtt', 'wss://broker.emqx.io:8084/mqtt', 'wss://test.mosquitto.org:8081/mqtt'];
+    const TOPIC = 'gubbe-pa-vagen/' + PROTO + '/', RELAY_ID = /^[\w-]{1,64}$/;
+    const R = { clients: [], conns: new Map(), out: null, me: '', room: '' };
+    let mqttLib = null;
+    function loadMqtt() {
+      if (window.mqtt) return Promise.resolve(window.mqtt);
+      if (mqttLib) return mqttLib;
+      mqttLib = new Promise((resolve, reject) => {
+        let i = 0;
+        const next = () => {
+          if (i >= RELAY_SRC.length) { mqttLib = null; reject(new Error('mqtt')); return; }
+          const s = document.createElement('script');
+          s.src = RELAY_SRC[i++]; s.async = true;
+          s.onload = () => (window.mqtt ? resolve(window.mqtt) : next());
+          s.onerror = () => { s.remove(); next(); };
+          document.head.append(s);
+        };
+        next();
+      });
+      return mqttLib;
+    }
+    // a connection over the broker that looks like a PeerJS one to the rest of the code: peer, open, send, close, on
+    function relayConn(cl, peer, topic) {
+      const ls = {};
+      const conn = {
+        peer, open: true, relay: true, seen: performance.now(),
+        on(ev, fn) { (ls[ev] = ls[ev] || []).push(fn); return conn; },
+        emit(ev, a) { for (const fn of ls[ev] || []) fn(a); },
+        send(m) { if (conn.open && cl.connected) cl.publish(topic, JSON.stringify({ f: R.me, m })); },
+        close() {
+          if (!conn.open) return;
+          conn.open = false;
+          try { if (cl.connected) cl.publish(topic, JSON.stringify({ f: R.me, bye: 1 })); } catch { /* gone already */ }
+          if (R.conns.get(peer) === conn) R.conns.delete(peer);
+          conn.emit('close');
+        }
+      };
+      return conn;
+    }
+    const readRelay = (buf) => { try { const o = JSON.parse(String(buf)); return o && typeof o === 'object' && typeof o.f === 'string' && RELAY_ID.test(o.f) ? o : null; } catch { return null; } };
+    // the room: listen on every broker for those knocking
+    async function relayListen(code, me) {
+      relayDown();
+      try { await loadMqtt(); } catch { return; }
+      if (!inRoom() || !S.host || S.myId !== me) return;
+      R.me = me; R.room = code;
+      for (const url of BROKERS) {
+        let cl;
+        try { cl = window.mqtt.connect(url, { connectTimeout: 8000, reconnectPeriod: 4000, keepalive: 30 }); } catch { continue; }
+        R.clients.push(cl);
+        cl.on('error', () => { /* it tries again by itself */ });
+        cl.on('connect', () => cl.subscribe(TOPIC + code + '/h'));
+        cl.on('message', (topic, buf) => {
+          const o = readRelay(buf);
+          if (!o || !inRoom() || !S.host || o.f === R.me) return;
+          let conn = R.conns.get(o.f);
+          if (o.bye) { if (conn) conn.close(); return; }
+          if (!o.m || typeof o.m !== 'object') return;
+          if (!conn || conn.cl !== cl) {
+            if (o.m.t !== 'hi') return;
+            if (conn) conn.close();
+            conn = relayConn(cl, o.f, TOPIC + code + '/c/' + o.f);
+            conn.cl = cl;
+            R.conns.set(o.f, conn);
+            accept(conn);
+          }
+          conn.seen = performance.now();
+          conn.emit('data', o.m);
+        });
+      }
+    }
+    // joining: the first broker that answers, a door to the room on it
+    async function relayKnock(code, me) {
+      try { await loadMqtt(); } catch { return null; }
+      let cl = R.clients[0];
+      if (!cl || !cl.connected) {
+        relayDown();
+        for (const url of BROKERS) {
+          if (S.joining !== code || S.myId !== me) return null;
+          const c = await new Promise((res) => {
+            let c0;
+            try { c0 = window.mqtt.connect(url, { connectTimeout: 6000, reconnectPeriod: 0, keepalive: 30 }); } catch { res(null); return; }
+            const t = setTimeout(() => fin(false), 7000);
+            function fin(ok) { clearTimeout(t); if (ok) { res(c0); return; } try { c0.end(true); } catch { /* never was */ } res(null); }
+            c0.once('connect', () => fin(true));
+            c0.once('error', () => fin(false));
+          });
+          if (c) { cl = c; break; }
+        }
+        if (!cl || !cl.connected) return null;
+        R.clients.push(cl);
+        cl.options.reconnectPeriod = 4000;
+        cl.on('error', () => { /* it tries again by itself */ });
+        cl.on('message', (topic, buf) => {
+          const o = readRelay(buf), conn = R.out;
+          if (!o || !conn || o.f !== conn.peer) return;
+          if (o.bye) { conn.close(); return; }
+          if (!o.m || typeof o.m !== 'object') return;
+          conn.seen = performance.now();
+          conn.emit('data', o.m);
+        });
+        cl.on('connect', () => cl.subscribe(TOPIC + code + '/c/' + me));
+        await new Promise((res) => cl.subscribe(TOPIC + code + '/c/' + me, () => res()));
+      }
+      R.me = me; R.room = code;
+      if (R.out) R.out.close();
+      R.out = relayConn(cl, PREFIX + code.toLowerCase(), TOPIC + code + '/h');
+      return R.out;
+    }
+    function relayDown() {
+      const all = [...R.conns.values(), R.out].filter(Boolean);
+      R.conns.clear(); R.out = null;
+      for (const c of all) c.close();
+      for (const cl of R.clients) try { cl.end(false); } catch { /* gone already */ }
+      R.clients = [];
+    }
+    // a relay connection that has gone quiet (the game sends 15 times a second) has gone
+    setInterval(() => {
+      const now = performance.now();
+      for (const c of [...R.conns.values(), R.out]) if (c && c.open && now - c.seen > 25000) c.close();
+    }, 2000);
     let peerLib = null;
     function loadPeer() {
       if (window.Peer) return Promise.resolve(window.Peer);
@@ -11665,7 +12720,8 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     }
     function newPeer(id) {
       // ?peerserver=host:port uses a PeerJS server of your own instead of the free one
-      const opts = { debug: 0 }, own = params.get('peerserver');
+      // several ways through: STUN servers to find each other's address, and TURN servers that pass the traffic on when two networks won't let it straight through
+      const opts = { debug: 0, config: { iceServers: ICE } }, own = params.get('peerserver');
       if (own) { const [host, port] = own.split(':'), p = Number(port) || 443; Object.assign(opts, { host, port: p, path: '/', secure: p === 443 }); }
       const peer = id ? new window.Peer(id, opts) : new window.Peer(opts);
       // the server only introduces players; if the line to it drops, the room carries on and it is called up again
@@ -11679,6 +12735,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     function fail(msg) {
       const peer = S.peer;
       S.peer = null; S.hostConn = null;
+      relayDown();
       if (peer) try { peer.destroy(); } catch { /* already gone */ }
       busy(false);
       status(msg, true);
@@ -11727,16 +12784,43 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       let peer;
       try { peer = newPeer(); } catch { trouble({ type: 'browser-incompatible' }); return; }
       S.peer = peer;
-      const wait = setTimeout(() => { if (S.peer === peer && !inRoom()) fail('Rum ' + code + ' svarar inte. Kolla koden, och att din vän har rummet öppet.'); }, 20000);
-      peer.on('open', (id) => {
-        if (S.peer !== peer) return;
-        S.myId = id;
-        const conn = peer.connect(PREFIX + code.toLowerCase(), { reliable: true, serialization: 'json' });
+      let iceFailed = false, tries = 0, retry = null;
+      const me0 = () => S.myId;
+      const wait = setTimeout(() => {
+        if (S.peer !== peer || inRoom()) return;
+        clearTimeout(retry);
+        fail(iceFailed ? 'Hittade rum ' + code + ', men era nätverk släpper inte igenom anslutningen. Prova ett annat nät, till exempel mobilens.'
+          : 'Rum ' + code + ' svarar inte. Kolla koden, och att din vän har spelet öppet och framme på skärmen.');
+      }, 32000);
+      // knock on the room's door: first straight through, then (if nothing has come back) via the broker, and again
+      const knock = async () => {
+        if (S.peer !== peer || inRoom()) return;
+        const n = tries++;
+        if (n < 4) retry = setTimeout(knock, n === 0 ? 6000 : 8000);
+        let conn;
+        if (n === 0) {
+          conn = peer.connect(PREFIX + code.toLowerCase(), { reliable: true, serialization: 'json' });
+          conn.on('iceStateChanged', (st) => { if (st === 'failed') iceFailed = true; });
+        } else {
+          if (n === 1) status('Går med i rum ' + code + ' en annan väg …');
+          const me = me0();
+          conn = await relayKnock(code, me);
+          if (!conn || S.peer !== peer || inRoom() || S.myId !== me) return;
+        }
+        if (S.hostConn && S.hostConn !== conn) try { S.hostConn.close(); } catch { /* gone already */ }
         S.hostConn = conn;
-        conn.on('open', () => conn.send({ t: 'hi', v: PROTO, name: S.name, look: look() }));
         conn.on('data', (m) => clientData(conn, m, code, wait));
         conn.on('close', () => { if (S.hostConn === conn && inRoom()) hostGone(); });
         conn.on('error', () => { /* the close, or the wait running out, deals with it */ });
+        const hi = () => conn.send({ t: 'hi', v: PROTO, name: S.name, look: look() });
+        if (conn.relay) hi(); else conn.on('open', hi);
+      };
+      peer.on('open', (id) => {
+        // (it fires again when the line to the server comes back: the connection to the room is still there)
+        if (S.peer !== peer || S.hostConn) return;
+        S.myId = id;
+        knock();
+        loadMqtt().catch(() => {});
       });
       peer.on('error', (err) => { if (S.peer === peer) { if (!inRoom()) clearTimeout(wait); trouble(err); } });
     }
@@ -11754,7 +12838,13 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       if (!m || typeof m !== 'object' || !inRoom()) return;
       const id = conn.peer, P = S.players.get(id);
       if (m.t === 'hi') {
-        if (P) return;
+        // the same player again on a new connection: carry on over that one
+        if (P) {
+          const old = S.conns.get(id);
+          if (old !== conn) { S.conns.set(id, conn); if (old) try { old.close(); } catch { /* gone already */ } }
+          conn.send({ t: 'welcome', v: PROTO, host: S.myId, players: [{ id: S.myId, name: S.name, look: look() }, ...[...S.players.values()].filter((p) => p !== P).map(info)] });
+          return;
+        }
         const no = m.v !== PROTO ? 'old' : S.players.size + 1 >= MAX ? 'full' : '';
         if (no) { try { conn.send({ t: 'no', why: no }); } catch { /* gone already */ } setTimeout(() => conn.close(), 1000); return; }
         S.conns.set(id, conn);
@@ -11765,12 +12855,13 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
         return;
       }
       if (!P) return;
-      if (m.t === 's') { if (take(P, m.d)) broadcast({ t: 's', id, d: m.d }, id); }
-      else if (m.t === 'e') { const e = Object.assign({}, m, { id }); heard(P, e); broadcast(e, id); }
+      if (m.t === 's') { if (take(P, m.d)) broadcast({ t: 's', id, d: m.d.slice(0, 11) }, id); }
+      else if (m.t === 'e') { const e = cleanEvent(m, id); if (e) { heard(P, e); broadcast(e, id); } }
     }
     function dropConn(conn) {
       if (S.conns.get(conn.peer) !== conn) return;
       S.conns.delete(conn.peer);
+      try { conn.close(); } catch { /* closed already */ }
       removePlayer(conn.peer, true);
       broadcast({ t: 'left', id: conn.peer });
     }
@@ -11805,6 +12896,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       S.timer = setInterval(send, SEND_MS);
       showRoom(); hud();
       if (!S.host) toast('Du är med i rum ' + code + '.');
+      else relayListen(code, S.myId);
     }
     function leave() {
       if (S.ride) unride(true);
@@ -11813,11 +12905,14 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       const peer = S.peer;
       Object.assign(S, { peer: null, host: false, code: '', joining: '', myId: '', hostId: '', hostConn: null, lastCar: null, near: null });
       S.conns.clear();
+      relayDown();
       if (peer) try { peer.destroy(); } catch { /* already gone */ }
       seats();
       busy(false); showSetup(); hud();
     }
     window.addEventListener('pagehide', () => { if (S.peer) try { S.peer.destroy(); } catch { /* closing anyway */ } });
+    // (back to the page from the browser's history: that room is gone)
+    window.addEventListener('pageshow', (e) => { if (e.persisted && inRoom()) { leave(); status('Du lämnade rummet.'); } });
 
     /* ---------- the other players ---------- */
     function addPlayer(id, name, lk) {
@@ -11894,11 +12989,13 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       const c = d[10];
       if (Array.isArray(c) && c.length >= 16 && typeof c[0] === 'string') {
         s.c = {
-          id: c[0].slice(0, 12), m: typeof c[1] === 'string' && MODEL[c[1]] ? c[1] : 'halvkombi', col: colour(c[2], 0xc8102e), x: pos(c[3]), z: pos(c[4]), h: num(c[5]),
+          id: c[0].slice(0, 12), m: typeof c[1] === 'string' && Object.prototype.hasOwnProperty.call(MODEL, c[1]) ? c[1] : 'halvkombi', col: num(c[2]), x: pos(c[3]), z: pos(c[4]), h: num(c[5]),
           vx: vel(c[6]), vz: vel(c[7]), st: clamp(num(c[8]), -1, 1), g: clamp(num(c[9]) | 0, 0, 9), th: clamp(num(c[10]), -1, 1), f: num(c[11]) | 0,
           b: clamp(num(c[12]) | 0, 0, 3), hp: clamp(num(c[13], 100), 0, 100), a: num(c[14]), slip: clamp(num(c[15]), 0, 30)
         };
       }
+      // (each colour is a geometry of its own: only the ones the model comes in, and gold)
+      if (s.c && !MODEL[s.c.m].colors.includes(s.c.col) && s.c.col !== 0xc9a227) s.c.col = MODEL[s.c.m].colors[0];
       a.push(s);
       if (a.length > 40) a.shift();
       // how far their clock is from ours, plus the quickest a message has come through
@@ -11985,6 +13082,16 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       if (S.host) broadcast(Object.assign(m, { id: S.myId }));
       else if (S.hostConn && S.hostConn.open) try { S.hostConn.send(m); } catch { /* its close event deals with it */ }
     }
+    // an event as it may be passed on: only what it should hold, and not too often
+    function cleanEvent(m, id) {
+      const k = m.k, e = { t: 'e', k, id };
+      if (k === 'horn') return e;
+      if (k === 'chat') { const text = cleanText(m.m); return text ? Object.assign(e, { m: text }) : null; }
+      if (k === 'dent') return typeof m.c === 'string' && Array.isArray(m.a) && m.a.length === 8 ? Object.assign(e, { c: m.c.slice(0, 12), a: m.a.map((v) => num(v)) }) : null;
+      if (k === 'fire') return Object.assign(e, { a: num(m.a) });
+      if (k === 'look') return Object.assign(e, { look: cleanLook(m.look) });
+      return null;
+    }
     function heard(P, m) {
       const atWheel = P.car && P.car.occupant === P.ident;
       if (m.k === 'horn') {
@@ -11999,8 +13106,12 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
           dentCar(P.car, clamp(a[0], -9, 9), clamp(a[1], -2, 6), clamp(a[2], -9, 9), clamp(a[3], -1, 1), clamp(a[4], -1, 1), clamp(a[5], 0, 0.7), clamp(a[6], 0, 1.5), clamp(a[7], 0, 80));
         }
       } else if (m.k === 'fire') {
-        if (atWheel && P.car.M.mil === 'tank') { P.car.aim = num(m.a); fireCannon(P.car, true); }
+        const now = performance.now();
+        if (atWheel && P.car.M.mil === 'tank' && !(now - (P.firedAt || -1e9) < 2000)) { P.firedAt = now; P.car.aim = num(m.a); fireCannon(P.car, true); }
       } else if (m.k === 'look') {
+        const now = performance.now();
+        if (now - (P.lookAt || -1e9) < 800) return;
+        P.lookAt = now;
         P.look = cleanLook(m.look); P.ident = makeIdentity(P.look);
         dress(P.person.model, P.ident);
         if (atWheel) setOccupant(P.car, P.ident);
@@ -12087,12 +13198,17 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     function unride(force) {
       const c = S.ride;
       if (!c) return true;
-      const out = rideExit(c) || (force ? spotNear(c.x, c.z) : null);
+      let out = rideExit(c) || (force ? spotNear(c.x, c.z) : null);
+      // far out on the water: put ashore at the nearest street corner instead of on the water
+      if (!out && force) {
+        let bd = Infinity;
+        for (const n of nodes) { const d = Math.hypot(n.x - c.x, n.z - c.z); if (d < bd && personFits(n.x, n.z)) { bd = d; out = { x: n.x, z: n.z }; } }
+      }
       if (!out && !force) { toast(c.M.boat ? 'Vänta tills båten ligger vid en kaj, så kan du kliva i land.' : 'Det finns ingen plats att kliva ur här.'); return false; }
       S.ride = null;
       seats();
       player.model.group.visible = true;
-      if (out) { player.x = out.x; player.z = out.z; }
+      if (out) { player.x = out.x; player.z = out.z; camTarget.set(out.x, 1.6, out.z); }
       const sp = Math.hypot(c.vx, c.vz);
       player.y = 0; player.rot = c.h; player.vx = c.vx * 0.5; player.vz = c.vz * 0.5; player.vy = 0;
       if (sp > 5 && !c.M.boat) { player.vy = 4.5; player.grounded = false; player.knockT = 1.2; toast('Du hoppade ur i farten!'); }
@@ -12114,6 +13230,8 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     // straight to a friend: out of your car and onto the pavement beside them
     function goTo(P) {
       if (stop && stop.locked) { status('Det går inte nu, du är gripen.', true); return; }
+      // (the game stands still behind the sign: bring everyone up to date first)
+      update(0);
       if (!P.st) { status(P.name + ' har inte kommit in i spelet än.', true); return; }
       const at = P.car && P.car.occupant === P.ident ? P.car : (P.st.ride && carOf(P.st.ride)) || P.person;
       const spot = spotNear(at.x, at.z);
@@ -12134,10 +13252,18 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       const now = performance.now();
       for (const P of S.players.values()) {
         if (P.offset === null) continue;
-        // (the clocks drift a little, and the way between you can get slower: let the offset creep up, the next quick message pulls it back)
+        // (the clocks drift a little, and the way between you can get slower: let the offset creep up, the next quick
+        // message pulls it back. Running out of updates for a while means the lag has grown: catch up faster)
         P.offset += dt * 3;
-        const st = sample(P, now - P.offset - DELAY);
-        if (st) place(P, st, dt);
+        const behind = now - P.offset - DELAY - P.snaps[P.snaps.length - 1].t;
+        if (behind > 60) P.offset += Math.min(behind, 400) * dt * 1.5;
+        try {
+          const st = sample(P, now - P.offset - DELAY);
+          if (st) place(P, st, dt);
+        } catch (err) {
+          // (whatever it was, it is not worth the game: forget what came from them and wait for the next update)
+          P.snaps.length = 0; P.offset = null;
+        }
       }
       if (S.ride && (!S.ride.group.parent || driving || (stop && stop.locked))) unride(true);
       seats();
@@ -12159,7 +13285,8 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
         let x = P.person.x, y = P.person.y + 2.12, z = P.person.z;
         if (c) { x = c.x; z = c.z; y = (c.M.boat ? WATER_Y + 2.4 : c.parts[c.parts.length - 1].top + 0.75) + (wheel ? 0 : 0.6 * (1 + (P.seat ? P.seat.n : 0))); }
         else if (st.f & 2) y = P.person.y + 2.6;
-        const d = Math.hypot(x - camera.position.x, z - camera.position.z), k = clamp(1.1 - d / 700, 0.62, 1);
+        // (a little bigger on a short screen, a phone on its side, so the name can be read)
+        const d = Math.hypot(x - camera.position.x, z - camera.position.z), k = clamp(1.1 - d / 700, 0.62, 1) * clamp(600 / window.innerHeight, 1, 1.6);
         t.visible = d < 1200;
         t.position.set(x, y, z);
         t.scale.set(0.046 * k * (512 / 96), 0.046 * k, 1);
@@ -12198,6 +13325,8 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     }
     E.bar.addEventListener('submit', (e) => { e.preventDefault(); say(E.barInput.value); closeChat(); });
     E.barInput.addEventListener('blur', () => setTimeout(closeChat, 0));
+    // (pressing the button would take the focus from the input and close the bar before the click: keep it)
+    E.bar.addEventListener('mousedown', (e) => { if (e.target !== E.barInput) e.preventDefault(); });
     $('mpSay').addEventListener('submit', (e) => { e.preventDefault(); say(E.sayInput.value); E.sayInput.value = ''; });
 
     /* ---------- the room sign ---------- */
@@ -12210,7 +13339,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     });
     function swatches() { for (const b of E.colors.children) b.setAttribute('aria-checked', String(Number(b.dataset.col) === playerId.shirt)); }
     const web = /^https?:$/.test(location.protocol);
-    const link = () => location.origin + location.pathname + '?rum=' + S.code;
+    const link = () => location.origin + location.pathname + '?rum=' + S.code + (params.get('peerserver') ? '&peerserver=' + encodeURIComponent(params.get('peerserver')) : '');
     function showSetup() { E.setup.hidden = false; E.room.hidden = true; E.name.value = S.name; swatches(); }
     function showRoom() {
       E.setup.hidden = true; E.room.hidden = false;
@@ -12345,7 +13474,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
   function tick(dt) {
     const inp = readInput();
     if (!paused()) {
-      for (const c of cars) c.input = c === driving ? inp : c.bot ? (c.police ? policeThink(c, dt) : botThink(c, dt)) : null;
+      for (const c of cars) c.input = c === driving ? inp : c.water ? WATER.think(c, dt) : c.bot ? (c.police ? policeThink(c, dt) : botThink(c, dt)) : null;
       for (const p of persons) if (p !== player && !p.asleep && !p.remote) p.intent = npcThink(p, dt);
       MP.update(dt);
       const pIntent = custodyIntent(dt) || playerIntent(inp);
@@ -12354,6 +13483,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       jumpQueued = false;
       manageTraffic(dt);
       policeUpdate(dt);
+      WATER.update(dt);
       updateHeli(dt);
       updateSurprises(dt);
       JOBS.update(dt);
@@ -12462,7 +13592,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     state() {
       const bad = [];
       for (const c of cars) { if (!isFinite(c.x + c.z + c.h + c.vx + c.vz)) bad.push('nan-car'); else if (!c.remote && !(c.M.boat ? boatFits(c.M, c.x, c.z, c.h) : fitsM(c.M, c.x, c.z, c.h))) bad.push('car-off ' + c.M.id + ' ' + c.x.toFixed(1) + ',' + c.z.toFixed(1)); }
-      for (const p of persons) { if (!isFinite(p.x + p.z + p.y)) bad.push('nan-person'); else if (!p.remote && !walkable(p.x, p.z) && !(p === player && (driving || MP.ride) && (driving || MP.ride).M.boat)) bad.push('person-off ' + p.x.toFixed(1) + ',' + p.z.toFixed(1)); }
+      for (const p of persons) { if (!isFinite(p.x + p.z + p.y)) bad.push('nan-person'); else if (!p.remote && !walkable(p.x, p.z) && !(p === player && (driving || MP.ride) && (driving || MP.ride).M.boat) && !(p === player && stop && stop.phase === 'water')) bad.push('person-off ' + p.x.toFixed(1) + ',' + p.z.toFixed(1)); }
       const bots = cars.filter((c) => c.bot);
       return {
         player: { x: +player.x.toFixed(2), y: +player.y.toFixed(2), z: +player.z.toFixed(2) },
