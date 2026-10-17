@@ -26,7 +26,9 @@ The game is these files, loaded in this order:
 - `src/city/build.js` (about 1,740 lines): building the city, from the ground and quays to the landmarks and the police station.
 - `src/city/draken.js` (about 960 lines): the yellow house in Drakens gränd with the penthouse and the lift, then the instanced trees and street lamps.
 - `src/people.js` (about 130 lines): person models, the spawn spot and the player.
-- `src/game.js` (about 8,900 lines, roughly 195k tokens): everything else. **Never read it whole.**
+- `src/vehicles/models.js` (about 740 lines): every car, boat, police and military model as data, and the gearbox.
+- `src/vehicles/cars.js` (about 1,490 lines): car materials, body and wheel geometry, `makeCar`.
+- `src/game.js` (about 6,700 lines, roughly 150k tokens): everything else. **Never read it whole.**
 
 Each part of the JavaScript starts with a section header comment. Grep for the header (or a name from the table) and read only that range:
 
@@ -46,7 +48,8 @@ Line numbers drift with every change, so search instead of trusting numbers. Eac
 | `src/city/draken.js` | `Drakens gränd: building the yellow house` | The yellow house with the three-floor penthouse and the lift | `LIFT` |
 | `src/city/draken.js` | `trees and street lamps…` | Instanced trees and lamps | |
 | `src/people.js` | `people` | Person models and the player | `persons`, `player`, `makePerson` |
-| `src/game.js` | `vehicles` | **All car, boat, police and military models as data**, then gearbox, materials, car body and wheel geometry | `MODELS`, `MODEL`, `PICKABLE`, `SECRET`, `carShape`, `wheelGeometry`, `cars`, `makeCar` |
+| `src/vehicles/models.js` | `vehicles`, `gearbox and engine` | **All car, boat, police and military models as data**, then the gearbox | `MODELS`, `MODEL`, `PICKABLE`, `SECRET` |
+| `src/vehicles/cars.js` | `car materials` | Car materials, car body, moped, boat and military geometry, wheels, building a car | `carShape`, `wheelGeometry`, `cars`, `makeCar` |
 | `src/game.js` | `car physics`, `particles…`, `skid marks`, `damage`, `people physics` | Driving physics, smoke and sparks, crashes | `crash` |
 | `src/game.js` | `traffic AI`, `pedestrians` | Bot drivers and walkers | `botThink`, `npcThink` |
 | `src/game.js` | `police` (and the subsections on the sjöpolis and navy, the helicopter, police on the ground) | Wanted stars, chases, police boats, military, helicopter, arrests and cells | `limitAt`, `startChase`, `endChase`, `policeThink`, `policeUpdate`, `WATER`, `updateHeli` |
@@ -71,7 +74,7 @@ Line numbers drift with every change, so search instead of trusting numbers. Eac
 
 ## Adding a car (the most common request)
 
-Add one object to the `MODELS` array in the `vehicles` section, copying a similar car. Important fields:
+Add one object to the `MODELS` array in `src/vehicles/models.js`, copying a similar car. Important fields:
 
 - `id` (unique), `name` (real model name), `kind` and `def` (Swedish type and Swedish definite-form nickname, e.g. `'Golfen'`)
 - Size and performance: `W`, `L`, `R` (wheel radius), `wb` (wheelbase), `max` (top speed m/s), `zero`, `brake`, `mass`, `grip`
