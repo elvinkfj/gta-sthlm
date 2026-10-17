@@ -156,7 +156,7 @@ För varje PR: flytta koden oförändrad, kör testet, uppdatera kartan i `CLAUD
 - [x] PR 8: `src/city/build.js`: marken, kajerna, parkerna, Gröna Lund, gatorna, broarna, husen, landmärkena, polisstationen
 - [x] PR 9: `src/city/draken.js`: det gula huset i Drakens gränd med takvåningen och hissen, plus träd och gatlampor om de ligger i samma del
 - [x] PR 10: `src/people.js`: gubbar och folk
-- [ ] PR 11: `src/vehicles/models.js`: alla bil- och båtmodeller, växellådan och bilmaterialen
+- [x] PR 11: `src/vehicles/models.js`: alla bil- och båtmodeller, växellådan och bilmaterialen. (Blev två filer: bilmaterialen och bilarnas form ligger i `src/vehicles/cars.js`, annars hade filen blivit ca 2 200 rader.)
 - [ ] PR 12: `src/vehicles/physics.js`: bilfysik, rök och gnistor, sladdmärken, skador, gubbarnas fysik
 - [ ] PR 13: `src/traffic.js`: trafikens AI och fotgängarna
 - [ ] PR 14: `src/police.js`: polisen, sjöpolisen och marinen, helikoptern, poliser till fots, gripanden och arresten. Dela i två filer om den blir över ca 1 000 rader.
