@@ -169,8 +169,8 @@ För varje PR: flytta koden oförändrad, kör testet, uppdatera kartan i `CLAUD
 ## PR 18: Städa upp efteråt
 
 - [ ] Gå igenom "Saker att fixa senare" och gör om dem till egna, små PR:er.
-- [ ] Skriv in i `CLAUDE.md`: ny funktion ska ligga i den fil den hör till, och en fil som växer över ca 1 500 rader delas.
-- [ ] Uppdatera "Spela"-delen i `README.md` om något har ändrats.
+- [x] Skriv in i `CLAUDE.md`: ny funktion ska ligga i den fil den hör till, och en fil som växer över ca 1 500 rader delas.
+- [x] Uppdatera "Spela"-delen i `README.md` om något har ändrats.
 
 ---
 
