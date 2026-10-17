@@ -152,7 +152,7 @@ Bryt ut en del per PR, **uppifrån och ned** i `src/game.js`. Varje ny fil lägg
 För varje PR: flytta koden oförändrad, kör testet, uppdatera kartan i `CLAUDE.md`, och spela en minut.
 
 - [x] PR 6: `src/core.js`: hjälpfunktioner, renderare och scen, geometrihjälp, texturer
-- [ ] PR 7: `src/city/map.js`: Stockholms land, vatten och gator, var man kan stå, hindren
+- [x] PR 7: `src/city/map.js`: Stockholms land, vatten och gator, var man kan stå, hindren
 - [ ] PR 8: `src/city/build.js`: marken, kajerna, parkerna, Gröna Lund, gatorna, broarna, husen, landmärkena, polisstationen
 - [ ] PR 9: `src/city/draken.js`: det gula huset i Drakens gränd med takvåningen och hissen, plus träd och gatlampor om de ligger i samma del
 - [ ] PR 10: `src/people.js`: gubbar och folk

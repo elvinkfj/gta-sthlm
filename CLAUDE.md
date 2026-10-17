@@ -22,7 +22,8 @@ The game is these files, loaded in this order:
 - `style.css` (about 410 lines): all the styles.
 - `lib/three.min.js`: Three.js r128.
 - `src/core.js` (about 580 lines): helpers, seeded random, the Three.js check, renderer and scene, geometry helpers, textures.
-- `src/game.js` (about 12,500 lines, roughly 280k tokens): everything else. **Never read it whole.**
+- `src/city/map.js` (about 740 lines): Stockholm's land, water and street graph, where you can stand, the obstacle grid.
+- `src/game.js` (about 11,800 lines, roughly 260k tokens): everything else. **Never read it whole.**
 
 Each part of the JavaScript starts with a section header comment. Grep for the header (or a name from the table) and read only that range:
 
@@ -36,8 +37,8 @@ Line numbers drift with every change, so search instead of trusting numbers. Eac
 | *(in `style.css`)* `HUD`, `start sign`, `big map`, `car picker`, `touch controls`, `playing with friends…` | Styles for the overlays | |
 | *(start of `src/core.js`)* | Helpers, seeded random | `$`, `clamp`, `lerp`, `rand`, `pick`, `TAU` |
 | *(in `src/core.js`)* `renderer & scene`, `geometry helpers`, `textures` | Three.js setup, mesh and texture helpers | `renderer`, `scene`, `camera` |
+| *(all of `src/city/map.js`)* `Stockholm: land, water and streets` | Map data: land polygons, the street graph, walkable raster, obstacle grid | `nodes`, `edges` |
 | *(the rest is in `src/game.js`)* | | |
-| `Stockholm: land, water and streets` | Map data: land polygons, the street graph, walkable raster, obstacle grid | `nodes`, `edges` |
 | `the city: ground, quays, streets` (and its subsections) | Building the city: parks, Gröna Lund, streets, bridges, lamps, car park, buildings, landmarks, boats, signs, Globen | `landmarkList` |
 | `Polisstationen on Stora Nygatan` | The police station building and its logic | `STATION` |
 | `Drakens gränd…` (two subsections) | The yellow house with the three-floor penthouse and the lift | `DRAKEN`, `LIFT` |
