@@ -299,6 +299,13 @@ h1 { margin: 0; font: 900 clamp(2.2rem, 9vw, 3.1rem)/0.95 var(--font-sign); lett
 .model-title b { font-size: 1.02rem; font-weight: 900; }
 .model .stats { font: 700 0.72rem/1.45 var(--font-gauge); opacity: 0.88; font-variant-numeric: tabular-nums; white-space: pre-line; }
 .group-sport h3 span { background: var(--sign-yellow); color: var(--asphalt); padding: 2px 6px; border-radius: 4px; margin-left: 6px; letter-spacing: 0.06em; }
+/* the secret page (B twice in the picker, or a double tap on its heading): the police's and the army's vehicles */
+.picker-secret { display: none; }
+#picker.secret .picker-group { display: none; }
+#picker.secret .picker-secret { display: block; }
+#picker.secret .picker-panel { background: #2e3a26; }
+.picker-secret h3 span { background: var(--snow); color: #2e3a26; padding: 2px 6px; border-radius: 4px; margin-left: 6px; letter-spacing: 0.06em; }
+#pickerTitle { user-select: none; -webkit-user-select: none; touch-action: manipulation; }
 .pick-note { margin-left: 6px; text-transform: none; letter-spacing: 0.02em; font-weight: 700; opacity: 0.8; }
 
 /* ---------- touch controls ---------- */
@@ -607,7 +614,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       <div class="picker-head">
         <div>
           <h2 id="pickerTitle">Välj bil</h2>
-          <p>Bilen ställs bredvid dig och du kliver in direkt.</p>
+          <p id="pickerLede">Bilen ställs bredvid dig och du kliver in direkt.</p>
         </div>
         <button id="pickerClose" class="btn-sign picker-close" type="button">Stäng</button>
       </div>
@@ -617,6 +624,8 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       <div class="picker-group"><h3>Klassiker</h3><div class="grid" id="gridClassic"></div></div>
       <div class="picker-group"><h3>Moped</h3><div class="grid" id="gridMoped"></div></div>
       <div class="picker-group"><h3>På vattnet <span class="pick-note">vid närmaste kaj</span></h3><div class="grid" id="gridBoat"></div></div>
+      <div class="picker-group picker-secret"><h3>Polisen <span>Hemligt</span></h3><div class="grid" id="gridPolice"></div></div>
+      <div class="picker-group picker-secret"><h3>Försvarsmakten <span>Hemligt</span></h3><div class="grid" id="gridArmy"></div></div>
     </div>
   </div>
 </div>
@@ -5453,6 +5462,8 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
   );
   const MODEL = Object.fromEntries(MODELS.map((m) => [m.id, m]));
   const PICKABLE = MODELS.filter((m) => !m.police && !m.mil);
+  // on the picker's secret page: everything the police and then the army drive, each with the boats last
+  const SECRET = MODELS.filter((m) => m.police || m.mil).sort((a, b) => (a.mil ? 2 : 0) + (a.boat ? 1 : 0) - (b.mil ? 2 : 0) - (b.boat ? 1 : 0));
   const REGULARS = MODELS.filter((m) => !m.sport && !m.bus && !m.police && !m.moped && !m.boat && !m.mil), SPORTS = MODELS.filter((m) => m.sport);
   const MILITARY = MODELS.filter((m) => m.mil);
   const BOATS = MODELS.filter((m) => m.boat);
@@ -10877,6 +10888,37 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       g.fillStyle = 'rgba(143,193,218,.85)'; g.fillRect(0, oy, W, H - oy);
       return;
     }
+    if (M.mil) {
+      // the army's vehicles from the side, plainly: the tank's tracks, hull, arrowhead turret and long gun; the armoured
+      // car's sloped hull on eight wheels and its weapon station; the truck's cab and the tarpaulin over the soldiers
+      const g = cv.getContext('2d'), W = cv.width, H = cv.height, gun = M.mil === 'tank' ? 2.4 : 0, hl = M.L / 2;
+      const s = Math.min((W - 20) / (M.L + gun), (H - 14) / 3.4), ox = W / 2 - (gun / 2) * s, oy = H - 8, P = (z, y) => [ox + z * s, oy - y * s];
+      const poly = (pts, fill) => { g.beginPath(); pts.forEach(([z, y], i) => { const [px, py] = P(z, y); if (i) g.lineTo(px, py); else g.moveTo(px, py); }); g.closePath(); g.fillStyle = fill; g.fill(); };
+      const col = hex(M.colors[0]), dark = hex(shade(M.colors[0], 0.7)), steel = '#2b2e2a', win = '#5a6a72';
+      g.clearRect(0, 0, W, H);
+      if (M.mil === 'tank') {
+        poly([[-hl, 0.2], [-hl + 0.3, 0], [hl - 0.4, 0], [hl, 0.4], [hl - 0.1, 0.95], [-hl + 0.1, 0.95]], '#2a2c2e');
+        poly([[-hl - 0.1, 0.85], [hl + 0.1, 0.85], [hl - 0.3, 1.55], [-hl, 1.6]], col);
+        poly([[-2.6, 1.55], [1.1, 1.55], [2.3, 1.85], [1.3, 2.45], [-2.6, 2.4]], dark);
+        poly([[1.9, 1.95], [hl + gun, 2.0], [hl + gun, 2.12], [1.9, 2.15]], steel);
+      } else if (M.mil === 'patria') {
+        poly([[-hl, 0.75], [hl - 0.9, 0.75], [hl, 1.35], [hl - 0.5, 2.05], [-hl + 0.1, 2.25], [-hl, 2.15]], col);
+        poly([[hl - 1.05, 1.5], [hl - 0.62, 1.5], [hl - 0.85, 1.9], [hl - 1.05, 1.95]], win);
+        poly([[-0.9, 2.2], [0.1, 2.2], [0.1, 2.75], [-0.9, 2.75]], dark);
+        poly([[0.1, 2.48], [1.3, 2.48], [1.3, 2.58], [0.1, 2.58]], steel);
+      } else {
+        poly([[-hl, 0.9], [hl, 0.9], [hl, 1.15], [-hl, 1.15]], steel);
+        poly([[hl - 2.0, 1.0], [hl, 1.0], [hl, 2.5], [hl - 0.4, 2.95], [hl - 2.0, 2.95]], col);
+        poly([[hl - 0.55, 2.2], [hl - 0.05, 2.2], [hl - 0.05, 2.5], [hl - 0.42, 2.85], [hl - 0.55, 2.85]], win);
+        poly([[-hl, 1.15], [hl - 2.2, 1.15], [hl - 2.2, 3.25], [-hl, 3.25]], dark);
+      }
+      for (const z of M.axles || [M.wb / 2, -M.wb / 2]) {
+        const [px, py] = P(z, M.R);
+        g.fillStyle = M.mil === 'tank' ? '#3a3d3a' : '#16181b'; g.beginPath(); g.arc(px, py, M.R * s, 0, TAU); g.fill();
+        g.fillStyle = '#4f5a3c'; g.beginPath(); g.arc(px, py, M.R * s * 0.5, 0, TAU); g.fill();
+      }
+      return;
+    }
     if (M.moped) {
       // the scooter from the side: wheels, the body under the seat, the frame tube, fork, bars and lamp mask
       const g = cv.getContext('2d'), W = cv.width, H = cv.height, s = (H - 24) / 1.35, ox = W / 2, oy = H - 10, P = (z, y) => [ox + z * s, oy - y * s];
@@ -10930,29 +10972,35 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       g.fillStyle = M.rim === 'black' ? '#3a3d42' : '#c6cbd1'; g.beginPath(); g.arc(px, py, M.R * s * 0.62, 0, TAU); g.fill();
     }
   }
+  function pickerButton(M, i) {
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'model'; btn.id = 'model-' + M.id;
+    const cv = document.createElement('canvas'); cv.width = 320; cv.height = 120;
+    drawSilhouette(cv, M);
+    const title = document.createElement('div'); title.className = 'model-title';
+    const name = document.createElement('b'); name.textContent = M.name;
+    title.append(name);
+    // the first ten have a number key
+    if (i < 10) { const num = document.createElement('span'); num.className = 'key'; num.textContent = String((i + 1) % 10); title.append(num); }
+    const stats = document.createElement('div'); stats.className = 'stats';
+    stats.textContent = M.kind + '\nToppfart ' + Math.round(M.max * 3.6) + ' km/h\n0–' + M.sprint.kmh + ' på ' + M.sprint.t.toFixed(1).replace('.', ',') + ' s\n' + (M.boat ? M.engine : M.ev ? 'Elmotor, en växel' : M.cvt ? 'Tvåtakt, variator' : M.gears + ' växlar');
+    btn.append(cv, title, stats);
+    btn.addEventListener('click', () => chooseModel(M));
+    return btn;
+  }
   function buildPicker() {
     PICKABLE.forEach((M, i) => {
-      const btn = document.createElement('button');
-      btn.type = 'button'; btn.className = 'model'; btn.id = 'model-' + M.id;
-      const cv = document.createElement('canvas'); cv.width = 320; cv.height = 120;
-      drawSilhouette(cv, M);
-      const title = document.createElement('div'); title.className = 'model-title';
-      const name = document.createElement('b'); name.textContent = M.name;
-      title.append(name);
-      // the first ten have a number key
-      if (i < 10) { const num = document.createElement('span'); num.className = 'key'; num.textContent = String((i + 1) % 10); title.append(num); }
-      const stats = document.createElement('div'); stats.className = 'stats';
-      stats.textContent = M.kind + '\nToppfart ' + Math.round(M.max * 3.6) + ' km/h\n0–' + M.sprint.kmh + ' på ' + M.sprint.t.toFixed(1).replace('.', ',') + ' s\n' + (M.boat ? M.engine : M.ev ? 'Elmotor, en växel' : M.cvt ? 'Tvåtakt, variator' : M.gears + ' växlar');
-      btn.append(cv, title, stats);
-      btn.addEventListener('click', () => chooseModel(M));
+      const btn = pickerButton(M, i);
       (M.boat ? $('gridBoat') : M.moped ? $('gridMoped') : M.group === 'super' ? $('gridSuper') : M.group === 'classic' ? $('gridClassic') : M.sport ? $('gridSport') : $('gridNormal')).appendChild(btn);
     });
+    SECRET.forEach((M, i) => $(M.mil ? 'gridArmy' : 'gridPolice').appendChild(pickerButton(M, i)));
   }
   function openPicker() {
     if (!started) return;
     // no new car while you are under arrest or in the cell
     if (stop && stop.locked) { toast('Det går inte nu, du är gripen.'); return; }
     pickerOpen = true;
+    setPickerSecret(false);
     $('picker').hidden = false;
     if (document.pointerLockElement && document.exitPointerLock) document.exitPointerLock();
     for (const k in keys) keys[k] = false;
@@ -10961,6 +11009,28 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     if (first) first.focus();
   }
   function closePicker() { pickerOpen = false; $('picker').hidden = true; }
+  // The secret page: B twice in quick succession in the picker (or a double tap on its heading) turns to the police's
+  // and the army's vehicles, and back. The first B closes the picker as always; the second, right after, opens it
+  // again on the other page
+  let pickerSecret = false, pickerBClose = -1e9, pickerTapT = 0;
+  function setPickerSecret(on) {
+    pickerSecret = on;
+    $('picker').classList.toggle('secret', on);
+    $('pickerTitle').textContent = on ? 'Hemliga fordon' : 'Välj bil';
+    $('pickerLede').textContent = on ? 'Polisens och Försvarsmaktens fordon. Båtarna ställs vid närmaste kaj.' : 'Bilen ställs bredvid dig och du kliver in direkt.';
+    const first = $('picker').querySelector(on ? '.picker-secret button.model' : 'button.model');
+    if (first && pickerOpen) first.focus();
+  }
+  function pickerB() {
+    if (pickerOpen) { closePicker(); pickerBClose = performance.now(); return; }
+    const again = performance.now() - pickerBClose < 350, secret = again && !pickerSecret;
+    openPicker();
+    if (again && pickerOpen) setPickerSecret(secret);
+  }
+  $('pickerTitle').addEventListener('pointerup', () => {
+    const t = performance.now();
+    if (t - pickerTapT < 400) { pickerTapT = 0; setPickerSecret(!pickerSecret); } else pickerTapT = t;
+  });
   // a berth for a boat by the quay nearest to (x, z): walk out from there to where the land ends, and lay the hull
   // alongside the edge just off it (or, from out on the water, anywhere free near by)
   function boatFree(M, x, z, h, ignore) {
@@ -11005,8 +11075,14 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
         const s = alongEdge(f, s0 + ds, 6);
         tries.push([f.A.x + f.ux * s + f.rx * lat, f.A.z + f.uz * s + f.rz * lat, Math.atan2(f.ux, f.uz) + (lat < 0 ? Math.PI : 0)]);
       }
+      // (the army's wide vehicles, taken from the picker's secret page, often fit only down the middle of the street)
+      if (M.W > 2.4) for (const ds of [0, 10, -10, 20, -20, 30, -30, 40, -40]) {
+        const s = alongEdge(f, s0 + ds, 6);
+        tries.push([f.A.x + f.ux * s, f.A.z + f.uz * s, Math.atan2(f.ux, f.uz)]);
+      }
     }
-    for (const dist of [M.L / 2 + 2, M.L / 2 + 5]) for (const a of [0, Math.PI / 2, -Math.PI / 2, Math.PI]) {
+    const dists = M.W > 2.4 ? [M.L / 2 + 2, M.L / 2 + 5, M.L / 2 + 9, M.L / 2 + 14] : [M.L / 2 + 2, M.L / 2 + 5];
+    for (const dist of dists) for (const a of [0, Math.PI / 2, -Math.PI / 2, Math.PI]) {
       tries.push([player.x + Math.sin(player.rot + a) * dist, player.z + Math.cos(player.rot + a) * dist, player.rot]);
     }
     // (never inside the police station, where the lobby is just big enough for a car)
@@ -11038,7 +11114,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     if (!spot) spot = findSpawnSpot(M);
     if (!spot) { toast(M.boat ? 'Det finns inget vatten här i närheten. Gå ner till en kaj och försök igen.' : 'Det finns ingen plats för ' + M.def + ' här. Gå ut på en gata och försök igen.'); return; }
     // found every Dalahäst: your cars come in gold
-    const c = makeCar(M, goldCars && !M.police && !M.boat && M.id !== 'taxi' ? 0xc9a227 : M.colors[Math.floor(Math.random() * M.colors.length)]);
+    const c = makeCar(M, goldCars && !M.police && !M.mil && !M.boat && M.id !== 'taxi' ? 0xc9a227 : M.colors[Math.floor(Math.random() * M.colors.length)]);
     c.x = spot.x; c.z = spot.z; c.h = spot.h;
     spawnedCar = c;
     enterCar(c);
@@ -12058,9 +12134,10 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       return;
     }
     if (pickerOpen) {
-      if (code === 'Escape' || code === 'KeyB') closePicker();
-      const m = /^Digit(\d)$/.exec(code);
-      if (m) { const i = (Number(m[1]) + 9) % 10; if (PICKABLE[i]) chooseModel(PICKABLE[i]); }
+      if (code === 'Escape') closePicker();
+      else if (code === 'KeyB' && !repeat) pickerB();
+      const m = /^Digit(\d)$/.exec(code), list = pickerSecret ? SECRET : PICKABLE;
+      if (m) { const i = (Number(m[1]) + 9) % 10; if (list[i]) chooseModel(list[i]); }
       return;
     }
     if (!started) { if (code === 'Enter' || code === 'Space') startGame(); return; }
@@ -12074,7 +12151,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     else if (code === 'KeyT') toggleMute();
     else if (code === 'KeyF') { if (!tankFire()) horn(); }
     else if (code === 'KeyR') resetToRoad();
-    else if (code === 'KeyB') openPicker();
+    else if (code === 'KeyB') pickerB();
     else if (code === 'KeyM') playerShift(1);
     else if (code === 'KeyN') playerShift(-1);
     else if (code === 'KeyG') toggleGearbox();
