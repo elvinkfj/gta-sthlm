@@ -5509,9 +5509,12 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
   /* ---------- car materials ---------- */
   // Each car has one PBR material. The vertex attribute "surf" says how rough, metallic and lacquered each part is,
   // and which light it belongs to: 1 headlights, 2 tail/brake lights, 3 and 4 the blue lights left/right, 5 reversing lights.
+  // Below zero it marks the parts the shader adds detail to: -1 the paint (metal flakes under the clear coat), -2 the tyres.
+  // The paint is a base coat with a little metal in it under a full, glassy clear coat; chrome and the rims are bare
+  // polished metal, sharp enough to mirror the street; the tyres are matte rubber.
   const SURF = {
-    paint: [0.32, 0.1, 0.8, 0], trim: [0.62, 0.1, 0, 0], gloss: [0.12, 0.2, 1, 0], chrome: [0.14, 1, 0, 0], plate: [0.4, 0, 0, 0], tyre: [0.92, 0, 0, 0],
-    alloy: [0.3, 0.85, 0.3, 0], under: [0.85, 0, 0, 0],
+    paint: [0.34, 0.12, 1, -1], trim: [0.62, 0.1, 0, 0], gloss: [0.1, 0.2, 1, 0], chrome: [0.05, 1, 0, 0], plate: [0.4, 0, 0, 0], tyre: [0.86, 0, 0, -2],
+    alloy: [0.2, 1, 0.45, 0], under: [0.85, 0, 0, 0],
     head: [0.08, 0, 1, 1], tail: [0.12, 0, 1, 2], blueL: [0.08, 0, 1, 3], blueR: [0.08, 0, 1, 4], rev: [0.08, 0, 1, 5],
     indL: [0.1, 0, 1, 6], indR: [0.1, 0, 1, 7]
   };
@@ -5533,14 +5536,82 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
         : col === COL.blueL ? SURF.blueL : col === COL.blueR ? SURF.blueR : col === COL.indL ? SURF.indL : col === COL.indR ? SURF.indR : col === COL.chrome ? SURF.chrome
           : col === COL.plate || col === COL.euBlue ? SURF.plate : col === COL.tyre ? SURF.tyre : col === COL.doors ? SURF.gloss : SURF.trim);
   }
+  // Reflections of the street: a small cube map caught round the camera (see POST) is mirrored in the cars near it,
+  // over the sky they reflect everywhere else. It holds the finished picture (tone mapped, sRGB), so it is turned back
+  // into light here, and a little of what the tone curve squeezed out of the bright sky and the sun is given back.
+  const CAR_PROBE = { tProbe: { value: null }, uProbeOn: { value: 0 }, uProbePos: { value: new THREE.Vector3() }, uProbeMip: { value: 8 } };
+  const PROBE_PARS = [
+    'uniform samplerCube tProbe;\nuniform float uProbeOn, uProbeMip;\nuniform vec3 uProbePos;\nvarying vec3 vCarW;',
+    '#ifdef USE_ENVMAP',
+    'vec3 probeRadiance( const in vec3 viewDir, const in vec3 n, const in float rough ) {',
+    '\tvec3 r = reflect( -viewDir, n );',
+    '\tr = inverseTransformDirection( normalize( mix( r, n, rough * rough ) ), viewMatrix );',
+    '\tfloat lod = clamp( uProbeMip + log2( PI * rough * rough / ( 1.0 + rough ) ), 0.0, uProbeMip );',
+    '\t#ifdef TEXTURE_LOD_EXT',
+    '\t\tvec3 c = textureCubeLodEXT( tProbe, r, lod ).rgb;',
+    '\t#else',
+    '\t\tvec3 c = textureCube( tProbe, r, lod ).rgb;',
+    '\t#endif',
+    '\tc = sRGBToLinear( vec4( c, 1.0 ) ).rgb;',
+    '\treturn c / max( vec3( 1.0 ) - c * 0.7, vec3( 0.3 ) ) * envMapIntensity;',
+    '}',
+    '#endif'
+  ].join('\n');
+  // (how much of the probe a point gets: all of it within 25 m of where it was caught, none beyond 60 m)
+  const PROBE_MIX = [
+    '#include <lights_fragment_maps>',
+    '#ifdef USE_ENVMAP',
+    '\tfloat probeK = uProbeOn * ( 1.0 - smoothstep( 25.0, 60.0, distance( vCarW, uProbePos ) ) );',
+    '\tif ( probeK > 0.0 ) {',
+    '\t\tradiance = mix( radiance, probeRadiance( geometry.viewDir, geometry.normal, material.specularRoughness ), probeK );',
+    '\t\t#ifdef CLEARCOAT',
+    '\t\t\tclearcoatRadiance = mix( clearcoatRadiance, probeRadiance( geometry.viewDir, geometry.clearcoatNormal, material.clearcoatRoughness ), probeK );',
+    '\t\t#endif',
+    '\t}',
+    '#endif'
+  ].join('\n');
+  function probeShader(shader) {
+    Object.assign(shader.uniforms, CAR_PROBE);
+    shader.vertexShader = 'varying vec3 vCarW;\n' + shader.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n\tvCarW = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <envmap_physical_pars_fragment>', '#include <envmap_physical_pars_fragment>\n' + PROBE_PARS)
+      .replace('#include <lights_fragment_maps>', PROBE_MIX);
+  }
+  // The detail the shader adds up close, and fades out with distance so it never shimmers: the paint's metal flakes
+  // (tiny mirrors tilted every which way under the clear coat, so the sun glints in the base coat) and the tyres' tread,
+  // grooves round the running surface and blocks across it, with the sidewall a shade smoother than the tread
+  // (only on the wheels, whose middle is their origin: not the spare wheel on a tailgate).
+  const CAR_DETAIL = [
+    '#include <normal_fragment_maps>',
+    '\tfloat carDist = length( vViewPosition );',
+    '\tif ( vSurf.w < -0.5 && vSurf.w > -1.5 && carDist < 7.0 ) {',
+    '\t\tvec3 fl = fract( floor( vCarO * 420.0 ) * vec3( 0.1031, 0.1030, 0.0973 ) );',
+    '\t\tfl += dot( fl, fl.yxz + 33.33 );',
+    '\t\tfl = fract( ( fl.xxy + fl.yxx ) * fl.zyx ) - 0.5;',
+    '\t\tnormal = normalize( normal + fl * 0.07 * ( 1.0 - smoothstep( 1.5, 7.0, carDist ) ) );',
+    '\t} else if ( vSurf.w < -1.5 && dot( vCarO.yz, vCarO.yz ) < 0.5 ) {',
+    '\t\tfloat side = smoothstep( 0.55, 0.85, abs( vCarN.x ) );',
+    '\t\troughnessFactor = mix( roughnessFactor, 0.72, side );',
+    '\t\tdiffuseColor.rgb *= mix( 1.0, 1.25, side );',
+    '\t\tif ( carDist < 22.0 && side < 0.5 ) {',
+    '\t\t\tfloat u = abs( vCarO.x ) * 9.0, a = atan( vCarO.z, vCarO.y ) * 9.549;',
+    '\t\t\tfloat groove = 1.0 - smoothstep( 0.05, 0.12, abs( fract( u ) - 0.5 ) );',
+    '\t\t\tgroove = max( groove, 1.0 - smoothstep( 0.04, 0.1, abs( fract( a + u * 0.35 ) - 0.5 ) ) );',
+    '\t\t\tgroove *= ( 1.0 - side * 2.0 ) * ( 1.0 - smoothstep( 8.0, 22.0, carDist ) );',
+    '\t\t\tdiffuseColor.rgb *= 1.0 - 0.45 * groove;',
+    '\t\t\troughnessFactor = min( 1.0, roughnessFactor + 0.1 * groove );',
+    '\t\t}',
+    '\t}'
+  ].join('\n');
   function carShader(shader) {
     shader.uniforms.uGlow = { value: this.userData.glow };
     shader.uniforms.uRev = this.userData.rev;
     shader.uniforms.uInd = { value: this.userData.ind };
-    shader.vertexShader = 'attribute vec4 surf;\nvarying vec4 vSurf;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvSurf = surf;');
-    shader.fragmentShader = 'varying vec4 vSurf;\nuniform vec4 uGlow;\nuniform float uRev;\nuniform vec2 uInd;\n' + shader.fragmentShader
+    shader.vertexShader = 'attribute vec4 surf;\nvarying vec4 vSurf;\nvarying vec3 vCarO, vCarN;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvSurf = surf;\n\tvCarO = position;\n\tvCarN = normal;');
+    shader.fragmentShader = 'varying vec4 vSurf;\nvarying vec3 vCarO, vCarN;\nuniform vec4 uGlow;\nuniform float uRev;\nuniform vec2 uInd;\n' + shader.fragmentShader
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n\troughnessFactor = vSurf.x;')
       .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\n\tmetalnessFactor = vSurf.y;')
+      .replace('#include <normal_fragment_maps>', CAR_DETAIL)
       .replace('#include <lights_physical_fragment>', THREE.ShaderChunk.lights_physical_fragment.replace('material.clearcoat = clearcoat;', 'material.clearcoat = clearcoat * vSurf.z;'))
       .replace('#include <emissivemap_fragment>', [
         '#include <emissivemap_fragment>',
@@ -5548,11 +5619,12 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
         '\tfloat glow = lightCh < 0.5 ? 0.0 : lightCh < 1.5 ? uGlow.x : lightCh < 2.5 ? uGlow.y : lightCh < 3.5 ? uGlow.z : lightCh < 4.5 ? uGlow.w : lightCh < 5.5 ? uRev : lightCh < 6.5 ? uInd.x : uInd.y;',
         '\ttotalEmissiveRadiance += diffuseColor.rgb * glow;'
       ].join('\n'));
+    probeShader(shader);
   }
   const HEAD_GLOW = 0.6, TAIL_GLOW = 0.3, BRAKE_GLOW = 2.6, IND_GLOW = 2.6;
   const IND = (s) => (s > 0 ? COL.indL : COL.indR);
   function carMaterial() {
-    const m = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.3, clearcoat: 1, clearcoatRoughness: 0.04, envMapIntensity: 0.65 });
+    const m = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.3, clearcoat: 1, clearcoatRoughness: 0.025, envMapIntensity: 0.8 });
     m.userData.glow = new THREE.Vector4(HEAD_GLOW, TAIL_GLOW, 0, 0);
     m.userData.rev = { value: 0 };
     m.userData.ind = new THREE.Vector2(0, 0);
@@ -5560,7 +5632,17 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
     return m;
   }
   const wheelMat = carMaterial();
-  const glassMat = new THREE.MeshPhysicalMaterial({ color: 0x0a1016, roughness: 0.03, metalness: 0.1, clearcoat: 1, transparent: true, opacity: 0.84 });
+  // Car windows: tinted glass you see the seats and the driver through head on, turning into a mirror of the sky and the
+  // street at a glancing angle (Fresnel), and as solid as its reflection is bright, as real glass looks
+  const glassMat = new THREE.MeshPhysicalMaterial({ color: 0x15222a, roughness: 0.02, metalness: 0, transparent: true, opacity: 0.62, envMapIntensity: 1.1 });
+  glassMat.onBeforeCompile = (shader) => {
+    probeShader(shader);
+    shader.fragmentShader = shader.fragmentShader.replace('gl_FragColor = vec4( outgoingLight, diffuseColor.a );', [
+      'float glassF = pow( 1.0 - saturate( dot( normal, normalize( vViewPosition ) ) ), 4.0 );',
+      '\tfloat glassA = saturate( mix( diffuseColor.a, 1.0, glassF ) + linearToRelativeLuminance( reflectedLight.directSpecular + reflectedLight.indirectSpecular ) );',
+      '\tgl_FragColor = vec4( outgoingLight, glassA );'
+    ].join('\n'));
+  };
   const crackedMat = new THREE.MeshStandardMaterial({ color: 0xa9b6bd, roughness: 0.6, metalness: 0.1, transparent: true, opacity: 0.92 });
   const blobMat = new THREE.MeshBasicMaterial({ map: blobTex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 });
   const blobGeo = new THREE.PlaneGeometry(1, 1); blobGeo.rotateX(-Math.PI / 2);
@@ -12305,6 +12387,40 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       water.visible = true; sky.position.copy(sp); renderer.shadowMap.autoUpdate = sh;
     }
 
+    /* the street round the camera, for the reflections in the cars (CAR_PROBE): a small cube map, one side of it drawn a
+       frame (every other frame at the middle setting) into the copy the cars are not reading from, and swapped in when
+       all six sides are done. It sees 200 m out (the haze takes over beyond), without your own car or yourself, and the
+       shadows are not drawn again for it. The sky dome is shrunk inside that range while it looks */
+    const PROBE_SIZE = 256, probeRT = [0, 1].map(() => {
+      const t = new THREE.WebGLCubeRenderTarget(PROBE_SIZE, { format: THREE.RGBAFormat, generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter });
+      t.texture.encoding = THREE.sRGBEncoding;
+      return t;
+    });
+    const probeCam = new THREE.CubeCamera(0.3, 200, probeRT[0]), probeLast = new THREE.Vector3(1e9, 0, 0);
+    let probeFace = 0, probeRead = 0, probeSkip = 0;
+    CAR_PROBE.uProbeMip.value = Math.log2(PROBE_SIZE);
+    function renderProbe() {
+      const write = probeRT[1 - probeRead], at = camTarget;
+      // moved far since the last side (into a car across the map, a teleport): start again, and show none until done
+      if (probeLast.distanceToSquared(at) > 40 * 40) { probeFace = 0; CAR_PROBE.uProbeOn.value = 0; }
+      probeLast.copy(at);
+      probeCam.position.copy(at);
+      probeCam.updateMatrixWorld();
+      const car = driving || (stop && stop.riding ? stop.car : null) || MP.ride, hide = [player.model.group, car && car.group].filter((o) => o && o.visible);
+      for (const o of hide) o.visible = false;
+      const sp = sky.position.clone(), sh = renderer.shadowMap.autoUpdate;
+      sky.position.copy(at); sky.scale.setScalar(0.12); renderer.shadowMap.autoUpdate = false;
+      write.texture.generateMipmaps = probeFace === 5;
+      renderer.setRenderTarget(write, probeFace);
+      renderer.render(scene, probeCam.children[probeFace]);
+      sky.position.copy(sp); sky.scale.setScalar(1); renderer.shadowMap.autoUpdate = sh;
+      for (const o of hide) o.visible = true;
+      if (++probeFace === 6) {
+        probeFace = 0; probeRead = 1 - probeRead;
+        CAR_PROBE.tProbe.value = write.texture; CAR_PROBE.uProbePos.value.copy(at); CAR_PROBE.uProbeOn.value = 1;
+      }
+    }
+
     let level = isTouch ? 1 : 2, W = 0, H = 0;
     const stats = { calls: 0, triangles: 0, mirror: false };
     let aoOn = true;
@@ -12321,8 +12437,12 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       refl.setSize(Math.max(1, Math.round(W * 0.38)), Math.max(1, Math.round(H * 0.38)));
     }
     function render() {
-      if (level === 0) { reflU.uReflOn.value = 0; renderer.setRenderTarget(null); renderer.render(scene, camera); return; }
+      if (level === 0) {
+        reflU.uReflOn.value = 0; CAR_PROBE.uProbeOn.value = 0; probeLast.set(1e9, 0, 0);
+        renderer.setRenderTarget(null); renderer.render(scene, camera); return;
+      }
       resize();
+      if (level >= 2 || (probeSkip ^= 1)) renderProbe();
       const mirrored = level >= 2 && waterInView();
       reflU.uReflOn.value = mirrored ? 1 : 0;
       if (mirrored) renderMirror();
@@ -12353,7 +12473,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
       finU.uPx.value.set(1 / W, 1 / H); finU.uAO.value = ao ? 0.85 : 0; finU.uTime.value = (finU.uTime.value + 0.618) % 50; finU.uAspect.value = W / H;
       draw(finMat, null);
     }
-    const NAMES = ['Enkel grafik', 'Mellangrafik: bloom och färgkorrigering', 'Högsta grafik: speglingar i vattnet, skuggning och bloom'];
+    const NAMES = ['Enkel grafik', 'Mellangrafik: bloom, färgkorrigering och speglingar i bilarna', 'Högsta grafik: speglingar i vattnet och bilarna, skuggning och bloom'];
     return {
       render,
       get level() { return level; },
