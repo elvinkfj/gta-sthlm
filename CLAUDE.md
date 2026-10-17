@@ -30,14 +30,16 @@ The game is these files, loaded in this order:
 - `src/vehicles/cars.js` (about 1,490 lines): car materials, body and wheel geometry, `makeCar`.
 - `src/vehicles/physics.js` (about 590 lines): car physics, smoke and sparks, skid marks, damage, people physics.
 - `src/traffic.js` (about 300 lines): the traffic AI and the pedestrians.
-- `src/game.js` (about 5,800 lines, roughly 130k tokens): everything else. **Never read it whole.**
+- `src/police.js` (about 870 lines): wanted stars, chases, the sjöpolis and the navy, the helicopter.
+- `src/police-stops.js` (about 740 lines): police on the ground (stops, arrests, the cells), then the traffic spawned at start.
+- `src/game.js` (about 4,150 lines, roughly 90k tokens): everything else. **Never read it whole.**
 
 Each part of the JavaScript starts with a section header comment. Grep for the header (or a name from the table) and read only that range:
 
 - Big sections: `/* ================= name ================= */`
 - Subsections: `/* ---------- name ---------- */`
 
-Line numbers drift with every change, so search instead of trusting numbers. Each file in `src/` is a plain script with `'use strict';` at the top and no wrapper function (the code still has its old two-space indent). Top-level names are globals shared by every `<script>` on the page, so a name from one file may be used in any other: grep all of `src/` for a name before renaming or removing it. Code that runs while a file loads can only use what earlier files (or earlier lines) define; functions are hoisted only within their own file. So when code moves to a new file, a helper it calls at load time must already be defined in an earlier file (that is why `curve` and `tubeTo` moved to `src/core.js`). A new top-level name must not clash with a browser global (`top`, `name`, `status`, `stop`, …); that is why the police stop's state is called `policeStop`. If Three.js is missing, the check at the top shows a message and throws, which stops the script.
+Line numbers drift with every change, so search instead of trusting numbers. Each file in `src/` is a plain script with `'use strict';` at the top and no wrapper function (the code still has its old two-space indent). Top-level names are globals shared by every `<script>` on the page, so a name from one file may be used in any other: grep all of `src/` for a name before renaming or removing it. Code that runs while a file loads can only use what earlier files (or earlier lines) define; functions are hoisted only within their own file. So when code moves to a new file, a helper it calls at load time must already be defined in an earlier file (that is why `curve` and `tubeTo` moved to `src/core.js`, and `boatFree` and `findBerth` to the end of `src/vehicles/physics.js`). A new top-level name must not clash with a browser global (`top`, `name`, `status`, `stop`, …); that is why the police stop's state is called `policeStop`. If Three.js is missing, the check at the top shows a message and throws, which stops the script.
 
 | File | Section header | What's in it | Key names |
 | --- | --- | --- | --- |
@@ -54,8 +56,9 @@ Line numbers drift with every change, so search instead of trusting numbers. Eac
 | `src/vehicles/cars.js` | `car materials` | Car materials, car body, moped, boat and military geometry, wheels, building a car | `carShape`, `wheelGeometry`, `cars`, `makeCar` |
 | `src/vehicles/physics.js` | `car physics`, `particles…`, `skid marks`, `damage`, `people physics` | Driving physics, smoke and sparks, crashes | `crash` |
 | `src/traffic.js` | `traffic AI`, `pedestrians` | Bot drivers and walkers | `botThink`, `npcThink` |
-| `src/game.js` | `police` (and the subsections on the sjöpolis and navy, the helicopter, police on the ground) | Wanted stars, chases, police boats, military, helicopter, arrests and cells | `limitAt`, `startChase`, `endChase`, `policeThink`, `policeUpdate`, `WATER`, `updateHeli` |
-| `src/game.js` | `initial traffic` | Spawns traffic at start | |
+| `src/police.js` | `police`, `the sjöpolis and the navy`, `the police helicopter` | Wanted stars, chases, police boats, military, helicopter | `limitAt`, `startChase`, `endChase`, `policeThink`, `policeUpdate`, `WATER`, `updateHeli` |
+| `src/police-stops.js` | `police on the ground…` | Stops, constables on foot, arrests and the cells | `policeStop`, `beginStop`, `useKey` |
+| `src/police-stops.js` | `initial traffic` | Spawns traffic, police and moored boats at start | |
 | `src/game.js` | `Högvakten and the Dalahäst hunt`, `jobs and street races`, `ice cream kiosks and balloon sellers` | Side activities | `JOBS`, `VENDORS` |
 | `src/game.js` | `game state`, `car picker`, `traffic upkeep` | Input state, picking a car, keeping traffic around the player | `keys`, `readInput`, `chooseModel`, `manageTraffic` |
 | `src/game.js` | `simulation step`, `visuals` | One physics step, moving meshes, the camera | `physicsStep`, `animate`, `updateCamera` |
