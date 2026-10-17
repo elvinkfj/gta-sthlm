@@ -128,10 +128,10 @@ flowchart LR
 
 ## PR 4: Ut ur HTML-filen
 
-- [ ] Flytta all CSS från `<style>` till `style.css`.
-- [ ] Flytta allt JavaScript från `<script>` till `src/game.js`, oförändrat.
-- [ ] `index.html` innehåller nu bara HTML och några `<link>`/`<script>`-taggar.
-- [ ] Uppdatera kartan i `CLAUDE.md`.
+- [x] Flytta all CSS från `<style>` till `style.css`.
+- [x] Flytta allt JavaScript från `<script>` till `src/game.js`, oförändrat.
+- [x] `index.html` innehåller nu bara HTML och några `<link>`/`<script>`-taggar.
+- [x] Uppdatera kartan i `CLAUDE.md`.
 
 **Klart när:** testet är grönt och spelet startar med dubbelklick.
 

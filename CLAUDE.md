@@ -16,16 +16,22 @@ The game is being split into smaller files, one step per PR, following **`PLAN.m
 
 ## How to find things
 
-`index.html` is about 13,700 lines and roughly 300k tokens. **Never read it whole.** Each part starts with a section header comment. Grep for the header (or a name from the table) and read only that range:
+The game is three files:
+
+- `index.html` (about 220 lines): only the HTML for the HUD, maps, start sign and car picker, plus the `<link>` and `<script>` tags.
+- `style.css` (about 410 lines): all the styles.
+- `src/game.js` (about 13,100 lines, roughly 290k tokens): all the JavaScript. **Never read it whole.**
+
+Each part of `src/game.js` starts with a section header comment. Grep for the header (or a name from the table) and read only that range:
 
 - Big sections: `/* ================= name ================= */`
 - Subsections: `/* ---------- name ---------- */`
 
-Line numbers drift with every change, so search instead of trusting numbers. Lines 1–620 are CSS and HTML; the rest is one script inside `(function () { 'use strict'; … })()`. Everything inside shares one scope, so a top-level name in one section may be used anywhere: grep for a name before renaming or removing it.
+Line numbers drift with every change, so search instead of trusting numbers. `src/game.js` is one script inside `(function () { 'use strict'; … })()`. Everything inside shares one scope, so a top-level name in one section may be used anywhere: grep for a name before renaming or removing it.
 
 | Section header | What's in it | Key names |
 | --- | --- | --- |
-| *(CSS, top of file)* `HUD`, `start sign`, `big map`, `car picker`, `touch controls`, `playing with friends…` | Styles for the overlays | |
+| *(in `style.css`)* `HUD`, `start sign`, `big map`, `car picker`, `touch controls`, `playing with friends…` | Styles for the overlays | |
 | *(script start)* | Helpers, seeded random | `$`, `clamp`, `lerp`, `rand`, `pick`, `TAU` |
 | `renderer & scene`, `geometry helpers`, `textures` | Three.js setup, mesh and texture helpers | `renderer`, `scene`, `camera` |
 | `Stockholm: land, water and streets` | Map data: land polygons, the street graph, walkable raster, obstacle grid | `nodes`, `edges` |
