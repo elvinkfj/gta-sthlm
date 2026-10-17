@@ -1,7 +1,7 @@
 'use strict';
   const $ = (id) => document.getElementById(id);
   if (!window.THREE) {
-    $('lede').textContent = 'Kunde inte ladda 3D-motorn. Kontrollera internetanslutningen och ladda om sidan.';
+    $('lede').textContent = 'Kunde inte ladda 3D-motorn. Kontrollera att mappen lib ligger bredvid index.html och ladda om sidan.';
     $('play').disabled = true;
     // a script can't return at the top level: throwing stops the rest of it
     throw new Error('Three.js is missing');
