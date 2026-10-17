@@ -25,7 +25,8 @@ The game is these files, loaded in this order:
 - `src/city/map.js` (about 740 lines): Stockholm's land, water and street graph, where you can stand, the obstacle grid.
 - `src/city/build.js` (about 1,740 lines): building the city, from the ground and quays to the landmarks and the police station.
 - `src/city/draken.js` (about 960 lines): the yellow house in Drakens gränd with the penthouse and the lift, then the instanced trees and street lamps.
-- `src/game.js` (about 9,000 lines, roughly 200k tokens): everything else. **Never read it whole.**
+- `src/people.js` (about 130 lines): person models, the spawn spot and the player.
+- `src/game.js` (about 8,900 lines, roughly 195k tokens): everything else. **Never read it whole.**
 
 Each part of the JavaScript starts with a section header comment. Grep for the header (or a name from the table) and read only that range:
 
@@ -44,7 +45,7 @@ Line numbers drift with every change, so search instead of trusting numbers. Eac
 | `src/city/build.js` | `Polisstationen on Stora Nygatan` | The police station building and its logic | `STATION` |
 | `src/city/draken.js` | `Drakens gränd: building the yellow house` | The yellow house with the three-floor penthouse and the lift | `LIFT` |
 | `src/city/draken.js` | `trees and street lamps…` | Instanced trees and lamps | |
-| `src/game.js` | `people` | Person models and the player | `persons`, `player`, `makePerson` |
+| `src/people.js` | `people` | Person models and the player | `persons`, `player`, `makePerson` |
 | `src/game.js` | `vehicles` | **All car, boat, police and military models as data**, then gearbox, materials, car body and wheel geometry | `MODELS`, `MODEL`, `PICKABLE`, `SECRET`, `carShape`, `wheelGeometry`, `cars`, `makeCar` |
 | `src/game.js` | `car physics`, `particles…`, `skid marks`, `damage`, `people physics` | Driving physics, smoke and sparks, crashes | `crash` |
 | `src/game.js` | `traffic AI`, `pedestrians` | Bot drivers and walkers | `botThink`, `npcThink` |
