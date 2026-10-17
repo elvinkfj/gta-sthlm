@@ -16,24 +16,27 @@ The game is being split into smaller files, one step per PR, following **`PLAN.m
 
 ## How to find things
 
-The game is three files:
+The game is these files, loaded in this order:
 
 - `index.html` (about 220 lines): only the HTML for the HUD, maps, start sign and car picker, plus the `<link>` and `<script>` tags.
 - `style.css` (about 410 lines): all the styles.
-- `src/game.js` (about 13,100 lines, roughly 290k tokens): all the JavaScript. **Never read it whole.**
+- `lib/three.min.js`: Three.js r128.
+- `src/core.js` (about 580 lines): helpers, seeded random, the Three.js check, renderer and scene, geometry helpers, textures.
+- `src/game.js` (about 12,500 lines, roughly 280k tokens): everything else. **Never read it whole.**
 
-Each part of `src/game.js` starts with a section header comment. Grep for the header (or a name from the table) and read only that range:
+Each part of the JavaScript starts with a section header comment. Grep for the header (or a name from the table) and read only that range:
 
 - Big sections: `/* ================= name ================= */`
 - Subsections: `/* ---------- name ---------- */`
 
-Line numbers drift with every change, so search instead of trusting numbers. `src/game.js` is a plain script with `'use strict';` at the top and no wrapper function (the code still has its old two-space indent). Its top-level names are globals shared by every `<script>` on the page, so a top-level name in one section may be used anywhere, and later in another file: grep for a name before renaming or removing it. A new top-level name must not clash with a browser global (`top`, `name`, `status`, `stop`, …); that is why the police stop's state is called `policeStop`. If Three.js is missing, the check at the top shows a message and throws, which stops the script.
+Line numbers drift with every change, so search instead of trusting numbers. Each file in `src/` is a plain script with `'use strict';` at the top and no wrapper function (the code still has its old two-space indent). Top-level names are globals shared by every `<script>` on the page, so a name from one file may be used in any other: grep all of `src/` for a name before renaming or removing it. Code that runs while a file loads can only use what earlier files (or earlier lines) define; functions are hoisted only within their own file. A new top-level name must not clash with a browser global (`top`, `name`, `status`, `stop`, …); that is why the police stop's state is called `policeStop`. If Three.js is missing, the check at the top shows a message and throws, which stops the script.
 
 | Section header | What's in it | Key names |
 | --- | --- | --- |
 | *(in `style.css`)* `HUD`, `start sign`, `big map`, `car picker`, `touch controls`, `playing with friends…` | Styles for the overlays | |
-| *(script start)* | Helpers, seeded random | `$`, `clamp`, `lerp`, `rand`, `pick`, `TAU` |
-| `renderer & scene`, `geometry helpers`, `textures` | Three.js setup, mesh and texture helpers | `renderer`, `scene`, `camera` |
+| *(start of `src/core.js`)* | Helpers, seeded random | `$`, `clamp`, `lerp`, `rand`, `pick`, `TAU` |
+| *(in `src/core.js`)* `renderer & scene`, `geometry helpers`, `textures` | Three.js setup, mesh and texture helpers | `renderer`, `scene`, `camera` |
+| *(the rest is in `src/game.js`)* | | |
 | `Stockholm: land, water and streets` | Map data: land polygons, the street graph, walkable raster, obstacle grid | `nodes`, `edges` |
 | `the city: ground, quays, streets` (and its subsections) | Building the city: parks, Gröna Lund, streets, bridges, lamps, car park, buildings, landmarks, boats, signs, Globen | `landmarkList` |
 | `Polisstationen on Stora Nygatan` | The police station building and its logic | `STATION` |
