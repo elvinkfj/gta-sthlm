@@ -33,7 +33,12 @@ The game is these files, loaded in this order:
 - `src/police.js` (about 870 lines): wanted stars, chases, the sjöpolis and the navy, the helicopter.
 - `src/police-stops.js` (about 740 lines): police on the ground (stops, arrests, the cells), then the traffic spawned at start.
 - `src/activities.js` (about 1,170 lines): Högvakten and the Dalahäst hunt, jobs and street races, ice cream kiosks and balloon sellers.
-- `src/game.js` (about 3,000 lines, roughly 65k tokens): everything else. **Never read it whole.**
+- `src/gameplay.js` (about 610 lines): input state, the car picker, traffic upkeep, one simulation step, moving the meshes and the camera.
+- `src/hud.js` (about 390 lines): on-screen text, the minimap and the big map.
+- `src/sound.js` (about 360 lines): synthesised engine sounds and effects.
+- `src/input.js` (about 150 lines): keyboard, touch and the start screen.
+- `src/post.js` (about 320 lines): graphics quality levels and post-processing.
+- `src/game.js` (about 1,140 lines): playing with friends, then the main loop and the test hooks.
 
 Each part of the JavaScript starts with a section header comment. Grep for the header (or a name from the table) and read only that range:
 
@@ -61,12 +66,12 @@ Line numbers drift with every change, so search instead of trusting numbers. Eac
 | `src/police-stops.js` | `police on the ground…` | Stops, constables on foot, arrests and the cells | `policeStop`, `beginStop`, `useKey` |
 | `src/police-stops.js` | `initial traffic` | Spawns traffic, police and moored boats at start | |
 | `src/activities.js` | `Högvakten and the Dalahäst hunt`, `jobs and street races`, `ice cream kiosks and balloon sellers` | Side activities | `JOBS`, `VENDORS` |
-| `src/game.js` | `game state`, `car picker`, `traffic upkeep` | Input state, picking a car, keeping traffic around the player | `keys`, `readInput`, `chooseModel`, `manageTraffic` |
-| `src/game.js` | `simulation step`, `visuals` | One physics step, moving meshes, the camera | `physicsStep`, `animate`, `updateCamera` |
-| `src/game.js` | `HUD`, `minimap`, `the big map` | On-screen text and both maps | `updateHUD`, `drawMap`, `bigmap`, `drawBigmap` |
-| `src/game.js` | `sound` | Synthesised engine sounds and effects | `ENGINE_SOUNDS`, `updateAudio` |
-| `src/game.js` | `input` | Keyboard, touch and the start screen | `startGame` |
-| `src/game.js` | `post-processing` | Graphics quality levels and effects | `POST` |
+| `src/gameplay.js` | `game state`, `car picker`, `traffic upkeep` | Input state, picking a car, keeping traffic around the player | `keys`, `readInput`, `chooseModel`, `manageTraffic` |
+| `src/gameplay.js` | `simulation step`, `visuals` | One physics step, moving meshes, the camera | `physicsStep`, `animate`, `updateCamera` |
+| `src/hud.js` | `HUD`, `minimap`, `the big map` | On-screen text and both maps | `updateHUD`, `drawMap`, `bigmap`, `drawBigmap` |
+| `src/sound.js` | `sound` | Synthesised engine sounds and effects | `ENGINE_SOUNDS`, `updateAudio` |
+| `src/input.js` | `input` | Keyboard, touch and the start screen | `startGame` |
+| `src/post.js` | `post-processing` | Graphics quality levels and effects | `POST` |
 | `src/game.js` | `playing with friends` | Multiplayer over WebRTC (PeerJS), with MQTT as fallback. Libraries load only when used. | `MP` |
 | `src/game.js` | `loop` | The main loop, adaptive resolution and the test hooks | `tick`, `frame`, `window.gubbeTest` |
 
