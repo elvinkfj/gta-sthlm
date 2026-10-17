@@ -23,7 +23,8 @@ The game is these files, loaded in this order:
 - `lib/three.min.js`: Three.js r128.
 - `src/core.js` (about 580 lines): helpers, seeded random, the Three.js check, renderer and scene, geometry helpers, textures.
 - `src/city/map.js` (about 740 lines): Stockholm's land, water and street graph, where you can stand, the obstacle grid.
-- `src/city/build.js` (about 1,740 lines): building the city, from the ground and quays to the landmarks and the police station.
+- `src/city/build.js` (about 1,210 lines): building the city, from the ground and quays to the landmarks and the police station.
+- `src/city/blocks.js` (about 530 lines): the layout of the house in Drakens gränd, the buildings along every other street, boats, signs, Globen, and assembling the meshes.
 - `src/city/draken.js` (about 960 lines): the yellow house in Drakens gränd with the penthouse and the lift, then the instanced trees and street lamps.
 - `src/people.js` (about 130 lines): person models, the spawn spot and the player.
 - `src/vehicles/models.js` (about 740 lines): every car, boat, police and military model as data, and the gearbox.
@@ -54,8 +55,9 @@ Line numbers drift with every change, so search instead of trusting numbers. Eac
 | `src/core.js` | *(start of the file)* | Helpers, seeded random | `$`, `clamp`, `lerp`, `rand`, `pick`, `TAU` |
 | `src/core.js` | `renderer & scene`, `geometry helpers`, `textures` | Three.js setup, mesh and texture helpers (also `curve` and `tubeTo`, which the city and the cars both use) | `renderer`, `scene`, `camera`, `Merger` |
 | `src/city/map.js` | `Stockholm: land, water and streets` | Map data: land polygons, the street graph, walkable raster, obstacle grid | `nodes`, `edges` |
-| `src/city/build.js` | `the city: ground, quays, streets` (and its subsections up to `assemble the meshes`) | Building the city: parks, Gröna Lund, streets, bridges, lamps, car park, buildings, landmarks, the layout of the house in Drakens gränd, boats, signs, Globen | `landmarkList`, `DRAKEN` |
+| `src/city/build.js` | `the city: ground, quays, streets` (and its subsections up to `landmarks`) | Building the city: parks, Gröna Lund, streets, bridges, lamps, car park, buildings, landmarks | `landmarkList` |
 | `src/city/build.js` | `Polisstationen on Stora Nygatan` | The police station building and its logic | `STATION` |
+| `src/city/blocks.js` | `Drakens gränd: the yellow house…` up to `assemble the meshes` | The layout of the house in Drakens gränd, the buildings along every other street, boats, signs, Globen, finer materials, assembling the meshes | `DRAKEN` |
 | `src/city/draken.js` | `Drakens gränd: building the yellow house` | The yellow house with the three-floor penthouse and the lift | `LIFT` |
 | `src/city/draken.js` | `trees and street lamps…` | Instanced trees and lamps | |
 | `src/people.js` | `people` | Person models and the player | `persons`, `player`, `makePerson` |
