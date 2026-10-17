@@ -590,3 +590,35 @@
     // indoors the ceiling stops a jump
     if (span && p.y + 2.05 > span.ceil) { p.y = Math.max(gy, span.ceil - 2.05); if (p.vy > 0) p.vy = 0; }
   }
+  // a berth for a boat by the quay nearest to (x, z): walk out from there to where the land ends, and lay the hull
+  // alongside the edge just off it (or, from out on the water, anywhere free near by)
+  function boatFree(M, x, z, h, ignore) {
+    if (!boatFits(M, x, z, h)) return false;
+    const r = M.W / 2 + 0.1, span = M.L / 2 - r, fx = Math.sin(h), fz = Math.cos(h);
+    for (const o of [-span, 0, span]) if (resolveWorld(x + fx * o, z + fz * o, r, WATER_Y).hit) return false;
+    for (const o of cars) if (o !== ignore && Math.hypot(o.x - x, o.z - z) < (o.M.L + M.L) / 2 + 0.8) return false;
+    return true;
+  }
+  function findBerth(M, x, z, maxD = 80, ignore) {
+    let best = null;
+    if (!(groundAt(x, z) & 1)) {
+      for (let r = 0; r < 40 && !best; r += 3) for (let a = 0; a < TAU && !best; a += 0.4) {
+        const cx = x + Math.cos(a) * r, cz = z + Math.sin(a) * r;
+        for (const h of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) if (boatFree(M, cx, cz, h, ignore)) { best = { x: cx, z: cz, h, d: r }; break; }
+      }
+      return best;
+    }
+    for (let a = 0; a < TAU; a += TAU / 36) {
+      const dx = Math.sin(a), dz = Math.cos(a);
+      let d = 0;
+      while (d < maxD && groundAt(x + dx * d, z + dz * d) & 1) d += 0.5;
+      if (d >= maxD || (best && d > best.d)) continue;
+      for (const off of [M.W / 2 + 0.5, M.W / 2 + 1.2, M.W / 2 + 2.5]) {
+        const cx = x + dx * (d + off), cz = z + dz * (d + off);
+        let found = false;
+        for (const h of [a + Math.PI / 2, a - Math.PI / 2]) if (boatFree(M, cx, cz, h, ignore)) { best = { x: cx, z: cz, h, d }; found = true; break; }
+        if (found) break;
+      }
+    }
+    return best;
+  }
