@@ -1,10 +1,10 @@
-(function () {
-  'use strict';
+'use strict';
   const $ = (id) => document.getElementById(id);
   if (!window.THREE) {
     $('lede').textContent = 'Kunde inte ladda 3D-motorn. Kontrollera internetanslutningen och ladda om sidan.';
     $('play').disabled = true;
-    return;
+    // a script can't return at the top level: throwing stops the rest of it
+    throw new Error('Three.js is missing');
   }
 
   // Light is computed in linear space and shown in sRGB, like newer three.js: hex colours go in as sRGB and come back out as sRGB
@@ -3716,7 +3716,7 @@
   // opens its doors; the first time you step into the flat, it says so
   const LIFT_NAMES = ['Gatan', '1 tr', '2 tr', 'Lägenheten', 'Biblioteket', 'Sovrummen'];
   function liftWhere() {
-    const L = DRAKEN.lift, { ST, CAB, F } = DRAKEN, [lx, lz] = DRAKEN.toLocal(player.x, player.z), free = !driving && !(stop && stop.locked);
+    const L = DRAKEN.lift, { ST, CAB, F } = DRAKEN, [lx, lz] = DRAKEN.toLocal(player.x, player.z), free = !driving && !(policeStop && policeStop.locked);
     const inCab = free && lx > CAB.x0 - 0.05 && lx < CAB.x1 + 0.05 && lz > CAB.z0 - 0.15 && lz < CAB.z1 + 0.05 && Math.abs(player.y - L.y) < 1;
     const k = Math.round(player.y / F), onFloor = Math.abs(player.y - k * F) < 0.35;
     const atDoor = free && !inCab && onFloor && k >= 0 && k < DRAKEN.FLOORS && lx > CAB.d0 - 0.8 && lx < CAB.d1 + 0.8 && lz > ST.z0 && lz < ST.z1 + 0.05;
@@ -7328,7 +7328,7 @@
   // the army: driven like the police in a chase, but with soldiers aboard, no blue lights, and it rams
   let armySpawnT = 0;
   // at five stars the army comes in force: two tanks, two trucks full of soldiers and five armoured cars on the streets
-  const armyTarget = () => (wanted && wanted.stars >= 5 && !stop ? 9 : 0);
+  const armyTarget = () => (wanted && wanted.stars >= 5 && !policeStop ? 9 : 0);
   function makeArmy(c) {
     makePolice(c);
     c.military = true; c.police.callIn = Infinity; c.aim = 0; c.fireT = 4 + Math.random() * 4;
@@ -7356,7 +7356,7 @@
     for (let d = 1; d <= 160; d += 1.5) {
       const x = mx + fx * d, z = mz + fz * d;
       // (a friend's shell can hit you, on foot)
-      const you = (p) => p === player && !(c.remote && !driving && !MP.ride && !(stop && stop.riding));
+      const you = (p) => p === player && !(c.remote && !driving && !MP.ride && !(policeStop && policeStop.riding));
       if (blockedAt(x, z, 0.3) || cars.some((o) => o !== c && Math.hypot(o.x - x, o.z - z) < Math.min(o.M.W, o.M.L) / 2 + 0.3) || persons.some((p) => !you(p) && !p.asleep && Math.hypot(p.x - x, p.z - z) < 0.7)) { hx = x; hz = z; break; }
     }
     explode(hx, hz, walkable(hx, hz) ? 0.6 : WATER_Y + 0.3);
@@ -7496,7 +7496,7 @@
   // with more stars the police drive faster, come from further away, are more of them and search longer
   const chaseSpeed = () => CHASE_SPEED + Math.max(0, stars() - 1) * 2;
   const chaseRadius = () => 400 + Math.max(0, stars() - 1) * 120;
-  const policeTarget = () => POLICE_TARGET + (wanted && !stop ? [0, 0, 1, 3, 5, 7][wanted.stars] : 0);
+  const policeTarget = () => POLICE_TARGET + (wanted && !policeStop ? [0, 0, 1, 3, 5, 7][wanted.stars] : 0);
   function setChase(c, on) {
     const P = c.police, b = c.bot;
     // a car whose crew is out on foot, or which is busy with a stop or a prisoner, stays as it is
@@ -7651,7 +7651,7 @@
     if (policeCool > 0) policeCool -= dt;
     sirenCars = cars.filter((c) => c.siren || (c.military && c.police && c.police.state === 'chase'));
     updateFootCops(dt);
-    if (stop) { stopUpdate(dt); return; }
+    if (policeStop) { stopUpdate(dt); return; }
     const T = playerTarget();
     // speeding where a patrol can see it
     if (driving && !driving.M.boat && !wanted && policeCool <= 0 && !driving.siren) {
@@ -7906,7 +7906,7 @@
       if (boat) { setOccupant(boat, null); boat.vx = boat.vz = 0; driving = null; }
       if (MP.ride) MP.unride();
       player.model.group.visible = false; player.vx = player.vz = 0;
-      stop = { car: null, mode: 'arrest', phase: 'water', t: 0, at: { x: player.x, z: player.z }, officer: null, crew: null, name: rpick(CONSTABLES), title: 'Konstapel',
+      policeStop = { car: null, mode: 'arrest', phase: 'water', t: 0, at: { x: player.x, z: player.z }, officer: null, crew: null, name: rpick(CONSTABLES), title: 'Konstapel',
         ticket: null, nav: {}, pnav: {}, locked: true, spot: null, door: null, vehicle: boat ? boat.M.name : 'Gående' };
       toast('Sjöpolisen griper dig. Du förs till polisstationen.');
       fadeThen(jailDirect);
@@ -7914,7 +7914,7 @@
     function update(dt) {
       const list = units(), wet = onWater();
       offT = wet ? 0 : offT + dt;
-      const hunting = !!wanted && !stop && offT < 25;
+      const hunting = !!wanted && !policeStop && offT < 25;
       if (!list.length && !(hunting && wet)) return;
       grid();
       const T = target();
@@ -8089,7 +8089,7 @@
     heliModel.group.visible = true;
   }
   function updateHeli(dt) {
-    const want = !!wanted && wanted.stars >= 3 && !(stop && stop.locked);
+    const want = !!wanted && wanted.stars >= 3 && !(policeStop && policeStop.locked);
     if (!heli) { if (want) spawnHeli(); else return; }
     const H = heli, T = playerTarget();
     H.t += dt;
@@ -8165,14 +8165,14 @@
   // the back seat of the police car and a ride to the station on Stora Nygatan, where you are put in a cell.
   // On foot the patrols pull up and the constables get out and run after you, along the streets, through the lanes,
   // up the stairs and into buildings. Get into a car and they run back to theirs and chase you by car again.
-  let stop = null;
+  let policeStop = null;
   const footCops = [];
   const CONSTABLES = ['Andersson', 'Lindqvist', 'Nyström', 'Berg', 'Holm', 'Karlsson', 'Ek', 'Sandberg', 'Öberg', 'Lundin'];
   const COP_RUN = 9.7, ARREST_OVER = 50, FLEE_ARREST = 20, IDLE = () => ({ mx: 0, mz: 0, speed: 0, jump: false });
   const arrestable = (w) => w.over >= ARREST_OVER || w.kinds.has('smitning') || (w.fleeT || 0) > FLEE_ARREST || w.stars >= 3;
   const stopTarget = () => (driving ? { x: driving.x, z: driving.z, h: driving.h, L: driving.M.L } : { x: player.x, z: player.z, h: player.rot, L: 1 });
   // the phases in which you have no say in where you go
-  const inCustody = () => !!(stop && stop.locked && stop.phase !== 'jail');
+  const inCustody = () => !!(policeStop && policeStop.locked && policeStop.phase !== 'jail');
 
   /* walking routes for people: straight there when nothing is in the way, through the station's rooms, or along the
      streets, lanes and stairs (every street a person can walk) */
@@ -8258,7 +8258,7 @@
     const boxes = [];
     for (const c of cars) {
       if (Math.hypot(c.vx, c.vz) > 0.5 || Math.abs(c.x - x) > len + c.M.L + 2 || Math.abs(c.z - z) > len + c.M.L + 2) continue;
-      if (stop && stop.riding && c === stop.car) continue;
+      if (policeStop && policeStop.riding && c === policeStop.car) continue;
       boxes.push(carBox(c));
     }
     const S0 = { x, z }, d0 = (p, q) => Math.hypot(p.x - q.x, p.z - q.z);
@@ -8365,15 +8365,15 @@
       const at = (s) => { const lx = s * (c.M.W / 2 + 0.75); return { x: c.x + lx * co + lz * si, z: c.z - lx * si + lz * co, fx: c.x, fz: c.z }; };
       // the driver's window, unless a wall or another car is in the way there: then the passenger's
       const free = (p) => personFits(p.x, p.z) && !blockedAt(p.x, p.z, 0.35) && !cars.some((q) => q !== c && byCar(q, p.x, p.z, 0.4));
-      if (stop && stop.winSide === undefined) stop.winSide = free(at(1)) || !free(at(-1)) ? 1 : -1;
-      return at(stop ? stop.winSide : 1);
+      if (policeStop && policeStop.winSide === undefined) policeStop.winSide = free(at(1)) || !free(at(-1)) ? 1 : -1;
+      return at(policeStop ? policeStop.winSide : 1);
     }
     const dx = o.x - player.x, dz = o.z - player.z, d = Math.hypot(dx, dz) || 1;
     return { x: player.x + (dx / d) * 1.0, z: player.z + (dz / d) * 1.0, fx: player.x, fz: player.z };
   }
   function newStop(c, mode, phase, officer) {
     const T = stopTarget();
-    stop = {
+    policeStop = {
       car: c, mode, phase, t: 0, at: { x: T.x, z: T.z }, officer: officer || null, crew: c.occupant || makeIdentity(OFFICER), name: rpick(CONSTABLES), title: 'Konstapel',
       ticket: null, nav: {}, pnav: {}, locked: false, spot: phase === 'approach' && driving ? stopSpot(c, T) : null, door: null,
       vehicle: driving ? driving.M.name + ', ' + plateOf(driving) : 'Gående'
@@ -8382,11 +8382,11 @@
     c.police.state = 'stop'; c.police.out = null; c.siren = false; c.yelp = false; c.beacon = true; c.police.direct = false;
     for (const o of cars) if (o !== c && o.police && o.police.state === 'chase') setChase(o, false);
     for (const fc of footCops) fc.mode = 'return';
-    return stop;
+    return policeStop;
   }
   function beginStop(c) {
     newStop(c, arrestable(wanted) ? 'arrest' : 'ticket', 'approach');
-    toast(stop.spot && stop.spot.ahead ? 'Polisen stannar framför dig. Sitt kvar i bilen.' : 'Polisen kör in bakom dig. Sitt kvar i bilen.');
+    toast(policeStop.spot && policeStop.spot.ahead ? 'Polisen stannar framför dig. Sitt kvar i bilen.' : 'Polisen kör in bakom dig. Sitt kvar i bilen.');
   }
   // a constable on foot has reached you
   function caughtOnFoot(fc) {
@@ -8432,11 +8432,11 @@
     const vT = clamp(d * 0.7, 1.5, slow || 11);
     return { fwd: clamp((vT - vf) * 0.5, -1, 1), right: -clamp(delta / maxSteer, -1, 1), brake: false };
   }
-  function stopDrive(c) { return parkDrive(c, stop && stop.car === c && stop.phase === 'approach' ? stop.spot : null); }
+  function stopDrive(c) { return parkDrive(c, policeStop && policeStop.car === c && policeStop.phase === 'approach' ? policeStop.spot : null); }
   // the ride to the station: along the streets at the limit, then into the kerb outside the door
   const STATION_NODE = (() => { let b = -1, bd = Infinity; nodes.forEach((n, i) => { const d = Math.hypot(n.x - STATION.X1, n.z - 222); if (n.nb.length && d < bd) { bd = d; b = i; } }); return b; })();
   function transportDrive(c, dt) {
-    const S = stop;
+    const S = policeStop;
     if (!S || S.car !== c || S.phase !== 'transport') return parkDrive(c, S && S.car === c && S.phase === 'park' ? S.curb : null, 6);
     const curb = STATION.curb(c.h), d = Math.hypot(curb.x - c.x, curb.z - c.z);
     if (d < 40 && clearView(c.x, c.z, curb.x, curb.z)) { S.curb = STATION.curb(c.h); S.phase = 'park'; S.t = 0; return parkDrive(c, S.curb, 6); }
@@ -8444,7 +8444,7 @@
     return botThink(c, dt);
   }
   function showTicket() {
-    const S = stop, { f, rows } = fineFor(wanted), now = new Date();
+    const S = policeStop, { f, rows } = fineFor(wanted), now = new Date();
     S.ticket = { f, rows };
     const place = (el.locStreet.textContent ? el.locStreet.textContent + ', ' : '') + el.locDistrict.textContent;
     $('tkPlace').textContent = place;
@@ -8465,33 +8465,33 @@
   }
   // E: sign the ticket. The fine is yours, and the constable walks back to the car
   function signTicket() {
-    if (!stop || stop.phase !== 'talk' || !stop.ticket) return;
-    fines += stop.ticket.f;
+    if (!policeStop || policeStop.phase !== 'talk' || !policeStop.ticket) return;
+    fines += policeStop.ticket.f;
     $('ticket').hidden = true;
-    toast('Du skrev under. Böter ' + fmtKr(stop.ticket.f) + '.' + (wanted.over > 35 ? ' Körkortet dras in.' : ' Kör försiktigt nu!'));
-    stop.phase = 'back'; stop.t = 0;
+    toast('Du skrev under. Böter ' + fmtKr(policeStop.ticket.f) + '.' + (wanted.over > 35 ? ' Körkortet dras in.' : ' Kör försiktigt nu!'));
+    policeStop.phase = 'back'; policeStop.t = 0;
   }
   // E during a stop or an arrest
   function useKey() {
-    const S = stop;
+    const S = policeStop;
     if (S && S.phase === 'talk') { signTicket(); return true; }
     if (S && (S.phase === 'transport' || S.phase === 'park') && !S.fade) { skipRide(); return true; }
     if (S && S.phase === 'jail') { S.wait = !S.wait; toast(S.wait ? 'Du sover på britsen. Tiden går fortare.' : 'Du vaknar.'); return true; }
     return inCustody();
   }
   // fade to black, do something, fade back
-  function fadeThen(fn) { if (stop) stop.fade = { t: 0, fn, done: false }; $('fade').classList.add('on'); }
+  function fadeThen(fn) { if (policeStop) policeStop.fade = { t: 0, fn, done: false }; $('fade').classList.add('on'); }
   function skipRide() {
     fadeThen(() => {
-      const c = stop.car, curb = STATION.curb(0);
+      const c = policeStop.car, curb = STATION.curb(0);
       c.x = curb.x; c.z = curb.z - 4; c.h = curb.h; c.vx = c.vz = 0;
-      stop.curb = curb; stop.phase = 'park'; stop.t = 0;
+      policeStop.curb = curb; policeStop.phase = 'park'; policeStop.t = 0;
       camTarget.set(c.x, 1.7, c.z);
     });
   }
   // the police car you are put in, or the cell, if the car was lost on the way
   function jailDirect() {
-    const S = stop;
+    const S = policeStop;
     if (S.officer) { removePerson(S.officer); S.officer = null; }
     const c = S.car;
     if (driving) exitCar();
@@ -8506,7 +8506,7 @@
     startJail();
   }
   function startJail() {
-    const S = stop, w = wanted || { over: 0, kinds: new Set(), fleeT: 0 };
+    const S = policeStop, w = wanted || { over: 0, kinds: new Set(), fleeT: 0 };
     S.jailT = Math.min(90, 30 + Math.max(0, Math.round((w.over - ARREST_OVER) / 10)) * 10 + (w.kinds.has('smitning') || (w.fleeT || 0) > FLEE_ARREST ? 15 : 0));
     S.phase = 'jail'; S.t = 0; S.wait = false; S.locked = true;
     if (!S.ticket) S.ticket = fineFor(w);
@@ -8514,13 +8514,13 @@
     toast('Du sitter i häktet på polisstationen i Gamla stan. Tryck E för att sova så går tiden fortare.');
   }
   function stopUpdate(dt) {
-    const S = stop, c = S.car, T = stopTarget();
+    const S = policeStop, c = S.car, T = stopTarget();
     S.t += dt;
     if (S.fade) {
       S.fade.t += dt;
       if (!S.fade.done && S.fade.t > 0.45) { S.fade.done = true; S.fade.fn(); }
       if (S.fade.t > 0.6) { $('fade').classList.remove('on'); S.fade = null; }
-      if (stop !== S) return;
+      if (policeStop !== S) return;
     }
     const carOk = c && c.police && cars.indexOf(c) >= 0 && !c.dead;
     if (!carOk && ['approach', 'parked', 'walk', 'talk', 'back', 'flee'].includes(S.phase)) { endStop(false); return; }
@@ -8539,7 +8539,7 @@
           const fc = { p: S.officer, car: c, crew: S.crew, door: S.door || doorNear(c, S.officer.x, S.officer.z, false), mode: 'chase', retT: 0 };
           S.officer.ai = { state: 'cop', role: 'foot', fc, nav: {}, dodgeT: 0 };
           footCops.push(fc);
-          stop = null;
+          policeStop = null;
           c.police.state = 'wait'; c.police.out = fc; c.beacon = true;
           if (wanted) { wanted.lostT = 0; wanted.stopT = 0; wanted.seen = playerTarget(); }
           return;
@@ -8688,7 +8688,7 @@
           fines += f;
           toast('Du är fri att gå. Böter ' + fmtKr(f) + ' har lagts till. Gå ut genom receptionen.');
           if (S.officer) { removePerson(S.officer); if (c && c.police && cars.indexOf(c) >= 0) { setOccupant(c, S.crew); c.police.state = 'patrol'; resyncBot(c); setChase(c, false); } }
-          stop = null; wanted = null; policeCool = 60;
+          policeStop = null; wanted = null; policeCool = 60;
         }
         break;
       }
@@ -8723,7 +8723,7 @@
   }
   // where you go while in custody: beside the constable, then into the cell
   function custodyIntent(dt) {
-    const S = stop;
+    const S = policeStop;
     if (!S || !S.locked || S.phase === 'jail') return null;
     const o = S.officer;
     if (S.phase === 'escort' || S.phase === 'walkin') {
@@ -8739,8 +8739,8 @@
   }
   // the constable is back in the car: drive on (or, if you ran, give chase again)
   function endStop(chase) {
-    const S = stop, c = S.car;
-    stop = null;
+    const S = policeStop, c = S.car;
+    policeStop = null;
     $('ticket').hidden = true;
     if (S.officer) removePerson(S.officer);
     if (c && c.police && cars.indexOf(c) >= 0) {
@@ -8765,9 +8765,9 @@
   }
   // you take a police car: that is theft, and its crew, whether in the car or out on foot, come after you on foot
   function policeCarTaken(c) {
-    if (stop && stop.car === c && !stop.locked) {
-      const S = stop;
-      stop = null;
+    if (policeStop && policeStop.car === c && !policeStop.locked) {
+      const S = policeStop;
+      policeStop = null;
       $('ticket').hidden = true;
       if (S.officer) footCop(S.officer, null, S.crew);
     }
@@ -8807,7 +8807,7 @@
     setOccupant(c, fc.crew);
     c.police.out = null; c.beacon = false; c.police.state = 'patrol';
     resyncBot(c);
-    setChase(c, !!wanted && !stop);
+    setChase(c, !!wanted && !policeStop);
   }
   function updateFootCops(dt) {
     for (const c of cars) {
@@ -8815,11 +8815,11 @@
       // a constable no longer out on foot (they caught you, or were taken off) leaves the car free to drive again
       if (c.police.out && footCops.indexOf(c.police.out) < 0) c.police.out = null;
       if (c.police.out) continue;
-      if (c.dead || driving || !wanted || stop) { c.police.state = 'patrol'; c.beacon = false; if (!c.occupant) setOccupant(c, makeIdentity(OFFICER)); setChase(c, !!wanted && !stop); continue; }
+      if (c.dead || driving || !wanted || policeStop) { c.police.state = 'patrol'; c.beacon = false; if (!c.occupant) setOccupant(c, makeIdentity(OFFICER)); setChase(c, !!wanted && !policeStop); continue; }
       if (Math.hypot(c.vx, c.vz) < 1.5) deployCop(c);
     }
     for (const fc of footCops.slice()) {
-      if (fc.mode === 'chase' && (driving || !wanted || stop)) fc.mode = 'return';
+      if (fc.mode === 'chase' && (driving || !wanted || policeStop)) fc.mode = 'return';
       if (fc.mode === 'return') {
         fc.retT += dt;
         const gone = !fc.car || cars.indexOf(fc.car) < 0 || fc.car.dead || !fc.car.police;
@@ -8841,7 +8841,7 @@
   function copThink(p, dt) {
     const ai = p.ai;
     if (ai.role === 'foot') return footCopIntent(ai.fc, p, dt);
-    if (ai.role === 'stop' && stop && stop.officer === p) return stopOfficerIntent(stop, p, dt);
+    if (ai.role === 'stop' && policeStop && policeStop.officer === p) return stopOfficerIntent(policeStop, p, dt);
     return IDLE();
   }
 
@@ -9026,7 +9026,7 @@
       if (d > 220) continue;
       h.mesh.rotation.y = clock * 1.1 + h.ph;
       h.mesh.position.y = 0.25 + Math.sin(clock * 2.2 + h.ph) * 0.18;
-      if (d < reach && (driving || player.y < 2.5) && !(stop && stop.riding)) collectHorse(h);
+      if (d < reach && (driving || player.y < 2.5) && !(policeStop && policeStop.riding)) collectHorse(h);
     }
     if (fireworksT > 0) {
       fireworksT = Math.max(0, fireworksT - dt);
@@ -9313,7 +9313,7 @@
     }
     // J
     function key() {
-      if (stop && stop.locked) return;
+      if (policeStop && policeStop.locked) return;
       if (job) { end(job.kind === 'race' ? 'Gatloppet avbrutet.' : 'Du slutade jobba.'); return; }
       if (!driving) { toast('Jobben görs med fordon: taxin, Sprintern, bussen, mopeden, polisbilen och motorbåtarna. Gatloppen startar vid de gula ljuspelarna, och bilar säljer du på bilskroten i Hammarby hamn.'); return; }
       if (nearScrap) { sell(); return; }
@@ -9338,7 +9338,7 @@
       if (!job) return;
       job.t += dt;
       // the car is gone, wrecked or left behind, or you were arrested
-      if (stop && stop.locked) { end('Uppdraget avbröts, du är gripen.'); return; }
+      if (policeStop && policeStop.locked) { end('Uppdraget avbröts, du är gripen.'); return; }
       if (!cars.includes(job.car) || job.car.dead) { end('Bilen är förstörd. Uppdraget är slut.'); return; }
       job.offT = driving === job.car ? 0 : job.offT + dt;
       if (job.offT > (job.kind === 'race' ? 3 : 25)) { end(job.kind === 'race' ? 'Du klev ur bilen. Gatloppet är slut.' : 'Du lämnade bilen. Uppdraget är slut.'); return; }
@@ -9904,7 +9904,7 @@
 
     /* where your balloons are tied: your left hand, or out of the window of the car you sit in */
     function anchor() {
-      const S = stop;
+      const S = policeStop;
       const seat = driving ? driving.driver : S && S.riding && S.car && S.car.rearSeat && S.car.rearSeat.visible ? S.car.rearSeat : null;
       if (seat) {
         const c = driving || S.car, side = Math.sign(seat.position.x) || 1;
@@ -9967,7 +9967,7 @@
     /* every frame, after the people have been posed */
     function update(dt) {
       wind.x = 0.6 + Math.sin(clock * 0.07) * 0.5; wind.z = -0.3 + Math.cos(clock * 0.05) * 0.45;
-      const walking = !driving && !(stop && (stop.locked || stop.riding)) && player.y < 1.5;
+      const walking = !driving && !(policeStop && (policeStop.locked || policeStop.riding)) && player.y < 1.5;
       near = null;
       // the kiosks: the seller turns to you, and reaches out with your cone when you buy one
       for (const k of kiosks) {
@@ -10091,7 +10091,7 @@
   }
 
   function findNearCar() {
-    if (driving || MP.ride || !started || (stop && stop.locked)) return null;
+    if (driving || MP.ride || !started || (policeStop && policeStop.locked)) return null;
     let best = null, bd = Infinity;
     for (const c of cars) {
       // (a friend's car you can only ride along in, and the sjöpolis's and the navy's boats can't be taken)
@@ -10364,7 +10364,7 @@
   function openPicker() {
     if (!started) return;
     // no new car while you are under arrest or in the cell
-    if (stop && stop.locked) { toast('Det går inte nu, du är gripen.'); return; }
+    if (policeStop && policeStop.locked) { toast('Det går inte nu, du är gripen.'); return; }
     pickerOpen = true;
     setPickerSecret(false);
     $('picker').hidden = false;
@@ -10458,7 +10458,7 @@
   }
   function chooseModel(M) {
     closePicker();
-    if (stop && stop.locked) return;
+    if (policeStop && policeStop.locked) return;
     let spot = null;
     // riding in a friend's boat out on the water: a car has to wait for a quay, a boat is put beside theirs
     if (MP.ride) {
@@ -10556,7 +10556,7 @@
     carPairs();
     for (const c of cars) if (!c.remote && (c === driving || c.vx !== 0 || c.vz !== 0)) carWorld(c);
     if (driving) { player.x = driving.x; player.z = driving.z; player.rot = driving.h; player.y = 0; }
-    else if (stop && stop.riding) { player.x = stop.car.x; player.z = stop.car.z; player.vx = player.vz = 0; }
+    else if (policeStop && policeStop.riding) { player.x = policeStop.car.x; player.z = policeStop.car.z; player.vx = player.vz = 0; }
     else if (MP.ride) { const c = MP.ride; player.x = c.x; player.z = c.z; player.y = 0; player.vx = c.vx; player.vz = c.vz; player.vy = 0; player.rot = c.h; }
     else personMove(player, dt, pIntent);
     for (const p of persons) {
@@ -10669,7 +10669,7 @@
   }
   function updateCamera(dt) {
     // in the back of a police car, or riding along with a friend, the camera follows the car just as when you drive
-    const car = driving || (stop && stop.riding ? stop.car : null) || MP.ride;
+    const car = driving || (policeStop && policeStop.riding ? policeStop.car : null) || MP.ride;
     const vf = car ? car.vx * Math.sin(car.h) + car.vz * Math.cos(car.h) : 0;
     let tx, ty, tz, want;
     if (car) { tx = car.x; ty = car.M.boat ? WATER_Y + (car.M.boat === 'jetski' ? 1.6 : 2.0) : car.M.bus ? 3.2 : car.M.moped ? 1.45 : 1.7; tz = car.z; want = (car.M.bus ? 15 : car.M.moped ? 5.2 : car.M.boat === 'jetski' ? 6.5 : car.M.boat ? 11 : 9.5) + Math.abs(vf) * 0.05; }
@@ -10749,7 +10749,7 @@
       if (prompt) { el.promptText.textContent = prompt; el.prompt.classList.toggle('steal', !mpP && !shop && !liftP && !!nearCar && !!nearCar.bot); el.prompt.classList.toggle('shop', !mpP && !!shop); }
     }
     // the stars: as many lit as the police want you, flashing while they search for you; the helicopter beside them
-    const ns = stars(), searching = !!wanted && !wanted.inSight && !stop, hl = !!heli && heli.state !== 'leave', army = !!wanted && cars.some((c) => c.military && c.police && c.police.state === 'chase');
+    const ns = stars(), searching = !!wanted && !wanted.inSight && !policeStop, hl = !!heli && heli.state !== 'leave', army = !!wanted && cars.some((c) => c.military && c.police && c.police.state === 'chase');
     const sk = ns + ':' + searching + ':' + hl + ':' + army;
     if (sk !== lastStars) {
       const was = lastStars ? Number(lastStars.split(':')[0]) : 0;
@@ -10775,7 +10775,7 @@
       $('btnJob').textContent = driving && driving.M.mil === 'tank' ? 'Skjut' : 'Jobb';
       el.btnUp.hidden = el.btnDown.hidden = !driving;
     }
-    const ph = stop && stop.phase;
+    const ph = policeStop && policeStop.phase;
     const vendor = !driving && VENDORS.near;
     const use = ph === 'talk' ? 'Skriv under' : ph === 'transport' || ph === 'park' ? 'Hoppa fram' : ph === 'jail' ? 'Sov' : mpP ? (MP.ride ? 'Kliv ur' : 'Åk med') : driving ? 'Kliv ur' : liftP ? 'Hissen' : vendor ? (vendor.seller ? 'Köp glass' : 'Köp ballong') : nearCar && nearCar.bot ? 'Ta bilen' : 'Kliv in';
     if (use !== lastUse) { el.btnUse.textContent = use; lastUse = use; }
@@ -10805,23 +10805,23 @@
       }
     }
     // in the cell: how long until you are let out
-    const jail = stop && stop.phase === 'jail';
+    const jail = policeStop && policeStop.phase === 'jail';
     el.wanted.hidden = !wanted && !jail;
     if (jail) {
-      const s = Math.max(0, Math.ceil(stop.jailT)), hint = 'Du släpps om ' + Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') + (stop.wait ? ' (du sover)' : '. E: sov så går tiden fortare');
+      const s = Math.max(0, Math.ceil(policeStop.jailT)), hint = 'Du släpps om ' + Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') + (policeStop.wait ? ' (du sover)' : '. E: sov så går tiden fortare');
       if (hint !== lastHint) { el.wantedHint.textContent = hint; el.wantedTitle.textContent = 'Häktet'; lastHint = hint; }
       el.wanted.classList.add('calm');
     } else if (wanted) {
-      const title = stop ? (stop.mode === 'arrest' && stop.locked ? 'Gripen' : 'Poliskontroll') : 'Polisen jagar dig';
-      const ph = stop && stop.phase;
-      const hint = stop ? (ph === 'approach' || ph === 'parked' ? 'Sitt kvar, polisen parkerar' : ph === 'walk' ? 'Konstapeln kommer fram till dig'
+      const title = policeStop ? (policeStop.mode === 'arrest' && policeStop.locked ? 'Gripen' : 'Poliskontroll') : 'Polisen jagar dig';
+      const ph = policeStop && policeStop.phase;
+      const hint = policeStop ? (ph === 'approach' || ph === 'parked' ? 'Sitt kvar, polisen parkerar' : ph === 'walk' ? 'Konstapeln kommer fram till dig'
         : ph === 'talk' ? 'Tryck E för att skriva under boten' : ph === 'flee' ? 'Du smet! Konstapeln springer tillbaka'
         : ph === 'order' ? 'Kliv ur bilen, du är gripen' : ph === 'cuff' ? 'Du får handbojor på dig' : ph === 'escort' || ph === 'board' ? 'Konstapeln för dig till polisbilen'
         : ph === 'transport' || ph === 'park' ? 'På väg till polisstationen. E hoppar fram' : ph === 'walkin' || ph === 'incell' ? 'Du förs in på polisstationen'
         : ph === 'water' ? 'Sjöpolisen tar dig till polisstationen' : 'Polisen kör snart vidare')
         : wanted.stopT > 0.2 ? 'Stå still …' : driving ? 'Kör in till kanten och stanna' : footCops.some((f) => f.mode === 'chase') ? 'Polisen springer efter dig!' : 'Polisen letar efter dig';
       if (hint !== lastHint) { el.wantedHint.textContent = hint; el.wantedTitle.textContent = title; lastHint = hint; }
-      el.wanted.classList.toggle('calm', !!stop);
+      el.wanted.classList.toggle('calm', !!policeStop);
     }
     if (fines !== lastFines) { lastFines = fines; el.fineTag.hidden = !fines; el.fines.textContent = fmtKr(fines); }
     JOBS.hud();
@@ -11510,7 +11510,7 @@
     if (!started) { if (code === 'Enter' || code === 'Space') startGame(); return; }
     if (repeat) return;
     // under arrest most keys do nothing: you can still look at the map, the help and the sound, and E moves things on
-    if (stop && stop.locked && !['KeyE', 'Enter', 'KeyH', 'KeyT', 'KeyK', 'KeyQ'].includes(code) && !(stop.phase === 'jail' && code === 'Space')) return;
+    if (policeStop && policeStop.locked && !['KeyE', 'Enter', 'KeyH', 'KeyT', 'KeyK', 'KeyQ'].includes(code) && !(policeStop.phase === 'jail' && code === 'Space')) return;
     if (code === 'KeyE' || code === 'Enter') { if (!useKey() && !MP.use() && !LIFT.use() && !VENDORS.use()) toggleCar(); }
     else if (/^(Digit|Numpad)[0-5]$/.test(code)) LIFT.digit(Number(code.slice(-1)));
     else if (code === 'Space') jumpQueued = true;
@@ -11850,7 +11850,7 @@
       probeLast.copy(at);
       probeCam.position.copy(at);
       probeCam.updateMatrixWorld();
-      const car = driving || (stop && stop.riding ? stop.car : null) || MP.ride, hide = [player.model.group, car && car.group].filter((o) => o && o.visible);
+      const car = driving || (policeStop && policeStop.riding ? policeStop.car : null) || MP.ride, hide = [player.model.group, car && car.group].filter((o) => o && o.visible);
       for (const o of hide) o.visible = false;
       const sp = sky.position.clone(), sh = renderer.shadowMap.autoUpdate;
       sky.position.copy(at); sky.scale.setScalar(0.12); renderer.shadowMap.autoUpdate = false;
@@ -12507,7 +12507,7 @@
       const c = driving || (S.lastCar && S.lastCar.group.parent ? S.lastCar : null);
       if (!c) S.lastCar = null;
       if (c && !c.netId) c.netId = Math.random().toString(36).slice(2, 10);
-      const hidden = !!driving || !!S.ride || !!(stop && stop.riding);
+      const hidden = !!driving || !!S.ride || !!(policeStop && policeStop.riding);
       const car = c ? [c.netId, c.M.id, c.color, r2(c.x), r2(c.z), r3(c.h), r2(c.vx), r2(c.vz), r3(c.steer), c.gear | 0, r2(c.thr || 0),
         (c.braking ? 1 : 0) | (c.reversing ? 2 : 0) | (c.siren ? 4 : 0) | (c.dead ? 8 : 0) | (c === driving ? 16 : 0), c.blink | 0, Math.round(c.health), r3(c.aim || 0), r1(c.slip || 0)] : 0;
       return [Math.round(performance.now()), r2(player.x), r2(player.y), r2(player.z), r3(player.rot), r2(player.vx), r2(player.vz),
@@ -12607,7 +12607,7 @@
     }
     // a friend's car with them at the wheel, near enough to get in, and not going too fast to
     function rideable() {
-      if (driving || S.ride || !started || (stop && stop.locked) || player.y > 1.5) return null;
+      if (driving || S.ride || !started || (policeStop && policeStop.locked) || player.y > 1.5) return null;
       let best = null, bd = Infinity;
       for (const P of S.players.values()) {
         const c = P.car;
@@ -12673,7 +12673,7 @@
     }
     // straight to a friend: out of your car and onto the pavement beside them
     function goTo(P) {
-      if (stop && stop.locked) { status('Det går inte nu, du är gripen.', true); return; }
+      if (policeStop && policeStop.locked) { status('Det går inte nu, du är gripen.', true); return; }
       // (the game stands still behind the sign: bring everyone up to date first)
       update(0);
       if (!P.st) { status(P.name + ' har inte kommit in i spelet än.', true); return; }
@@ -12709,7 +12709,7 @@
           P.snaps.length = 0; P.offset = null;
         }
       }
-      if (S.ride && (!S.ride.group.parent || driving || (stop && stop.locked))) unride(true);
+      if (S.ride && (!S.ride.group.parent || driving || (policeStop && policeStop.locked))) unride(true);
       seats();
       S.near = rideable();
       // a friend standing in your way: you can't walk through them
@@ -13031,12 +13031,12 @@
       });
     },
     mp: MP, get cars() { return cars; }, boatFits, findBerth, blockedAt: (x, z, r) => blockedAt(x, z, r), obstaclesNear(x, z, r) { const out = []; forNear(x - r, z - r, x + r, z + r, (o) => out.push({ ...o })); return out; }, distTo, get persons() { return persons; }, get player() { return player; }, get driving() { return driving; },
-    get wanted() { return wanted; }, get heli() { return heli; }, updateStars, get fines() { return fines; }, get audio() { return audio; }, get stop() { return stop; }, footCops, STATION, useKey, walkWaypoint, walkLine, landmarkList, mapSquares, mapGreens, signTicket, beginStop, setCall, resyncBot, get horses() { return horses; }, fireworks(s) { fireworksT = s; },
+    get wanted() { return wanted; }, get heli() { return heli; }, updateStars, get fines() { return fines; }, get audio() { return audio; }, get stop() { return policeStop; }, footCops, STATION, useKey, walkWaypoint, walkLine, landmarkList, mapSquares, mapGreens, signTicket, beginStop, setCall, resyncBot, get horses() { return horses; }, fireworks(s) { fireworksT = s; },
     nodes, edges, walkable, fitsM, MODEL, driveAccel, limitAt, bridgeTrims, nearestEdgeAt(x, z) { const ne = nearestEdge(x, z); return ne.e && ne.d < ne.e.hw + ne.e.walk + 2 ? ne.e : null; },
     state() {
       const bad = [];
       for (const c of cars) { if (!isFinite(c.x + c.z + c.h + c.vx + c.vz)) bad.push('nan-car'); else if (!c.remote && !(c.M.boat ? boatFits(c.M, c.x, c.z, c.h) : fitsM(c.M, c.x, c.z, c.h))) bad.push('car-off ' + c.M.id + ' ' + c.x.toFixed(1) + ',' + c.z.toFixed(1)); }
-      for (const p of persons) { if (!isFinite(p.x + p.z + p.y)) bad.push('nan-person'); else if (!p.remote && !walkable(p.x, p.z) && !(p === player && (driving || MP.ride) && (driving || MP.ride).M.boat) && !(p === player && stop && stop.phase === 'water')) bad.push('person-off ' + p.x.toFixed(1) + ',' + p.z.toFixed(1)); }
+      for (const p of persons) { if (!isFinite(p.x + p.z + p.y)) bad.push('nan-person'); else if (!p.remote && !walkable(p.x, p.z) && !(p === player && (driving || MP.ride) && (driving || MP.ride).M.boat) && !(p === player && policeStop && policeStop.phase === 'water')) bad.push('person-off ' + p.x.toFixed(1) + ',' + p.z.toFixed(1)); }
       const bots = cars.filter((c) => c.bot);
       return {
         player: { x: +player.x.toFixed(2), y: +player.y.toFixed(2), z: +player.z.toFixed(2) },
@@ -13073,4 +13073,3 @@
   }
   if (hot && hot.ready) hot.ready(boot);
   else boot((hot && hot.data) || {});
-})();

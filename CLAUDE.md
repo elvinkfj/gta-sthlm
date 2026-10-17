@@ -27,7 +27,7 @@ Each part of `src/game.js` starts with a section header comment. Grep for the he
 - Big sections: `/* ================= name ================= */`
 - Subsections: `/* ---------- name ---------- */`
 
-Line numbers drift with every change, so search instead of trusting numbers. `src/game.js` is one script inside `(function () { 'use strict'; … })()`. Everything inside shares one scope, so a top-level name in one section may be used anywhere: grep for a name before renaming or removing it.
+Line numbers drift with every change, so search instead of trusting numbers. `src/game.js` is a plain script with `'use strict';` at the top and no wrapper function (the code still has its old two-space indent). Its top-level names are globals shared by every `<script>` on the page, so a top-level name in one section may be used anywhere, and later in another file: grep for a name before renaming or removing it. A new top-level name must not clash with a browser global (`top`, `name`, `status`, `stop`, …); that is why the police stop's state is called `policeStop`. If Three.js is missing, the check at the top shows a message and throws, which stops the script.
 
 | Section header | What's in it | Key names |
 | --- | --- | --- |
