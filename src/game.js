@@ -1,0 +1,13076 @@
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  if (!window.THREE) {
+    $('lede').textContent = 'Kunde inte ladda 3D-motorn. Kontrollera internetanslutningen och ladda om sidan.';
+    $('play').disabled = true;
+    return;
+  }
+
+  // Light is computed in linear space and shown in sRGB, like newer three.js: hex colours go in as sRGB and come back out as sRGB
+  {
+    const C = THREE.Color.prototype, setHex = C.setHex, getHex = C.getHex;
+    C.setHex = function (h) { setHex.call(this, h); return this.convertSRGBToLinear(); };
+    C.getHex = function () { return getHex.call(this.clone().convertLinearToSRGB()); };
+  }
+
+  const loadStart = performance.now();
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const TAU = Math.PI * 2;
+  const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const wrapAngle = (a) => { a = (a + Math.PI) % TAU; if (a < 0) a += TAU; return a - Math.PI; };
+  const lerpAngle = (a, b, t) => a + wrapAngle(b - a) * t;
+  const hex = (c) => '#' + c.toString(16).padStart(6, '0');
+  const fmtKm = (m) => (m / 1000).toFixed(1).replace('.', ',') + ' km';
+  let seed = 1252; // Stockholm is first mentioned in 1252
+  const rand = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+  const rr = (a, b) => a + rand() * (b - a);
+  const pick = (arr) => arr[Math.floor(rand() * arr.length)];
+  const rpick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  const shade = (col, f) => { const c = new THREE.Color(col); c.r = Math.min(1, c.r * f); c.g = Math.min(1, c.g * f); c.b = Math.min(1, c.b * f); return c.getHex(); };
+
+  /* ================= renderer & scene ================= */
+  const canvas = $('game');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+  const MAX_DPR = Math.min(window.devicePixelRatio || 1, 1.75);
+  renderer.setPixelRatio(MAX_DPR);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  // filmic (ACES) tone mapping, with some of the colour it washes out of bright paint and facades put back
+  THREE.ShaderChunk.tonemapping_pars_fragment = THREE.ShaderChunk.tonemapping_pars_fragment.replace(
+    'vec3 CustomToneMapping( vec3 color ) { return color; }',
+    'vec3 CustomToneMapping( vec3 color ) { vec3 c = ACESFilmicToneMapping( color ); float l = dot( c, vec3( 0.2126, 0.7152, 0.0722 ) ); return saturate( mix( vec3( l ), c, 1.2 ) ); }'
+  );
+  renderer.toneMapping = THREE.CustomToneMapping;
+  renderer.toneMappingExposure = 1.0;
+
+  // fog is mixed in after tone mapping in three.js r128, so its colour is given in screen (sRGB) values
+  const HAZE = [0.78, 0.84, 0.89];
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color().setRGB(HAZE[0], HAZE[1], HAZE[2]);
+  scene.fog = new THREE.Fog(0xffffff, 180, 1350);
+  scene.fog.color.setRGB(HAZE[0], HAZE[1], HAZE[2]);
+  const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.2, 2400);
+  camera.layers.enable(1);
+
+  const hemi = new THREE.HemisphereLight(0xdcecff, 0x8a8172, 0.3);
+  scene.add(hemi);
+  const sun = new THREE.DirectionalLight(0xffeccc, 1.6);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  Object.assign(sun.shadow.camera, { left: -85, right: 85, top: 85, bottom: -85, near: 1, far: 420 });
+  sun.shadow.camera.updateProjectionMatrix();
+  sun.shadow.bias = -0.0005;
+  sun.shadow.normalBias = 0.04;
+  scene.add(sun, sun.target);
+  const SUN_OFF = new THREE.Vector3(85, 120, 55);
+  const SUN_DIR = SUN_OFF.clone().normalize();
+
+  // sky: blue gradient, sun and drifting clouds, drawn by one shader on a dome that follows the camera
+  const SKY_VERT = 'varying vec3 vDir;\nvoid main() { vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }';
+  const SKY_FRAG = [
+    'uniform vec3 sunDir; uniform float time; uniform vec3 haze; uniform float hazeAmt; uniform float envMode;',
+    'varying vec3 vDir;',
+    'float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }',
+    'float noise(vec2 p) { vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);',
+    '  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y); }',
+    'float fbm(vec2 p) { float v = 0.0, a = 0.5; for (int i = 0; i < 5; i++) { v += a * noise(p); p = p * 2.03 + vec2(1.7, 9.2); a *= 0.5; } return v; }',
+    'void main() {',
+    '  vec3 d = normalize(vDir); float h = d.y;',
+    '  vec3 zen = vec3(0.075, 0.24, 0.62), hor = vec3(0.55, 0.68, 0.82);',
+    '  vec3 col = mix(hor, zen, pow(max(h, 0.0), 0.5));',
+    '  if (h < 0.0) col = mix(hor, mix(vec3(0.30, 0.32, 0.31), vec3(0.42, 0.39, 0.35), envMode), min(1.0, -h * 5.0));',
+    '  float sd = max(dot(d, sunDir), 0.0);',
+    '  col += vec3(1.0, 0.82, 0.58) * (pow(sd, 6.0) * 0.22 + pow(sd, 90.0) * 0.8);',
+    '  col += vec3(1.0, 0.96, 0.88) * smoothstep(0.9993, 0.9997, sd) * 14.0;',
+    '  if (h > 0.0) {',
+    '    vec2 uv = d.xz / (h + 0.1) * 1.1 + vec2(time * 0.006, time * 0.0025);',
+    '    float n = fbm(uv);',
+    '    float c = smoothstep(0.48, 0.74, n) * smoothstep(0.0, 0.14, h);',
+    '    vec3 cc = mix(vec3(0.58, 0.63, 0.70), vec3(1.05, 1.03, 1.0), smoothstep(0.5, 0.86, fbm(uv * 1.7 + 3.1)));',
+    '    cc += vec3(1.0, 0.86, 0.66) * pow(sd, 5.0) * 0.45;',
+    '    col = mix(col, cc, c * 0.92);',
+    '  }',
+    '  col = mix(col, vec3(dot(col, vec3(0.3, 0.55, 0.15))), envMode * 0.45);',
+    '  gl_FragColor = vec4(col, 1.0);',
+    '  #include <tonemapping_fragment>',
+    '  #include <encodings_fragment>',
+    '  gl_FragColor.rgb = mix(gl_FragColor.rgb, haze, hazeAmt * (1.0 - smoothstep(-0.02, 0.16, h)));',
+    '}'
+  ].join('\n');
+  // envMode 1 is the copy used for lighting: less saturated, with warm light bouncing up from the streets
+  function skyMaterial(hazeAmt, envMode = 0) {
+    return new THREE.ShaderMaterial({
+      vertexShader: SKY_VERT, fragmentShader: SKY_FRAG, side: THREE.BackSide, depthWrite: false, fog: false,
+      uniforms: { sunDir: { value: SUN_DIR }, time: { value: 0 }, haze: { value: new THREE.Vector3(HAZE[0], HAZE[1], HAZE[2]) }, hazeAmt: { value: hazeAmt }, envMode: { value: envMode } }
+    });
+  }
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(1500, 48, 24), skyMaterial(1));
+  sky.renderOrder = -1;
+  scene.add(sky);
+
+  // reflections and soft sky light for every PBR material come from the same sky
+  {
+    const envScene = new THREE.Scene();
+    envScene.add(new THREE.Mesh(new THREE.SphereGeometry(900, 48, 24), skyMaterial(0, 1)));
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromScene(envScene, 0.02, 0.1, 2000).texture;
+    pmrem.dispose();
+  }
+  const std = (o) => new THREE.MeshStandardMaterial(Object.assign({ roughness: 0.9, metalness: 0 }, o));
+
+  /* ================= geometry helpers ================= */
+  const _c = new THREE.Color(), _m4 = new THREE.Matrix4(), _eu = new THREE.Euler();
+  function newell(q) {
+    let nx = 0, ny = 0, nz = 0;
+    for (let i = 0; i < q.length; i++) {
+      const a = q[i], b = q[(i + 1) % q.length];
+      nx += (a[1] - b[1]) * (a[2] + b[2]);
+      ny += (a[2] - b[2]) * (a[0] + b[0]);
+      nz += (a[0] - b[0]) * (a[1] + b[1]);
+    }
+    const l = Math.hypot(nx, ny, nz) || 1;
+    return [nx / l, ny / l, nz / l];
+  }
+  // 8 corners: 0..3 bottom (-x-z, +x-z, +x+z, -x+z), 4..7 top in the same order
+  const HEXA_FACES = [[0, 1, 2, 3], [4, 5, 6, 7], [0, 1, 5, 4], [3, 2, 6, 7], [0, 3, 7, 4], [1, 2, 6, 5]];
+  function hexaFaces(c, cb) {
+    let mx = 0, my = 0, mz = 0;
+    for (const v of c) { mx += v[0]; my += v[1]; mz += v[2]; }
+    mx /= 8; my /= 8; mz /= 8;
+    for (const f of HEXA_FACES) {
+      let q = f.map((i) => c[i]);
+      let n = newell(q);
+      const fx = (q[0][0] + q[1][0] + q[2][0] + q[3][0]) / 4 - mx;
+      const fy = (q[0][1] + q[1][1] + q[2][1] + q[3][1]) / 4 - my;
+      const fz = (q[0][2] + q[1][2] + q[2][2] + q[3][2]) / 4 - mz;
+      if (n[0] * fx + n[1] * fy + n[2] * fz < 0) { q = [q[0], q[3], q[2], q[1]]; n = [-n[0], -n[1], -n[2]]; }
+      cb(q[0], q[1], q[2], q[3], n);
+    }
+  }
+
+  // merged static geometry: vertex colours + (optionally) a repeating texture.
+  // A "split" builder sends untextured faces to a second builder so they can use a material without the texture,
+  // and textured faces to a third one while "modern" is set (glass and ribbon-window facades).
+  // "ao" darkens vertices by height, a cheap stand-in for the shade that collects where walls meet the ground.
+  // setFrame(ox, oz, cos, sin) places everything that follows in a rotated local frame: local x runs along
+  // (cos, sin), local z along (-sin, cos), so a building can be modelled axis-aligned and turned to face its street.
+  class Builder {
+    constructor(opts = {}) {
+      this.p = []; this.n = []; this.u = []; this.c = []; this.ix = []; this.nv = 0;
+      this.ao = opts.ao || null;
+      this.solidB = opts.split ? new Builder({ ao: opts.ao }) : null;
+      this.altB = opts.split ? new Builder({ ao: opts.ao }) : null;
+      this.fr = null; this.modern = false;
+    }
+    setFrame(ox, oz, c = 1, s = 0) {
+      this.fr = ox === undefined ? null : [ox, oz, c, s];
+      if (this.solidB) { this.solidB.fr = this.fr; this.altB.fr = this.fr; }
+    }
+    _tf(v) { const f = this.fr; return [f[0] + v[0] * f[2] - v[2] * f[3], v[1], f[1] + v[0] * f[3] + v[2] * f[2]]; }
+    _th(h) { const f = this.fr; return [h[0] * f[2] - h[2] * f[3], h[1], h[0] * f[3] + h[2] * f[2]]; }
+    _push(v, n, uv, r, g, b) {
+      const k = this.ao ? this.ao(v[1]) : 1;
+      this.p.push(v[0], v[1], v[2]); this.n.push(n[0], n[1], n[2]); this.u.push(uv[0], uv[1]); this.c.push(r * k, g * k, b * k);
+      return this.nv++;
+    }
+    quad(a, b, c, d, col, uvs, hint) {
+      if (!uvs && this.solidB) { this.solidB.quad(a, b, c, d, col, null, hint); return; }
+      if (uvs && this.modern && this.altB) { this.altB.quad(a, b, c, d, col, uvs, hint); return; }
+      if (this.fr) { a = this._tf(a); b = this._tf(b); c = this._tf(c); d = this._tf(d); if (hint) hint = this._th(hint); }
+      let n = newell([a, b, c, d]);
+      if (hint && n[0] * hint[0] + n[1] * hint[1] + n[2] * hint[2] < 0) {
+        const t = b; b = d; d = t; n = [-n[0], -n[1], -n[2]];
+        if (uvs) uvs = [uvs[0], uvs[3], uvs[2], uvs[1]];
+      }
+      _c.set(col);
+      const r = _c.r, g = _c.g, bl = _c.b, z = [0, 0];
+      const U = uvs || [z, z, z, z];
+      const i0 = this._push(a, n, U[0], r, g, bl), i1 = this._push(b, n, U[1], r, g, bl), i2 = this._push(c, n, U[2], r, g, bl), i3 = this._push(d, n, U[3], r, g, bl);
+      this.ix.push(i0, i1, i2, i0, i2, i3);
+    }
+    tri(a, b, c, col, hint, uvs) {
+      if (!uvs && this.solidB) { this.solidB.tri(a, b, c, col, hint); return; }
+      if (uvs && this.modern && this.altB) { this.altB.tri(a, b, c, col, hint, uvs); return; }
+      if (this.fr) { a = this._tf(a); b = this._tf(b); c = this._tf(c); if (hint) hint = this._th(hint); }
+      let n = newell([a, b, c]);
+      if (hint && n[0] * hint[0] + n[1] * hint[1] + n[2] * hint[2] < 0) {
+        const t = b; b = c; c = t; n = [-n[0], -n[1], -n[2]];
+        if (uvs) uvs = [uvs[0], uvs[2], uvs[1]];
+      }
+      _c.set(col);
+      const z = [0, 0], U = uvs || [z, z, z];
+      this.ix.push(this._push(a, n, U[0], _c.r, _c.g, _c.b), this._push(b, n, U[1], _c.r, _c.g, _c.b), this._push(c, n, U[2], _c.r, _c.g, _c.b));
+    }
+    flat(x0, z0, x1, z1, y, col, uvs) { this.quad([x0, y, z1], [x1, y, z1], [x1, y, z0], [x0, y, z0], col, uvs); }
+    box(x0, y0, z0, x1, y1, z1, col, win = false, top = true) {
+      // tall textured walls get an extra row of vertices a few metres up so the ground shading stays near the ground
+      const ys = win && this.ao && y0 < 1 && y1 > 7 ? [y0, 4.5, y1] : [y0, y1];
+      for (let i = 0; i < ys.length - 1; i++) this._walls(x0, ys[i], z0, x1, ys[i + 1], z1, col, win);
+      if (top) this.flat(x0, z0, x1, z1, y1, col);
+    }
+    _walls(x0, y0, z0, x1, y1, z1, col, win) {
+      const uvF = (len) => {
+        if (!win) return null;
+        const nu = Math.max(1, Math.round(len / CELL_W)), v0 = y0 / FLOOR_H, v1 = y1 / FLOOR_H;
+        return [[0, v0], [nu, v0], [nu, v1], [0, v1]];
+      };
+      this.quad([x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0], col, uvF(x1 - x0));
+      this.quad([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], col, uvF(x1 - x0));
+      this.quad([x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0], col, uvF(z1 - z0));
+      this.quad([x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1], col, uvF(z1 - z0));
+    }
+    hip(x0, z0, x1, z1, y, rh, ix, iz, col) {
+      const yt = y + rh;
+      const A = [x0, y, z0], B = [x1, y, z0], C = [x1, y, z1], D = [x0, y, z1];
+      const A2 = [x0 + ix, yt, z0 + iz], B2 = [x1 - ix, yt, z0 + iz], C2 = [x1 - ix, yt, z1 - iz], D2 = [x0 + ix, yt, z1 - iz];
+      this.quad(B, A, A2, B2, col);
+      this.quad(D, C, C2, D2, col);
+      this.quad(A, D, D2, A2, col);
+      this.quad(C, B, B2, C2, col);
+      if (x1 - x0 - 2 * ix > 0.05 && z1 - z0 - 2 * iz > 0.05) this.quad(D2, C2, B2, A2, col);
+    }
+    prism(cx, cz, r, y0, y1, n, col, rTop = r, cap = true) {
+      for (let i = 0; i < n; i++) {
+        const a0 = (i / n) * TAU, a1 = ((i + 1) / n) * TAU, am = (a0 + a1) / 2;
+        const p0 = [cx + Math.cos(a0) * r, y0, cz + Math.sin(a0) * r], p1 = [cx + Math.cos(a1) * r, y0, cz + Math.sin(a1) * r];
+        const q0 = [cx + Math.cos(a0) * rTop, y1, cz + Math.sin(a0) * rTop], q1 = [cx + Math.cos(a1) * rTop, y1, cz + Math.sin(a1) * rTop];
+        this.quad(p0, p1, q1, q0, col, null, [Math.cos(am), 0.2, Math.sin(am)]);
+        if (cap && rTop > 0) this.tri([cx, y1, cz], q0, q1, col, [0, 1, 0]);
+      }
+    }
+    hexa(c, col) { hexaFaces(c, (a, b, cc, d) => this.quad(a, b, cc, d, col)); }
+    get empty() { return this.nv === 0; }
+    build() {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(this.p, 3));
+      g.setAttribute('normal', new THREE.Float32BufferAttribute(this.n, 3));
+      g.setAttribute('uv', new THREE.Float32BufferAttribute(this.u, 2));
+      g.setAttribute('color', new THREE.Float32BufferAttribute(this.c, 3));
+      g.setIndex(new THREE.BufferAttribute(this.nv > 65535 ? new Uint32Array(this.ix) : new Uint16Array(this.ix), 1));
+      if (this.nv) g.computeBoundingSphere();
+      this.p = this.n = this.u = this.c = this.ix = null;
+      return g;
+    }
+  }
+
+  // merged vertex-coloured meshes for cars and people.
+  // surfOf(colour) can give each part [roughness, metalness, clearcoat, light channel] for the car shader.
+  class Merger {
+    constructor(surfOf) { this.p = []; this.n = []; this.c = []; this.s = []; this.surfOf = surfOf || null; }
+    _surf(col, count) {
+      if (!this.surfOf) return;
+      const s = this.surfOf(col);
+      for (let i = 0; i < count; i++) this.s.push(s[0], s[1], s[2], s[3]);
+    }
+    add(geo, col, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) {
+      const g = geo.index ? geo.toNonIndexed() : geo.clone();
+      if (rx || ry || rz) g.applyMatrix4(_m4.makeRotationFromEuler(_eu.set(rx, ry, rz)));
+      g.translate(x, y, z);
+      const P = g.attributes.position.array, N = g.attributes.normal.array;
+      _c.set(col);
+      for (let i = 0; i < P.length; i += 3) {
+        this.p.push(P[i], P[i + 1], P[i + 2]); this.n.push(N[i], N[i + 1], N[i + 2]); this.c.push(_c.r, _c.g, _c.b);
+      }
+      this._surf(col, P.length / 3);
+      g.dispose(); geo.dispose();
+    }
+    box(w, h, d, col, x, y, z) { this.add(new THREE.BoxGeometry(w, h, d), col, x, y, z); }
+    // one triangle with its own vertex normals (smooth surfaces)
+    triN(a, b, c, na, nb, nc, col) {
+      _c.set(col);
+      for (const v of [a, b, c]) this.p.push(v[0], v[1], v[2]);
+      for (const n of [na, nb, nc]) this.n.push(n[0], n[1], n[2]);
+      this.c.push(_c.r, _c.g, _c.b, _c.r, _c.g, _c.b, _c.r, _c.g, _c.b);
+      this._surf(col, 3);
+    }
+    hexa(c, col) {
+      _c.set(col);
+      const r = _c.r, g = _c.g, b = _c.b;
+      hexaFaces(c, (a, bb, cc, d, n) => {
+        for (const v of [a, bb, cc, a, cc, d]) { this.p.push(v[0], v[1], v[2]); this.n.push(n[0], n[1], n[2]); this.c.push(r, g, b); }
+      });
+      this._surf(col, 36);
+    }
+    build() {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(this.p, 3));
+      g.setAttribute('normal', new THREE.Float32BufferAttribute(this.n, 3));
+      g.setAttribute('color', new THREE.Float32BufferAttribute(this.c, 3));
+      if (this.s.length) g.setAttribute('surf', new THREE.Float32BufferAttribute(this.s, 4));
+      g.computeBoundingSphere();
+      return g;
+    }
+  }
+
+  const maxAniso = renderer.capabilities.getMaxAnisotropy();
+  // readback: the pixels will be read back (grain, normal maps), so keep the canvas in main memory
+  function canvasTex(w, h, draw, repeat, linear, readback) {
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    draw(c.getContext('2d', { willReadFrequently: !!readback }), w, h);
+    const t = new THREE.CanvasTexture(c);
+    t.anisotropy = maxAniso;
+    if (!linear) t.encoding = THREE.sRGBEncoding;
+    if (repeat) t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.redraw = () => { const g = c.getContext('2d'); g.clearRect(0, 0, w, h); draw(g, w, h); t.needsUpdate = true; };
+    return t;
+  }
+  function roundRect(g, x, y, w, h, r) {
+    g.beginPath(); g.moveTo(x + r, y); g.lineTo(x + w - r, y); g.quadraticCurveTo(x + w, y, x + w, y + r);
+    g.lineTo(x + w, y + h - r); g.quadraticCurveTo(x + w, y + h, x + w - r, y + h); g.lineTo(x + r, y + h);
+    g.quadraticCurveTo(x, y + h, x, y + h - r); g.lineTo(x, y + r); g.quadraticCurveTo(x, y, x + r, y); g.closePath();
+  }
+  function instanced(geo, mat, list, place, shadow = true) {
+    const m = new THREE.InstancedMesh(geo, mat, Math.max(1, list.length));
+    const o = new THREE.Object3D(), col = new THREE.Color();
+    list.forEach((it, i) => {
+      o.position.set(0, 0, 0); o.rotation.set(0, 0, 0); o.scale.set(1, 1, 1);
+      const cc = place(o, it);
+      o.updateMatrix();
+      m.setMatrixAt(i, o.matrix);
+      if (cc !== undefined) m.setColorAt(i, col.set(cc));
+    });
+    m.count = list.length;
+    m.instanceMatrix.needsUpdate = true;
+    if (m.instanceColor) m.instanceColor.needsUpdate = true;
+    m.castShadow = shadow; m.receiveShadow = true; m.frustumCulled = false;
+    scene.add(m);
+    return m;
+  }
+
+  /* ================= textures ================= */
+  // speckle noise at a few scales, for asphalt, stone and plaster
+  function grain(g, x, y, w, h, n, dark, light, size = 1.4) {
+    for (let i = 0; i < n; i++) { g.fillStyle = rand() < 0.5 ? dark : light; const s = size * (0.6 + rand()); g.fillRect(x + rand() * w, y + rand() * h, s, s); }
+  }
+  function blotches(g, w, h, n, rgb, alpha, rmin, rmax) {
+    for (let i = 0; i < n; i++) {
+      const x = rand() * w, y = rand() * h, r = rr(rmin, rmax), gr = g.createRadialGradient(x, y, 0, x, y, r);
+      gr.addColorStop(0, `rgba(${rgb},${alpha * (0.4 + rand() * 0.6)})`); gr.addColorStop(1, `rgba(${rgb},0)`);
+      g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+  }
+  // facade atlas: 4 × 4 window cells (one cell is 3 m wide and one storey tall), each window a little different.
+  // The roughness atlas has the same layout so only the glass is shiny.
+  const FACADE_CELLS = [];
+  for (let i = 0; i < 16; i++) {
+    const roll = rand();
+    FACADE_CELLS.push({
+      kind: roll < 0.3 ? 'curtain' : roll < 0.5 ? 'blind' : roll < 0.58 ? 'plant' : 'dark',
+      curtain: pick(['#e8dfcf', '#c9b48f', '#b65a4a', '#6b7f6a', '#f2efe8', '#8d6e9c', '#d9c27a']),
+      tilt: rr(-0.08, 0.12), blind: rr(0.2, 0.75), sky: rr(0.25, 0.7)
+    });
+  }
+  function facadeCell(g, x0, y0, s, cell, rough) {
+    const fx = x0 + s * 0.28, fy = y0 + s * 0.14, fw = s * 0.44, fh = s * 0.63;
+    if (rough) {
+      g.fillStyle = 'rgb(235,235,235)'; g.fillRect(x0, y0, s, s);
+      g.fillStyle = 'rgb(150,150,150)'; g.fillRect(fx - 3, fy - 3, fw + 6, fh + 6);
+      g.fillStyle = 'rgb(16,16,16)'; g.fillRect(fx + 4, fy + 4, fw - 8, fh - 8);
+      g.fillStyle = 'rgb(150,150,150)'; g.fillRect(fx + fw / 2 - 2, fy + 4, 4, fh - 8); g.fillRect(fx + 4, fy + fh * 0.34, fw - 8, 4);
+      g.fillStyle = 'rgb(200,200,200)'; g.fillRect(fx - 7, fy + fh + 2, fw + 14, 6);
+      return;
+    }
+    g.fillStyle = '#dedad3'; g.fillRect(x0, y0, s, s);
+    grain(g, x0, y0, s, s, 900, 'rgba(120,110,100,.08)', 'rgba(255,255,255,.18)', 1.6);
+    g.fillStyle = 'rgba(0,0,0,.07)'; g.fillRect(x0, y0 + s - 7, s, 4);
+    g.fillStyle = 'rgba(255,255,255,.35)'; g.fillRect(x0, y0 + s - 9, s, 2);
+    // reveal shadow around the opening, then frame
+    g.fillStyle = 'rgba(40,30,20,.18)'; g.fillRect(fx - 6, fy - 6, fw + 12, fh + 14);
+    g.fillStyle = '#f5f3ee'; g.fillRect(fx - 3, fy - 3, fw + 6, fh + 6);
+    const gx = fx + 4, gy = fy + 4, gw = fw - 8, gh = fh - 8;
+    const gr = g.createLinearGradient(gx, gy, gx + gw * cell.tilt * 4, gy + gh);
+    gr.addColorStop(0, `rgb(${Math.round(110 + cell.sky * 80)},${Math.round(130 + cell.sky * 70)},${Math.round(150 + cell.sky * 60)})`);
+    gr.addColorStop(0.45, '#3a4752'); gr.addColorStop(1, '#1d252c');
+    g.fillStyle = gr; g.fillRect(gx, gy, gw, gh);
+    if (cell.kind === 'curtain') {
+      g.fillStyle = cell.curtain; g.globalAlpha = 0.85;
+      g.fillRect(gx, gy, gw * 0.24, gh); g.fillRect(gx + gw * 0.76, gy, gw * 0.24, gh);
+      g.globalAlpha = 0.25; g.fillRect(gx, gy, gw, gh * 0.12); g.globalAlpha = 1;
+    } else if (cell.kind === 'blind') {
+      g.fillStyle = '#e9e4da'; g.fillRect(gx, gy, gw, gh * cell.blind);
+      g.fillStyle = 'rgba(0,0,0,.12)';
+      for (let y = gy + 3; y < gy + gh * cell.blind; y += 4) g.fillRect(gx, y, gw, 1);
+    } else if (cell.kind === 'plant') {
+      g.fillStyle = '#3f6e36'; g.beginPath(); g.arc(gx + gw * 0.3, gy + gh * 0.82, gw * 0.18, 0, TAU); g.fill();
+      g.fillStyle = '#9c5a3c'; g.fillRect(gx + gw * 0.2, gy + gh * 0.86, gw * 0.2, gh * 0.12);
+    }
+    g.fillStyle = 'rgba(255,255,255,.10)'; g.beginPath(); g.moveTo(gx, gy + gh * 0.55); g.lineTo(gx + gw * 0.55, gy); g.lineTo(gx + gw * 0.75, gy); g.lineTo(gx, gy + gh * 0.8); g.fill();
+    g.fillStyle = 'rgba(0,0,0,.28)'; g.fillRect(gx, gy, gw, 5); g.fillRect(gx, gy, 4, gh);
+    g.fillStyle = '#f5f3ee'; g.fillRect(fx + fw / 2 - 2, gy, 4, gh); g.fillRect(gx, fy + fh * 0.34, gw, 4);
+    g.fillStyle = '#d8d3ca'; g.fillRect(fx - 7, fy + fh + 2, fw + 14, 6);
+    g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(fx - 7, fy + fh + 8, fw + 14, 3);
+  }
+  const facadeAtlas = (rough) => (g, w) => { const s = w / 4; FACADE_CELLS.forEach((cell, i) => facadeCell(g, (i % 4) * s, Math.floor(i / 4) * s, s, cell, rough)); };
+  const facadeTex = canvasTex(512, 512, facadeAtlas(false), true, false, true);
+  const facadeRough = canvasTex(512, 512, facadeAtlas(true), true, true);
+  facadeTex.repeat.set(0.25, 0.25);
+  facadeRough.repeat.set(0.25, 0.25);
+
+  function asphalt(g, w, h) {
+    g.fillStyle = '#44474b'; g.fillRect(0, 0, w, h);
+    blotches(g, w, h, 40, '20,22,25', 0.18, 10, 40);
+    blotches(g, w, h, 25, '120,122,126', 0.08, 8, 30);
+    grain(g, 0, 0, w, h, w * h * 0.09, 'rgba(18,20,24,.45)', 'rgba(150,152,156,.32)', 1.3);
+  }
+  const roadTex = canvasTex(256, 512, (g, w, h) => {
+    asphalt(g, w, h);
+    // worn wheel tracks in both lanes, and a few sealed cracks
+    for (const u of [0.225, 0.358, 0.642, 0.775]) {
+      const gr = g.createLinearGradient(u * w - 14, 0, u * w + 14, 0);
+      gr.addColorStop(0, 'rgba(15,16,18,0)'); gr.addColorStop(0.5, 'rgba(15,16,18,.22)'); gr.addColorStop(1, 'rgba(15,16,18,0)');
+      g.fillStyle = gr; g.fillRect(u * w - 14, 0, 28, h);
+    }
+    g.strokeStyle = 'rgba(12,13,15,.55)'; g.lineWidth = 2;
+    for (let i = 0; i < 6; i++) {
+      let x = rand() * w, y = rand() * h;
+      g.beginPath(); g.moveTo(x, y);
+      for (let k = 0; k < 8; k++) { x += rr(-10, 10); y += rr(4, 16); g.lineTo(x, y); }
+      g.stroke();
+    }
+    // Swedish centre line: 3 m dash, 9 m gap
+    g.fillStyle = '#e9ebe6'; g.fillRect(w / 2 - 5, h * 0.05, 10, h * 0.25);
+    grain(g, w / 2 - 5, h * 0.05, 10, h * 0.25, 120, 'rgba(60,60,60,.35)', 'rgba(255,255,255,.2)', 1.4);
+  }, true);
+  const junctionTex = canvasTex(256, 256, asphalt, true);
+  // four-lane avenue: dashed lane lines and a solid double centre line
+  const avenueTex = canvasTex(256, 512, (g, w, h) => {
+    asphalt(g, w, h);
+    g.fillStyle = '#e9ebe6';
+    g.fillRect(w / 2 - 7, 0, 4, h); g.fillRect(w / 2 + 3, 0, 4, h);
+    for (const u of [0.25, 0.75]) g.fillRect(u * w - 3, h * 0.05, 6, h * 0.25);
+  }, true);
+  // avenue with a planted median down the middle (Karlavägen)
+  const medianTex = canvasTex(256, 512, (g, w, h) => {
+    asphalt(g, w, h);
+    g.fillStyle = '#a7a39b'; g.fillRect(w * 0.41, 0, w * 0.18, h);
+    g.fillStyle = '#4f7a37'; g.fillRect(w * 0.425, 0, w * 0.15, h);
+    grain(g, w * 0.425, 0, w * 0.15, h, 2500, 'rgba(30,50,20,.45)', 'rgba(140,180,90,.35)', 2);
+    g.fillStyle = '#e9ebe6';
+    for (const u of [0.2, 0.8]) g.fillRect(u * w - 3, h * 0.05, 6, h * 0.25);
+  }, true);
+  // Gamla stan cobbles (gatsten): rows of small, irregular stones
+  const cobbleTex = canvasTex(256, 256, (g, w, h) => {
+    g.fillStyle = '#5d5953'; g.fillRect(0, 0, w, h);
+    const s = 8;
+    for (let y = 0; y < h; y += s) {
+      const off = (y / s) % 2 ? s / 2 : 0;
+      for (let x = -s; x < w + s; x += s) {
+        const v = Math.round(rr(110, 160)), t = rr(-8, 8);
+        g.fillStyle = `rgb(${v + t},${v - 2},${v - 8 - t})`;
+        roundRect(g, x + off + 0.8, y + 0.8, s - 1.6 + rr(-0.6, 0.6), s - 1.6, 2.5); g.fill();
+      }
+    }
+    blotches(g, w, h, 20, '40,36,32', 0.18, 8, 30);
+  }, true);
+  // granite slabs for pedestrian streets and squares
+  const slabTex = canvasTex(256, 256, (g, w, h) => {
+    const rows = 5, rh = h / rows;
+    for (let r = 0; r < rows; r++) {
+      let x = -rr(0, 40);
+      while (x < w) {
+        const sw = rr(34, 64), v = Math.round(rr(168, 196));
+        g.fillStyle = `rgb(${v},${v - 2},${v - 6})`; g.fillRect(x, r * rh, sw, rh);
+        g.fillStyle = 'rgba(70,66,60,.55)'; g.fillRect(x, r * rh, 1.5, rh);
+        x += sw;
+      }
+      g.fillStyle = 'rgba(70,66,60,.55)'; g.fillRect(0, r * rh, w, 1.5);
+    }
+    grain(g, 0, 0, w, h, 9000, 'rgba(60,58,54,.25)', 'rgba(255,255,255,.25)', 1.2);
+    blotches(g, w, h, 16, '80,76,70', 0.12, 6, 24);
+  }, true);
+  // rail yard: ballast with two tracks per tile
+  const railTex = canvasTex(256, 256, (g, w, h) => {
+    g.fillStyle = '#6a6259'; g.fillRect(0, 0, w, h);
+    grain(g, 0, 0, w, h, 14000, 'rgba(40,36,32,.55)', 'rgba(170,160,145,.45)', 2);
+    for (const cx of [w * 0.25, w * 0.75]) {
+      g.fillStyle = '#4a3a2c';
+      for (let y = 4; y < h; y += 16) g.fillRect(cx - 40, y, 80, 7);
+      g.fillStyle = '#b8bcc0'; g.fillRect(cx - 21, 0, 4, h); g.fillRect(cx + 17, 0, 4, h);
+      g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(cx - 17, 0, 1.5, h); g.fillRect(cx + 21, 0, 1.5, h);
+    }
+  }, true);
+  // modern facades (1960s city centre, offices): ribbon windows and glass curtain walls, same cell size as the classic atlas
+  const MODERN_CELLS = [];
+  for (let i = 0; i < 16; i++) MODERN_CELLS.push({ glass: pick(['#2c3a48', '#3a3a34', '#24323a', '#30404a', '#3b3226']), sky: rr(0.2, 0.75), blind: rand() < 0.3 ? rr(0.2, 0.7) : 0, curtain: i % 4 === 3 });
+  function modernCell(g, x0, y0, s, cell, rough) {
+    const band = cell.curtain ? 0.12 : 0.36;
+    if (rough) {
+      g.fillStyle = 'rgb(16,16,16)'; g.fillRect(x0, y0, s, s);
+      g.fillStyle = 'rgb(200,200,200)'; g.fillRect(x0, y0 + s * (1 - band), s, s * band);
+      g.fillStyle = 'rgb(120,120,120)'; g.fillRect(x0, y0, 4, s);
+      return;
+    }
+    const gr = g.createLinearGradient(x0, y0, x0 + s * 0.4, y0 + s);
+    gr.addColorStop(0, `rgb(${Math.round(120 + cell.sky * 70)},${Math.round(140 + cell.sky * 60)},${Math.round(155 + cell.sky * 55)})`);
+    gr.addColorStop(0.5, cell.glass); gr.addColorStop(1, '#151a1f');
+    g.fillStyle = gr; g.fillRect(x0, y0, s, s);
+    if (cell.blind) { g.fillStyle = 'rgba(225,220,210,.85)'; g.fillRect(x0, y0, s, s * (1 - band) * cell.blind); }
+    g.fillStyle = cell.curtain ? '#59606a' : '#c9c6bf'; g.fillRect(x0, y0 + s * (1 - band), s, s * band);
+    grain(g, x0, y0 + s * (1 - band), s, s * band, 300, 'rgba(80,80,80,.15)', 'rgba(255,255,255,.2)', 1.4);
+    g.fillStyle = '#7d848c'; g.fillRect(x0, y0, 4, s); g.fillRect(x0 + s / 2 - 1, y0, 2, s * (1 - band));
+    g.fillStyle = 'rgba(255,255,255,.10)'; g.beginPath(); g.moveTo(x0, y0 + s * 0.5); g.lineTo(x0 + s * 0.5, y0); g.lineTo(x0 + s * 0.7, y0); g.lineTo(x0, y0 + s * 0.7); g.fill();
+  }
+  const modernAtlas = (rough) => (g, w) => { const s = w / 4; MODERN_CELLS.forEach((cell, i) => modernCell(g, (i % 4) * s, Math.floor(i / 4) * s, s, cell, rough)); };
+  const modernTex = canvasTex(512, 512, modernAtlas(false), true, false, true);
+  const modernRough = canvasTex(512, 512, modernAtlas(true), true, true);
+  modernTex.repeat.set(0.25, 0.25);
+  modernRough.repeat.set(0.25, 0.25);
+  const paveTex = canvasTex(256, 256, (g, w, h) => {
+    // concrete slabs, 50 cm, each a slightly different shade
+    const n = 8, s = w / n;
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+      const v = Math.round(178 + rr(-12, 12));
+      g.fillStyle = `rgb(${v},${v - 4},${v - 10})`; g.fillRect(c * s, r * s, s, s);
+    }
+    blotches(g, w, h, 30, '90,85,78', 0.14, 6, 26);
+    grain(g, 0, 0, w, h, 9000, 'rgba(80,76,70,.25)', 'rgba(255,255,255,.22)', 1.2);
+    g.fillStyle = 'rgba(70,66,60,.55)';
+    for (let i = 0; i <= n; i++) { g.fillRect(i * s - 1, 0, 2, h); g.fillRect(0, i * s - 1, w, 2); }
+  }, true);
+  // water ripples as a tileable normal map (sum of whole-number sine waves)
+  const waterNormal = canvasTex(256, 256, (g, w, h) => {
+    const waves = [];
+    for (let i = 0; i < 14; i++) waves.push({ kx: Math.round(rr(-9, 9)), ky: Math.round(rr(1, 9)) * (rand() < 0.5 ? -1 : 1), a: rr(0.4, 1) / (1 + i * 0.25), p: rand() * TAU });
+    const img = g.createImageData(w, h), d = img.data;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      let dx = 0, dy = 0;
+      for (const wv of waves) {
+        const c = Math.cos(TAU * (wv.kx * x / w + wv.ky * y / h) + wv.p) * wv.a;
+        dx += c * wv.kx; dy += c * wv.ky;
+      }
+      const nx = -dx * 0.05, ny = -dy * 0.05, l = Math.hypot(nx, ny, 1), i = (y * w + x) * 4;
+      d[i] = (nx / l * 0.5 + 0.5) * 255; d[i + 1] = (ny / l * 0.5 + 0.5) * 255; d[i + 2] = (1 / l * 0.5 + 0.5) * 255; d[i + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+  }, true, true);
+  waterNormal.repeat.set(110, 110);
+  // soft dark ellipse that sits under every car, where the sun's shadow map is too coarse to darken the road
+  const blobTex = canvasTex(64, 128, (g, w, h) => {
+    g.save(); g.scale(1, h / w);
+    const r = w / 2, gr = g.createRadialGradient(r, r, 0, r, r, r);
+    gr.addColorStop(0, 'rgba(0,0,0,.8)'); gr.addColorStop(0.6, 'rgba(0,0,0,.5)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, w, w);
+    g.restore();
+  });
+  const glowTex = canvasTex(64, 64, (g, w) => {
+    const gr = g.createRadialGradient(w / 2, w / 2, 0, w / 2, w / 2, w / 2);
+    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.25, 'rgba(255,255,255,.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, w, w);
+  });
+  const plazaTex = canvasTex(256, 256, (g, w) => {
+    const n = 8, s = w / n;
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+      const x = c * s, y = r * s, f = (r + c) % 2;
+      g.fillStyle = f ? '#1c1d1f' : '#f2f2ef'; g.beginPath(); g.moveTo(x, y); g.lineTo(x + s, y); g.lineTo(x, y + s); g.closePath(); g.fill();
+      g.fillStyle = f ? '#f2f2ef' : '#1c1d1f'; g.beginPath(); g.moveTo(x + s, y); g.lineTo(x + s, y + s); g.lineTo(x, y + s); g.closePath(); g.fill();
+    }
+  }, true);
+  const tTex = canvasTex(128, 128, (g) => {
+    g.fillStyle = '#ffffff'; g.beginPath(); g.arc(64, 64, 63, 0, TAU); g.fill();
+    g.fillStyle = '#1062b4'; g.beginPath(); g.arc(64, 64, 56, 0, TAU); g.fill();
+    g.fillStyle = '#ffffff'; g.font = '900 84px Overpass, "Arial Black", Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('T', 64, 70);
+  });
+
+  /* ================= Stockholm: land, water and streets ================= */
+  // Metres at real scale, measured from the middle of the Royal Palace (Kungliga slottet): x points east, z south.
+  // Shores, streets and landmarks follow the real map, simplified so that every street runs straight between junctions.
+  // WATER_Y: the water surface, low enough under the bridges for a boat to pass beneath them
+  const FLOOR_H = 3.2, CELL_W = 3.0, LANE = 2.5, WATER_Y = -2.8;
+  const BOUNDS = { x0: -2700, x1: 3300, z0: -2400, z1: 3000 };
+
+  function pointInPoly(P, x, z) {
+    let inside = false;
+    for (let i = 0, j = P.length - 1; i < P.length; j = i++) {
+      const xi = P[i][0], zi = P[i][1], xj = P[j][0], zj = P[j][1];
+      if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+  function segDist(px, pz, ax, az, bx, bz) {
+    const dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz;
+    const t = l2 ? clamp(((px - ax) * dx + (pz - az) * dz) / l2, 0, 1) : 0;
+    return Math.hypot(px - (ax + dx * t), pz - (az + dz * t));
+  }
+
+  /* ---------- land ---------- */
+  // Birger Jarlsgatan is roughly where Norrmalm ends and Östermalm begins
+  const birgerJarl = (z) => (z > -968 ? 310 + (z + 675) * 0.614 : 130 + (z + 968) * 0.32);
+  const LANDS = [
+    {
+      name: (x, z) => (x > 150 && x < 450 && z > -640 ? 'Blasieholmen' : x > 1450 && z < -560 ? 'Gärdet' : z < -1690 && x > -60 ? 'Norra Djurgården'
+        : x > birgerJarl(z) ? 'Östermalm' : z < -2090 ? 'Hagastaden' : z < -1160 ? 'Vasastan' : 'Norrmalm'),
+      poly: [[-2700, -2400], [-2700, -1248], [-1700, -1252], [-1200, -1247], [-850, -1242], [-850, -240], [-760, -245], [-650, -275], [-540, -288], [-462, -284], [-300, -278], [-200, -276], [-160, -268], [-60, -262], [60, -256],
+        [140, -250], [200, -255], [270, -245], [340, -205], [395, -150], [428, -160], [432, -260], [425, -420], [400, -560], [365, -628], [420, -632], [600, -617],
+        [800, -598], [1000, -580], [1120, -570], [1400, -575], [1700, -580], [2000, -615], [2300, -660], [2600, -690], [2780, -665], [2920, -650],
+        [3020, -760], [3060, -1100], [3010, -1500], [2950, -1900], [2900, -2400]]
+    },
+    {
+      name: 'Kungsholmen',
+      poly: [[-910, -1190], [-905, -900], [-900, -560], [-905, -260], [-900, -150], [-915, -60], [-960, -15], [-1100, -20], [-1400, -35], [-1700, -50],
+        [-1900, -45], [-2100, -60], [-2400, -80], [-2700, -90], [-2700, -1192], [-1700, -1194]]
+    },
+    { name: 'Helgeandsholmen', poly: [[-300, -228], [-55, -232], [-40, -180], [-55, -120], [-290, -118], [-310, -170]] },
+    {
+      name: 'Gamla stan',
+      poly: [[-300, -98], [-120, -100], [40, -102], [160, -98], [205, -62], [245.8, 29.1], [258.5, 188.6], [240, 214], [226, 330], [192, 430], [142, 505], [60, 528], [-40, 528],
+        [-140, 518], [-215, 480], [-270, 400], [-310, 280], [-330, 140], [-335, 20], [-320, -60]]
+    },
+    { name: 'Riddarholmen', poly: [[-360, -20], [-450, -55], [-540, -10], [-590, 110], [-570, 260], [-480, 350], [-395, 370], [-362, 300], [-358, 120]] },
+    { name: 'Skeppsholmen', poly: [[455, -70], [560, -118], [700, -100], [820, -30], [905, 80], [880, 220], [780, 322], [640, 330], [520, 260], [458, 150], [445, 40]] },
+    { name: 'Kastellholmen', poly: [[640, 380], [760, 360], [820, 430], [760, 500], [660, 490]] },
+    {
+      name: 'Djurgården',
+      poly: [[1020, -475], [1500, -485], [1700, -495], [2000, -525], [2300, -570], [2600, -630], [2780, -625], [2920, -600], [3080, -470], [3170, -250],
+        [3130, 0], [2980, 160], [2700, 290], [2400, 360], [2100, 470], [1800, 610], [1550, 660], [1350, 640], [1150, 420], [1060, 150], [1000, -150]]
+    },
+    { name: 'Långholmen', poly: [[-1700, 600], [-1500, 562], [-1250, 575], [-1120, 630], [-1160, 712], [-1450, 722], [-1670, 690]] },
+    {
+      name: 'Södermalm',
+      poly: [[-1650, 792], [-1200, 772], [-850, 742], [-550, 722], [-260, 680], [-120, 655], [-20, 640], [60, 632], [160, 645], [400, 682], [700, 718],
+        [1000, 758], [1300, 795], [1600, 830], [1820, 880], [1950, 990], [1990, 1200], [1975, 1450], [1930, 1700], [1800, 1880], [1550, 1970], [800, 1985],
+        [0, 1990], [-800, 1988], [-1250, 1960], [-1500, 1860], [-1640, 1650], [-1700, 1350], [-1720, 1050]]
+    },
+    // across Hammarby sjö and Årstaviken: Liljeholmen, Johanneshov with Globen, Hammarby sjöstad, and Nacka beyond
+    // Danvikskanalen
+    {
+      name: (x, z) => (x > 2000 ? 'Nacka' : x < -1000 ? 'Liljeholmen' : x > 700 && z < 2720 ? 'Hammarby sjöstad' : 'Johanneshov'),
+      poly: [[-2700, 2050], [-2000, 2030], [-1600, 2080], [-1300, 2140], [-600, 2160], [200, 2155], [900, 2150], [1500, 2130], [1850, 2080], [2010, 1950],
+        [2030, 1700], [2040, 1450], [2060, 1250], [2250, 1150], [2700, 1100], [3300, 1080], [3300, 3000], [-2700, 3000]]
+    }
+  ];
+  function landName(x, z) {
+    for (const L of LANDS) if (pointInPoly(L.poly, x, z)) return typeof L.name === 'function' ? L.name(x, z) : L.name;
+    return null;
+  }
+  function waterName(x, z) {
+    if (x < -850 && x > -910 && z < -150 && z > -1190) return 'Klara sjö';
+    if (z < -1180 && z > -1260 && x < -850) return 'Karlbergssjön';
+    if (z > 480 && z < 690 && x > -280 && x < 260) return 'Söderström';
+    if (x > 330 && x < 1100 && z < -150 && z > -650) return 'Nybroviken';
+    if (z < -90 && z > -300 && x > -340 && x < 450) return 'Strömmen';
+    if (x > 1080 && x < 2950 && z < -450 && z > -700) return 'Djurgårdsbrunnsviken';
+    if (x > 2900 && z < -300) return 'Lilla Värtan';
+    if (x > 1900 && x < 2150 && z > 1150 && z < 2000) return 'Danvikskanalen';
+    if (z > 1900 && z < 2200 && x > -1000) return 'Hammarby sjö';
+    if (z > 1700 && x < -1000) return 'Årstaviken';
+    if (z > 690 && z < 800 && x < -1100 && x > -1750) return 'Pålsundet';
+    if (x < -1600) return 'Mälaren';
+    return x < -300 ? 'Riddarfjärden' : 'Saltsjön';
+  }
+
+  /* ---------- streets ---------- */
+  // Named junctions, then streets as chains of junctions. kind: 'street' (cars), 'lane' (Gamla stan's narrow cobbled
+  // lanes) or 'ped' (pedestrian streets). hw is half the carriageway width, walk the pavement width.
+  const PTS = {
+    // Norrmalm
+    TB: [-540, -305], VB: [-462, -298], D0: [-200, -290], GA: [-110, -282], OP: [-20, -274], KT0: [105, -266],
+    GH: [250, -268], NM: [345, -222], BT: [400, -170], NK1: [405, -420], NP: [310, -675], BH1: [265, -470],
+    KT1: [110, -470], KT2: [115, -650], NT: [168, -655], VT0: [-50, -362], VT1: [-50, -470], VT2: [-45, -648],
+    R0: [-125, -366], R1: [-122, -470], R2: [-118, -646], R3: [-130, -762], R4: [-150, -925], R45: [-162, -1035], R5: [-175, -1150],
+    D1: [-229, -352], D2: [-284, -470], D3: [-351, -612], D4: [-405, -727], D5: [-475, -878], D6: [-538, -1012], D7: [-600, -1145],
+    ST: [-270, -652], S1: [-303, -722], S2: [-379, -884], S3: [-441, -1016], S4: [-503, -1148],
+    V2: [-585, -430], V3: [-620, -545], V4: [-655, -684], V5: [-700, -852], V6: [-735, -1008], V7: [-768, -1142],
+    TBw: [-720, -280], SHB: [-838, -262], KB1: [-838, -855],
+    // Östermalm
+    BB1: [150, -810], BJr: [264, -750], BJs: [190, -870], SP: [130, -968], BJ2: [62, -1180], LN0: [175, -1012], KA1: [240, -1180],
+    NYr: [338, -748], NYs: [345, -868], NY2: [355, -1006], NY3: [365, -1180],
+    SV1: [500, -650], SIr: [510, -745], SIs: [522, -866], SI2: [538, -1002], SI3: [550, -1180],
+    SV2: [700, -630], GRr: [705, -735], GRs: [712, -862], GR2: [718, -998], GR3: [725, -1180],
+    SV3: [900, -612], BAr: [905, -725], BAs: [910, -858], BA2: [916, -994], BA3: [925, -1180], SV4: [1072, -596],
+    // Kungsholmen
+    SHk: [-925, -238], KG0: [-928, -640], KB2: [-925, -860], NM0: [-1090, -48], NM1: [-1380, -58],
+    SC1: [-1110, -372], SC2: [-1115, -642], SC3: [-1120, -868], PH1: [-1380, -582], PH2: [-1380, -646], PH3: [-1380, -885],
+    // Helgeandsholmen and Gamla stan
+    RB1: [-195, -208], RB2: [-190, -140], MT: [-180, -76], NB1: [-100, -205], NB2: [-95, -140], LB: [-90, -78],
+    SBs: [165, -82], SK1: [210, 40], SK2: [222, 190], SK3: [212, 330], SK4: [175, 430], SL0: [60, 500],
+    SBk: [75, 80], STK: [-80, 84], gSB1: [105, 71],
+    RT: [-270, -30], MB1: [-312, 110], MB2: [-292, 260], MB3: [-245, 390], KH: [-130, 492], gMBg: [-277.5, 300],
+    // Gamla stan, lane by lane. West to east the long streets are Munkbron, Lilla Nygatan, Stora Nygatan,
+    // Västerlånggatan, Prästgatan, Stortorget with Skomakargatan, Svartmangatan, Österlånggatan and Skeppsbron;
+    // the gränder cross between them. Västerlånggatan (Vx):
+    gMT2: [-140, -77], gV0: [-142, -10], gV2: [-144, 78], gV3: [-148, 118], gV3b: [-149, 165], gV4: [-149, 200], gV4b: [-147, 245],
+    gV5: [-138, 290], gV6: [-118, 345], gV6b: [-102, 372], gV7: [-88, 398], gV8: [-58, 425], gJT: [-20, 440], gJT2: [8, 444], gJG: [34, 472],
+    gHV0: [-100, -10], gHV: [-70, 0], gRHN: [-194, -18], gRHT: [-194, 22],
+    // Prästgatan (P), Stora Nygatan (N), Lilla Nygatan (L) and Kornhamnstorg
+    gP0: [-108, 80], gP1: [-114, 118], gP1b: [-116, 165], gP2: [-116, 200], gP2b: [-113, 242], gP3: [-103, 290], gP4: [-85, 348], gP4b: [-73, 370],
+    gN0: [-174, 44], gN1: [-186, 118], gN1b: [-190, 165], gN2: [-192, 200], gN2b: [-190, 245], gN3: [-182, 290], gN4: [-165, 345], gN5: [-145, 400], gKHT: [-115, 458],
+    gL0: [-208, 40], gL1: [-226, 118], gL2: [-232, 200], gL2a: [-231, 245], gL3: [-222, 300], gL4: [-205, 355], gL5: [-180, 415],
+    // Stortorget's corners, Källargränd, Bollhusgränd, Köpmangatan, Skomakargatan, Svartmangatan and the lanes off them
+    gTNW: [-92, 190], gTNE: [-36, 190], gTE: [-36, 212], gTSE: [-52, 240], gTSW: [-98, 236], gKG0: [14, 84], gKG1: [12, 150], gBH0: [48, 82], gBH1: [52, 213],
+    gSM0: [30, 213], gSM1: [32, 262], gSM1b: [33, 280], gSKo1: [-47, 280], gTB3: [-46, 350], gTB5: [38, 352], gTB6: [64, 352], gTB7: [100, 350],
+    gBG0: [60, 264], gBT: [85, 265], gSJ1: [93, 300],
+    // Österlånggatan (O), and where each gränd meets Skeppsbron (Sz, z the distance south of the palace). The gränder
+    // between them are placed from their real coordinates (hitta.se and Wikidata), scaled to the game's Gamla stan:
+    // z = 232 + (59.325111 − latitude) × 118 700, Köpmantorget being at z = 232
+    gO1: [118, 136], gO1b: [122, 156], gO2: [125, 184], gO2k: [126.8, 206], gKT: [128, 220], gO2b: [131, 245], gO3: [134, 268], gO3b: [134, 294],
+    gO3c: [133, 312], gO5: [130, 345], gO6: [122, 370], gO6b: [110, 392], gO7: [88, 415], gO8: [50, 436],
+    gS136: [217.7, 136], gS156: [219.3, 156], gS206: [220.9, 206], gS245: [218.1, 245], gS268: [216.4, 268], gS294: [214.6, 294],
+    gS312: [213.3, 312], gS370: [197.2, 370], gS392: [189.1, 392], gS415: [180.6, 415], gS475: [100.3, 475.5],
+    RH1: [-385, -15], RH2: [-470, 50], RH3: [-480, 240], RH4: [-400, 200],
+    // Södermalm
+    SL1: [50, 665], SMT: [30, 725], CB1: [-260, 705], SMS2: [-550, 745], SMS3: [-850, 768], KV1: [260, 695], KV2: [520, 735],
+    HG1: [-150, 800], BM1: [-245, 847], HG2: [-330, 890], HG3: [-490, 1010], SW0: [-560, 1040], HG4: [-700, 1100], HG5: [-950, 1200],
+    GG1: [45, 860], GG2: [60, 1000], GG3: [70, 1142], GG4: [78, 1290], MP: [85, 1380], GG5: [100, 1500],
+    OG0: [330, 880], OG1: [335, 1152], OG2: [345, 1368], OG3: [350, 1488], RG0: [570, 900], RG1: [580, 1160], RG2: [590, 1362], RG3: [600, 1480],
+    SW1: [-560, 1140], SWh: [-557, 1250], SW3: [-552, 1510], HB1: [-180, 1165], HB2: [-380, 1205], SP1: [-180, 1040], BM2: [-255, 1052], SP2: [-390, 1075], FW1: [-200, 1508],
+    // Skeppsholmen and Djurgården
+    SH0: [478, -52], SH1: [610, -80], SH2: [780, 5], SH3: [850, 170], SH4: [720, 290], SH5: [545, 225],
+    DJ0: [1078, -455], DJ1: [1170, -330], DJ2: [1220, -90], DJ3: [1260, 170], DJ5: [1110, 130], DJ6: [1060, -180],
+    // further out: Norrtull, Roslagstull, Sankt Eriksplan and Odenplan, Karlaplan and Gärdet, the far end of Djurgården,
+    // Danvikstull and Skanstull on Söder, and the bridges to Långholmen and Liljeholmen
+    NTL: [-870, -2060], RTU: [-8, -1700], SEP: [-1560, -1440], ODP: [-795.3, -1420], KPL: [1100, -1205], LVV: [1450, -1500],
+    DHN: [2650, -742], DBS: [2665, -575], RDL: [2800, -450], BHU: [3080, -150], GLU: [1330, 400],
+    DVT: [1900, 1250], NAK: [2125, 1255], SIK: [1950, 2150], SKT: [125, 1955], SKS: [140, 2190],
+    VBN: [-1760, -72.27], LHJ: [-1440, 640], VBS: [-1350, 815], LJS: [-1150, 1890], LJH: [-1300, 2200]
+  };
+  const STREETS = [
+    // Norrmalm
+    ['Strömgatan', 'TB VB D0 GA OP KT0', { hw: 7, walk: 6 }],
+    ['Vasagatan', 'TB V2 V3 V4 V5 V6 V7', { hw: 8 }],
+    ['Drottninggatan', 'D0 D1 D2 D3 D4 D5 D6 D7', { kind: 'ped', hw: 6 }],
+    ['Sveavägen', 'ST S1 S2 S3 S4', { hw: 9, trees: 'both' }],
+    ['Regeringsgatan', 'GA R0 R1 R2 R3 R4 R45 R5', { hw: 5.5 }],
+    ['Västra Trädgårdsgatan', 'VT0 VT1 VT2', { hw: 5 }],
+    ['Kungsträdgårdsgatan', 'KT0 KT1 KT2', { hw: 6 }],
+    ['Fredsgatan', 'D1 R0 VT0', { hw: 5 }],
+    ['Jakobsgatan', 'D2 R1 VT1', { hw: 5 }],
+    ['Klarabergsgatan', 'V3 D3 ST', { hw: 7 }],
+    ['Hamngatan', 'ST R2 VT2 KT2 NT NP', { hw: 7, walk: 5 }],
+    ['Mäster Samuelsgatan', 'V4 D4 S1 R3', { hw: 5 }],
+    ['Kungsgatan', 'V5 D5 S2 R4 SP', { hw: 7.5, walk: 5 }],
+    ['Olof Palmes gata', 'V6 D6 S3 R45', { hw: 6 }],
+    ['Tegnérgatan', 'V7 D7 S4 R5 BJ2', { hw: 6 }],
+    ['Tegelbacken', 'TB TBw SHB', { hw: 7 }],
+    ['Stadshusbron', 'SHB SHk', { hw: 7, bridge: true }],
+    ['Kungsbron', 'V5 KB1', { hw: 7 }],
+    ['Kungsbron', 'KB1 KB2', { hw: 7, bridge: true }],
+    ['Södra Blasieholmshamnen', 'KT0 GH NM BT', { hw: 7, walk: 9 }],
+    ['Arsenalsgatan', 'KT1 BH1', { hw: 5 }],
+    ['Blasieholmsgatan', 'GH BH1 NP', { hw: 5 }],
+    ['Nybrokajen', 'BT NK1 NP', { hw: 6 }],
+    // Östermalm
+    ['Birger Jarlsgatan', 'NP BJr BJs SP BJ2', { hw: 7.5, walk: 5 }],
+    ['Biblioteksgatan', 'NT BB1 SP', { kind: 'ped', hw: 4.5 }],
+    ['Sturegatan', 'SP LN0 KA1', { hw: 6.5 }],
+    ['Strandvägen', 'NP SV1 SV2 SV3 SV4', { hw: 9, walk: 10, trees: 'both' }],
+    ['Riddargatan', 'BJr NYr SIr GRr BAr', { hw: 5.5 }],
+    ['Storgatan', 'BJs NYs SIs GRs BAs', { hw: 5.5 }],
+    ['Linnégatan', 'LN0 NY2 SI2 GR2 BA2', { hw: 6.5 }],
+    ['Karlavägen', 'BJ2 KA1 NY3 SI3 GR3 BA3', { hw: 9, median: true }],
+    ['Nybrogatan', 'NP NYr NYs NY2 NY3', { hw: 6 }],
+    ['Sibyllegatan', 'SV1 SIr SIs SI2 SI3', { hw: 5.5 }],
+    ['Grevgatan', 'SV2 GRr GRs GR2 GR3', { hw: 5.5 }],
+    ['Banérgatan', 'SV3 BAr BAs BA2 BA3', { hw: 6 }],
+    // Kungsholmen
+    ['Hantverkargatan', 'SHk SC1 PH1', { hw: 7 }],
+    ['Kungsholmsgatan', 'KG0 SC2 PH2', { hw: 6 }],
+    ['Fleminggatan', 'KB2 SC3 PH3', { hw: 7 }],
+    ['Norr Mälarstrand', 'NM0 NM1', { hw: 7, walk: 8, trees: 'left' }],
+    ['Scheelegatan', 'NM0 SC1 SC2 SC3', { hw: 6 }],
+    ['Polhemsgatan', 'NM1 PH1 PH2 PH3', { hw: 5.5 }],
+    ['Kungsbro strand', 'SHk KG0 KB2', { hw: 5.5 }],
+    // Helgeandsholmen and Gamla stan
+    ['Riksbron', 'D0 RB1', { hw: 5, bridge: true }],
+    ['Riksgatan', 'RB1 RB2', { hw: 4.5, walk: 2.5 }],
+    ['Stallbron', 'RB2 MT', { hw: 4.5, bridge: true }],
+    ['Norrbro', 'GA NB1', { hw: 6, bridge: true }],
+    ['Norrbro', 'NB1 NB2', { hw: 6, walk: 2.5 }],
+    ['Norrbro', 'NB2 LB', { hw: 6, bridge: true }],
+    ['Strömbron', 'KT0 SBs', { hw: 6.5, bridge: true }],
+    ['Mynttorget', 'MT gMT2 LB', { hw: 5 }],
+    ['Slottskajen', 'LB SBs', { hw: 6, walk: 5 }],
+    ['Skeppsbron', 'SBs SK1 gS136 gS156 SK2 gS206 gS245 gS268 gS294 gS312 SK3 gS370 gS392 gS415 SK4 gS475 SL0', { hw: 8, walk: 7 }],
+    ['Slottsbacken', 'SK1 gSB1 SBk', { hw: 6 }],
+    ['Storkyrkobrinken', 'SBk gBH0 gKG0 STK gP0 gV2 gN0 gRHT', { hw: 4, walk: 1.5 }],
+    ['Myntgatan', 'MT gRHN', { hw: 4.5, walk: 2 }],
+    ['Riddarhustorget', 'RT gRHN gRHT', { hw: 5, walk: 2 }],
+    ['Stora Nygatan', 'gN0 gN1 gN1b gN2 gN2b gN3 gN4 gN5 gKHT', { hw: 4, walk: 1.5 }],
+    ['Kornhamnstorg', 'gKHT KH', { hw: 5, walk: 2 }],
+    ['Kornhamnstorg', 'KH SL0', { hw: 6 }],
+    ['Munkbroleden', 'RT MB1 MB2 gMBg MB3 KH', { hw: 7, walk: 6 }],
+    // the lanes: cobbles, no through traffic (the police on blue lights take them anyway)
+    ['Västerlånggatan', 'gMT2 gV0 gV2 gV3 gV3b gV4 gV4b gV5 gV6 gV6b gV7 gV8 gJT', { kind: 'lane', hw: 3.2 }],
+    ['Högvaktsterrassen', 'gV0 gHV0', { kind: 'lane', hw: 3.5 }],
+    ['Yttre borggården', 'gHV0 gHV', { kind: 'lane', hw: 6, walk: 0 }],
+    ['Prästgatan', 'gP0 gP1 gP1b gP2 gP2b gP3 gP4 gP4b gV8', { kind: 'lane', hw: 2.4, walk: 0.4 }],
+    ['Lilla Nygatan', 'gRHT gL0 gL1 gL2 gL2a gL3 gL4 gL5 gKHT', { kind: 'lane', hw: 3 }],
+    ['Trångsund', 'STK gTNW', { kind: 'lane', hw: 2.6, walk: 0.5 }],
+    ['Källargränd', 'gKG0 gKG1 gTNE', { kind: 'lane', hw: 1.9, walk: 0.3 }],
+    ['Bollhusgränd', 'gBH0 gBH1', { kind: 'lane', hw: 1.8, walk: 0.3 }],
+    ['Stortorget', 'gTNW gTNE gTE gTSE gTSW gTNW', { kind: 'lane', hw: 2.6, walk: 0.4 }],
+    ['Köpmangatan', 'gTE gSM0 gBH1', { kind: 'lane', hw: 2.5, walk: 0.4 }],
+    ['Köpmanbrinken', 'gBH1 gKT', { kind: 'lane', hw: 2.5, walk: 0.4 }],
+    ['Skomakargatan', 'gTSE gSKo1 gTB3', { kind: 'lane', hw: 2.4, walk: 0.4 }],
+    ['Svartmangatan', 'gSM0 gSM1 gSM1b gTB5', { kind: 'lane', hw: 2.6, walk: 0.4 }],
+    ['Kåkbrinken', 'gV4b gP2b gTSW', { kind: 'lane', hw: 2, walk: 0.3 }],
+    ['Tyska brinken', 'gV6 gP4 gTB3 gTB5 gTB6 gTB7 gO5', { kind: 'lane', hw: 2.8, walk: 0.5 }],
+    ['Tyska skolgränd', 'gSKo1 gSM1b', { kind: 'lane', hw: 1.5, walk: 0.3 }],
+    ['Kindstugatan', 'gSM1 gBG0 gBT gO3', { kind: 'lane', hw: 2.2, walk: 0.3 }],
+    ['Baggensgatan', 'gBG0 gTB6', { kind: 'lane', hw: 2, walk: 0.3 }],
+    ['Själagårdsgatan', 'gBT gSJ1 gTB7', { kind: 'lane', hw: 2.2, walk: 0.3 }],
+    ['Brunnsgränd', 'gSJ1 gO3b', { kind: 'lane', hw: 1.6, walk: 0.3 }],
+    ['Österlånggatan', 'gSB1 gO1 gO1b gO2 gO2k gKT gO2b gO3 gO3b gO3c gO5 gO6 gO6b gO7 gO8 gJT2', { kind: 'lane', hw: 3 }],
+    ['Järntorget', 'gJT gJT2', { kind: 'lane', hw: 5, walk: 0.5 }],
+    ['Järntorget', 'gKHT gJT', { kind: 'lane', hw: 3.5 }],
+    ['Järntorgsgatan', 'gJT2 gJG SL0', { kind: 'lane', hw: 3 }],
+    // between Västerlånggatan and Prästgatan, north to south
+    ['Helga Lekamens gränd', 'gV3 gP1', { kind: 'lane', hw: 1.4, walk: 0.2 }],
+    ['Peder Fredags gränd', 'gV3b gP1b', { kind: 'lane', hw: 1.4, walk: 0.2 }],
+    ['Didrik Ficks gränd', 'gV4 gP2', { kind: 'lane', hw: 1.4, walk: 0.2 }],
+    ['Schönfeldts gränd', 'gV5 gP3', { kind: 'lane', hw: 1.4, walk: 0.2 }],
+    ['Mårten Trotzigs gränd', 'gV6b gP4b', { kind: 'lane', hw: 0.55, walk: 0.1, stairs: true }],
+    // west of Västerlånggatan, down to Stora and Lilla Nygatan and the quay at Munkbron
+    ['Sven Vintappares gränd', 'gV3 gN1', { kind: 'lane', hw: 1.5, walk: 0.2 }],
+    ['Gåsgränd', 'gV3b gN1b', { kind: 'lane', hw: 1.4, walk: 0.2 }],
+    ['Göran Hälsinges gränd', 'gV4 gN2 gL2', { kind: 'lane', hw: 1.5, walk: 0.2 }],
+    ['Ignatiigränd', 'gV4b gN2b', { kind: 'lane', hw: 1.5, walk: 0.2 }],
+    ['Funckens gränd', 'gN2b gL2a', { kind: 'lane', hw: 1.5, walk: 0.2 }],
+    ['Yxsmedsgränd', 'gV7 gN5', { kind: 'lane', hw: 1.5, walk: 0.2 }],
+    ['Munkbrogatan', 'gL3 gMBg', { kind: 'lane', hw: 2.6, walk: 0.4 }],
+    // from Österlånggatan down to Skeppsbron, north to south, in the real order: Telegrafgränd by Slottsbacken, then
+    // Skeppar Karls gränd, Bredgränd, Kråkgränd, Nygränd (across from Köpmanbrinken), Skottgränd, Stora Hoparegränd,
+    // Drakens gränd, Ferkens gränd, Gaffelgränd, Johannesgränd, Packhusgränd and Tullgränd down by Slussen
+    ['Telegrafgränd', 'gO1 gS136', { kind: 'lane', hw: 1.5, walk: 0.2 }],
+    ['Skeppar Karls gränd', 'gO1b gS156', { kind: 'lane', hw: 1.4, walk: 0.2 }],
+    ['Bredgränd', 'gO2 SK2', { kind: 'lane', hw: 2.1, walk: 0.2 }],
+    ['Kråkgränd', 'gO2k gS206', { kind: 'lane', hw: 1.4, walk: 0.2 }],
+    ['Nygränd', 'gO2b gS245', { kind: 'lane', hw: 1.6, walk: 0.2 }],
+    ['Skottgränd', 'gO3 gS268', { kind: 'lane', hw: 1.4, walk: 0.2 }],
+    ['Stora Hoparegränd', 'gO3b gS294', { kind: 'lane', hw: 1.5, walk: 0.2 }],
+    // named after the tavern Draken that stood at its western end (75 m, 59.32444 N 18.07475 E)
+    ['Drakens gränd', 'gO3c gS312', { kind: 'lane', hw: 1.5, walk: 0.2 }],
+    ['Ferkens gränd', 'gO5 SK3', { kind: 'lane', hw: 1.4, walk: 0.2 }],
+    ['Gaffelgränd', 'gO6 gS370', { kind: 'lane', hw: 1.4, walk: 0.2 }],
+    ['Johannesgränd', 'gO6b gS392', { kind: 'lane', hw: 1.5, walk: 0.2 }],
+    ['Packhusgränd', 'gO7 gS415', { kind: 'lane', hw: 1.6, walk: 0.2 }],
+    ['Tullgränd', 'gJG gS475', { kind: 'lane', hw: 1.8, walk: 0.2 }],
+    ['Vasabron', 'VB RT', { hw: 6.5, bridge: true }],
+    ['Riddarholmsbron', 'RT RH1', { hw: 5, bridge: true }],
+    ['Birger jarls torg', 'RH1 RH2', { hw: 5 }],
+    ['Evert Taubes terrass', 'RH2 RH3', { hw: 5 }],
+    ['Riddarholmen', 'RH3 RH4 RH1', { hw: 5 }],
+    ['Slussen', 'SL0 SL1', { hw: 9, bridge: true }],
+    ['Centralbron', 'MB3 CB1', { hw: 8, bridge: true, limit: 90 }],
+    // Södermalm
+    ['Slussen', 'SL1 SMT', { hw: 8 }],
+    ['Söder Mälarstrand', 'SL1 CB1 SMS2 SMS3', { hw: 7.5, walk: 8, trees: 'right' }],
+    ['Katarinavägen', 'SL1 KV1 KV2', { hw: 7 }],
+    ['Hornsgatan', 'SMT HG1 BM1 HG2 HG3 SW0 HG4 HG5', { hw: 7.5, walk: 5 }],
+    ['Götgatan', 'SMT GG1 GG2 GG3 GG4 MP GG5', { hw: 6.5 }],
+    ['Hökens gata', 'GG1 OG0 RG0', { hw: 5.5 }],
+    ['Renstiernas gata', 'KV2 RG0 RG1 RG2 RG3', { hw: 6 }],
+    ['Östgötagatan', 'OG0 OG1 OG2 OG3', { hw: 6 }],
+    ['Swedenborgsgatan', 'SW0 SW1 SWh SW3', { hw: 5.5 }],
+    ['Högbergsgatan', 'SWh HB2 HB1 GG3 OG1 RG1', { hw: 5.5 }],
+    ['Sankt Paulsgatan', 'GG2 SP1 BM2 SP2 SW1', { hw: 5.5 }],
+    ['Bellmansgatan', 'CB1 BM1 BM2', { hw: 5 }],
+    ['Tjärhovsgatan', 'MP OG2 RG2', { hw: 6 }],
+    ['Folkungagatan', 'GG5 OG3 RG3', { hw: 7 }],
+    ['Rosenlundsgatan', 'SW3 FW1 GG5', { hw: 6.5 }],
+    ['Ludvigsbergsgatan', 'SMS3 HG5', { hw: 5.5 }],
+    ['Torkel Knutssonsgatan', 'SMS2 SW0', { hw: 6 }],
+    // Skeppsholmen and Djurgården
+    ['Skeppsholmsbron', 'BT SH0', { hw: 5.5, bridge: true }],
+    ['Skeppsholmen', 'SH0 SH1 SH2 SH3 SH4 SH5 SH0', { hw: 5 }],
+    ['Djurgårdsbron', 'SV4 DJ0', { hw: 6, bridge: true }],
+    ['Djurgårdsvägen', 'DJ0 DJ1 DJ2 DJ3', { hw: 5.5 }],
+    ['Galärvarvsvägen', 'DJ3 DJ5 DJ6 DJ1', { hw: 5 }]
+  ];
+
+
+  // The rest of the inner city: streets drawn through real points rather than between named junctions. Wherever one
+  // crosses another, or ends on it, a junction is made there, so the network stays joined up however it was drawn.
+  const MORE = [
+    ['Karduansmakargatan', [[-562.7, -368], [-241.2, -378]], { hw: 4.5 }],
+    ['Klara Södra Kyrkogata', [[-594.7, -462], 'D2'], { hw: 4.5 }],
+    ['Klara Östra Kyrkogata', [[-333.7, -375.1], [-434.7, -591.1]], { hw: 4.5 }],
+    ['Klara Västra Kyrkogata', [[-431.6, -372.1], [-523.7, -569.0]], { hw: 4.5 }],
+    ['Klara Norra Kyrkogata', [[-635.1, -605.1], [-377.5, -669.3]], { hw: 4.5 }],
+    ['Vattugatan', [[-678.8, -772.8], [-444.7, -813.0]], { hw: 4 }],
+    ['Bryggargatan', [[-412.0, -596.8], [-540.0, -870.5]], { hw: 4.5 }],
+    ['Gamla Brogatan', [[-489.1, -577.6], [-621.7, -861.0]], { hw: 4.5 }],
+    ['Barnhusgatan', [[-751.5, -1075.0], [-569.0, -1078.7]], { hw: 4.5 }],
+    ['Kammakargatan', [[-569.0, -1078.7], [-168.3, -1090.6]], { hw: 5 }],
+    ['Malmtorgsgatan', [[-182, -358.3], [-176, -648.3]], { hw: 4.5 }],
+    ['Sergelgatan', [[-316.6, -629.0], [-434.8, -880.5]], { kind: 'ped', hw: 5 }],
+    ['Holländargatan', [[-488.7, -1014.0], [-550.9, -1146.5]], { hw: 4.5 }],
+    ['Luntmakargatan', [[-332.1, -892.4], [-452.3, -1148.3]], { hw: 4.5 }],
+    ['Döbelnsgatan', [[-333.9, -1023.3], [-392.8, -1148.7]], { hw: 5 }],
+    ['Malmskillnadsgatan', [[-192, -766], [-248, -1150]], { hw: 5 }],
+    ['Lästmakargatan', ['VT2', [-44, -722], [-56, -939.4]], { hw: 4.5 }],
+    ['Norrlandsgatan', [[40, -649.1], [56, -956.6]], { hw: 5 }],
+    ['Smålandsgatan', [[-48, -711], [285.5, -715]], { hw: 5 }],
+    ['Mäster Samuelsgatan', ['R3', 'BB1', [229.5, -806]], { hw: 5 }],
+    ['Jakobsbergsgatan', [[-141.8, -858], [183.9, -880]], { hw: 4.5 }],
+    ['Stallgatan', [[259.2, -392], [404.4, -392]], { hw: 4.5 }],
+    ['Upplandsgatan', ['V7', [-800, -1468]], { hw: 6 }],
+    ['Drottninggatan', ['D7', [-685.6, -1328.0]], { kind: 'ped', hw: 5 }],
+    ['Sveavägen', ['S4', [-653.3, -1468]], { hw: 9, trees: 'both' }],
+    ['Holländargatan', [[-550.9, -1146.5], [-701.9, -1468]], { hw: 4.5 }],
+    ['Luntmakargatan', [[-452.3, -1148.3], [-602.5, -1468]], { hw: 4.5 }],
+    ['Döbelnsgatan', [[-392.8, -1148.7], [-542.8, -1468]], { hw: 4.5 }],
+    ['Tulegatan', [[-300, -1149.2], [-338, -1468]], { hw: 4.5 }],
+    ['Regeringsgatan', ['R5', [-196.4, -1342.9]], { hw: 5.5 }],
+    ['Birger Jarlsgatan', ['BJ2', [24, -1468]], { hw: 7.5, walk: 5 }],
+    ['Rådmansgatan', [[-777.1, -1235], [51.4, -1260]], { hw: 5.5 }],
+    ['Kungstensgatan', [[-786.0, -1325], [39.6, -1350]], { hw: 5 }],
+    ['Odengatan', [[-795.3, -1420], [27.0, -1445]], { hw: 7 }],
+    ['Grev Turegatan', [[300, -749.0], [300, -1180.0]], { hw: 5 }],
+    ['Skeppargatan', [[615, -638.5], [615, -1180.0]], { hw: 5 }],
+    ['Jungfrugatan', [[782, -622.6], [782, -1180.0]], { hw: 5 }],
+    ['Artillerigatan', [[848, -616.7], [848, -1180.0]], { hw: 5 }],
+    ['Humlegårdsgatan', [[150.2, -935], [350.0, -937]], { hw: 5.5 }],
+    ['Kommendörsgatan', [[205.2, -1090], [920.6, -1090]], { hw: 5.5 }],
+    ['Bergsgatan', [[-927.4, -560], [-1351.7, -560]], { hw: 5 }],
+    ['Pipersgatan', [[-1280, -504.2], [-1280, -644.5]], { hw: 4.5 }],
+    ['Parmmätargatan', [[-1200, -442.0], [-1200, -643.3]], { hw: 4.5 }],
+    ['Pilgatan', [[-1250, -53.5], [-1250, -480.9]], { hw: 4.5 }],
+    ['Garvargatan', [[-1099.7, -205], [-1380, -205]], { hw: 4.5 }],
+    ['Sankt Eriksgatan', [[-1560, -62.8], [-1560, -1100]], { hw: 7 }],
+    ['Fridhemsgatan', [[-1470, -60.4], [-1470, -900]], { hw: 5 }],
+    ['Hantverkargatan', ['PH1', [-1560, -720]], { hw: 7 }],
+    ['Kungsholmsgatan', ['PH2', [-1560, -652]], { hw: 6 }],
+    ['Fleminggatan', ['PH3', [-1560, -900]], { hw: 7 }],
+    ['Norr Mälarstrand', ['NM1', [-1680, -66]], { hw: 7, walk: 8, trees: 'left' }],
+    ['Brännkyrkagatan', [[-252.1, 780.0], [-943.6, 1172.6]], { hw: 4.5 }],
+    ['Långholmsgatan', ['HG5', [-945, 1640]], { hw: 7 }],
+    ['Krukmakargatan', [[-560.0, 1140.0], [-948.2, 1360.3]], { hw: 4.5 }],
+    ['Timmermansgatan', [[-650, 1078.6], [-650, 1640]], { hw: 4.5 }],
+    ['Ringvägen', [[-945, 1640], [1000, 1630]], { hw: 8, median: true }],
+    ['Götgatan', ['GG5', [112, 1634.6]], { hw: 6.5 }],
+    ['Östgötagatan', ['OG3', [356, 1633.3]], { hw: 6 }],
+    ['Renstiernas gata', ['RG3', [606, 1632.0]], { hw: 6 }],
+    ['Swedenborgsgatan', ['SW3', [-550, 1638.0]], { hw: 5.5 }],
+    ['Wollmar Yxkullsgatan', [[81.1, 1330], [-554.7, 1372]], { hw: 5 }],
+    ['Folkungagatan', ['RG3', [930, 1474]], { hw: 7 }],
+    ['Tjärhovsgatan', ['RG2', [930, 1356]], { hw: 6 }],
+    ['Högbergsgatan', ['RG1', [930, 1162]], { hw: 5.5 }],
+    ['Åsögatan', [[338.4, 1226], [930, 1226]], { hw: 5 }],
+    ['Skånegatan', [[341.9, 1300], [930, 1300]], { hw: 5.5 }],
+    ['Bondegatan', [[347.5, 1428], [930, 1428]], { hw: 5 }],
+    ['Södermannagatan', [[462, 1156.1], [462, 1484.4]], { hw: 5 }],
+    ['Nytorgsgatan', [[762, 1162], [762, 1474]], { hw: 5 }],
+    ['Gotlandsgatan', [[255, 1372.2], [255, 1492.6]], { hw: 4.5 }],
+    // two gränder that really are on the other side of Gamla stan: Ankargränd between Trångsund and Prästgatan just
+    // west of Storkyrkan, and Triewaldsgränd from Järntorget down to Kornhamnstorg
+    ['Ankargränd', [[-90.4, 176], [-116, 176]], { kind: 'lane', hw: 1.3, walk: 0.2 }],
+    ['Triewaldsgränd', ['gJT', [-24, 496.4]], { kind: 'lane', hw: 1.6, walk: 0.2 }],
+    // Vasastan's north: Sankt Eriksbron over Karlbergssjön, Karlbergsvägen to Odenplan, Sveavägen and Norrtullsgatan up
+    // to Norrtull, Vanadisvägen across to Roslagstull
+    ['Sankt Eriksgatan', [[-1560, -1100], [-1560, -1172]], { hw: 7 }],
+    ['Sankt Eriksbron', [[-1560, -1172], [-1560, -1268]], { hw: 7, bridge: true }],
+    ['Sankt Eriksgatan', [[-1560, -1268], 'SEP', [-1560, -2073.4]], { hw: 7 }],
+    ['Karlbergsvägen', [[-2400, -1460], 'SEP', 'ODP'], { hw: 6.5 }],
+    ['Norrtullsgatan', [[-800, -1468], 'NTL'], { hw: 6 }],
+    ['Sveavägen', [[-653.3, -1468], 'NTL'], { hw: 9, trees: 'both' }],
+    ['Uppsalavägen', ['NTL', [-905, -2375]], { hw: 9, limit: 90 }],
+    ['Norra Stationsgatan', [[-1900, -2080], 'NTL', [-32.02, -2045]], { hw: 6 }],
+    ['Vanadisvägen', [[-1560, -1775], 'RTU'], { hw: 6 }],
+    ['Dalagatan', [[-1300, -1433.2], [-1310, -2068.54]], { hw: 5.5 }],
+    ['Tulegatan', [[-338, -1468], [-367.7, -1717.4]], { hw: 4.5 }],
+    ['Birger Jarlsgatan', [[24, -1468], 'RTU'], { hw: 7.5, walk: 5 }],
+    ['Roslagsvägen', ['RTU', [-55, -2375]], { hw: 8, limit: 90 }],
+    // Östermalm up to Valhallavägen, Karlaplan, Narvavägen down to Strandvägen, and Lidingövägen out over Gärdet
+    ['Valhallavägen', ['RTU', [1150, -1640], 'LVV'], { hw: 9, median: true }],
+    ['Grev Turegatan', [[300, -1180], [300, -1684.04]], { hw: 5 }],
+    ['Nybrogatan', ['NY3', [370, -1680.42]], { hw: 6 }],
+    ['Sibyllegatan', ['SI3', [555, -1670.83]], { hw: 5.5 }],
+    ['Skeppargatan', [[615, -1180], [615, -1667.72]], { hw: 5 }],
+    ['Grevgatan', ['GR3', [730, -1661.76]], { hw: 5.5 }],
+    ['Banérgatan', ['BA3', [930, -1651.4]], { hw: 6 }],
+    ['Östermalmsgatan', [[43.53, -1320], [1236.44, -1320]], { hw: 5.5 }],
+    ['Karlavägen', ['BA3', 'KPL'], { hw: 9, median: true }],
+    ['Narvavägen', ['SV4', 'KPL'], { hw: 8, median: true }],
+    ['Riddargatan', ['BAr', [1078.16, -730]], { hw: 5.5 }],
+    ['Storgatan', ['BAs', [1084.23, -862]], { hw: 5.5 }],
+    ['Linnégatan', ['BA2', [1090.48, -998]], { hw: 6.5 }],
+    ['Lidingövägen', ['KPL', 'LVV', [1800, -1800], [2300, -1900], [2900, -2000]], { hw: 8 }],
+    ['Dag Hammarskjölds väg', ['SV4', [1500, -610], [1950, -655], [2350, -712], 'DHN'], { hw: 6 }],
+    ['Kaknäsvägen', ['DHN', [2600, -1100], [2550, -1941.67]], { hw: 6 }],
+    // Djurgården: over the canal at Djurgårdsbrunn, Rosendal, Gröna Lund, Skansen and out to Blockhusudden
+    ['Djurgårdsbrunnsbron', ['DHN', 'DBS'], { hw: 5, bridge: true }],
+    ['Djurgårdsbrunnsvägen', ['DBS', 'RDL', 'BHU'], { hw: 5 }],
+    ['Rosendalsvägen', ['DJ2', [1600, -160], [2200, -300], 'RDL'], { hw: 5 }],
+    ['Djurgårdsvägen', ['DJ3', 'GLU', [1550, 520], [1850, 540], [2150, 400], [2450, 300], [2750, 200], [3000, 50], 'BHU'], { hw: 5.5 }],
+    // Söder: Stadsgårdsleden along the water to Danvikstull and over Danviksbron to Nacka, Götgatan over Skanstullsbron
+    // to Johanneshov, Globen and Hammarby sjöstad
+    ['Stadsgårdsleden', ['KV2', [1000, 790], [1300, 825], [1600, 860], [1820, 925], 'DVT'], { hw: 8 }],
+    ['Folkungagatan', [[930, 1474], 'DVT'], { hw: 7 }],
+    ['Danviksbron', ['DVT', 'NAK'], { hw: 7, bridge: true }],
+    ['Värmdövägen', ['NAK', [2600, 1330], [3270, 1360]], { hw: 7 }],
+    ['Sicklavägen', [[1870, 2360], 'SIK', [2140, 1720], 'NAK'], { hw: 6 }],
+    ['Götgatan', [[112, 1634.6], 'SKT'], { hw: 6.5 }],
+    ['Skanstullsbron', ['SKT', 'SKS'], { hw: 8, bridge: true, limit: 90 }],
+    ['Nynäsvägen', ['SKS', [300, 2400], [380, 2700], [420, 2970]], { hw: 8, limit: 90 }],
+    ['Hammarby Sjöväg', [[159.05, 2215], 'SIK'], { hw: 6 }],
+    ['Hammarby allé', [[261.9, 2350], [1870, 2360]], { hw: 7, trees: 'both' }],
+    ['Lugnets allé', [[800, 2191.74], [800, 2690]], { hw: 5.5 }],
+    ['Sickla kanalgata', [[1350, 2171.78], [1350, 2690]], { hw: 5 }],
+    ['Arenavägen', [[332, 2520], [800, 2525]], { hw: 7 }],
+    ['Palmfeltsvägen', [[377.33, 2690], [1350, 2690]], { hw: 6 }],
+    ['Erstagatan', [[930, 781.98], [930, 1630.36]], { hw: 5 }],
+    // west: Långholmsgatan up to Västerbron, which lands on Långholmen on its way over to Kungsholmen, Pålsundsbron, and
+    // Liljeholmsbron over Årstaviken
+    ['Långholmsgatan', ['HG5', 'VBS'], { hw: 7 }],
+    ['Västerbron', ['VBN', 'LHJ'], { hw: 7, bridge: true, limit: 90 }],
+    ['Västerbron', ['LHJ', 'VBS'], { hw: 7, bridge: true, limit: 90 }],
+    ['Långholmsmuren', [[-1290, 690], 'LHJ', [-1620, 655]], { hw: 4.5 }],
+    ['Pålsundsbron', [[-1300, 863.13], [-1290, 690]], { hw: 4.5, bridge: true }],
+    ['Långholmsgatan', [[-945, 1640], 'LJS'], { hw: 7 }],
+    ['Liljeholmsbron', ['LJS', 'LJH'], { hw: 7, bridge: true }],
+    ['Södertäljevägen', ['LJH', [-2680, 2480]], { hw: 8 }],
+    // Kungsholmen's west: Rålambshov, Marieberg, Drottningholmsvägen from Fridhemsplan, and Kungsholms strand
+    ['Norr Mälarstrand', [[-1680, -66], 'VBN', [-2050, -95], [-2400, -130]], { hw: 7, walk: 8, trees: 'left' }],
+    ['Rålambsvägen', [[-2050, -95], [-2080, -939.46]], { hw: 6 }],
+    ['Drottningholmsvägen', [[-1560, -900], [-2680, -985]], { hw: 8 }],
+    ['Gjörwellsgatan', [[-1560, -420], [-2400, -450]], { hw: 5.5 }],
+    ['Lindhagensgatan', [[-2400, -1160], [-2400, -130]], { hw: 6.5 }],
+    ['Kungsbro strand', ['KB2', [-935, -1150]], { hw: 5.5 }],
+    ['Kungsholms strand', [[-935, -1150], [-2400, -1160]], { hw: 5.5 }]
+  ];
+  {
+    const SNAP = 2.5, pt = (x, z, id) => ({ x, z, id: id || null });
+    const named = new Map(), named1 = (id) => named.get(id) || (named.set(id, pt(PTS[id][0], PTS[id][1], id)), named.get(id));
+    const chains = STREETS.map(([name, chain, o]) => ({ name, o, pts: chain.split(' ').map(named1) }))
+      .concat(MORE.map(([name, list, o]) => ({ name, o, pts: list.map((p) => (typeof p === 'string' ? named1(p) : pt(p[0], p[1]))) })));
+    const segs = [];
+    for (const ch of chains) for (let i = 0; i < ch.pts.length - 1; i++) {
+      const a = ch.pts[i], b = ch.pts[i + 1];
+      segs.push({ ch, a, b, ins: [], x0: Math.min(a.x, b.x) - SNAP, x1: Math.max(a.x, b.x) + SNAP, z0: Math.min(a.z, b.z) - SNAP, z1: Math.max(a.z, b.z) + SNAP });
+    }
+    const along = (p, s) => {
+      const dx = s.b.x - s.a.x, dz = s.b.z - s.a.z, t = ((p.x - s.a.x) * dx + (p.z - s.a.z) * dz) / (dx * dx + dz * dz);
+      return { t, d: Math.hypot(s.a.x + dx * t - p.x, s.a.z + dz * t - p.z) };
+    };
+    for (let i = 0; i < segs.length; i++) for (let j = i + 1; j < segs.length; j++) {
+      const s = segs[i], q = segs[j];
+      if (s.x1 < q.x0 || q.x1 < s.x0 || s.z1 < q.z0 || q.z1 < s.z0) continue;
+      if (s.a === q.a || s.a === q.b || s.b === q.a || s.b === q.b) continue;
+      // one street ending on another
+      let tee = false;
+      for (const [u, v] of [[s, q], [q, s]]) for (const p of [u.a, u.b]) {
+        const r = along(p, v);
+        if (r.d < SNAP && r.t > 0 && r.t < 1) { v.ins.push({ t: r.t, p }); tee = true; }
+      }
+      // two streets crossing (never in the middle of a bridge)
+      if (tee || s.ch.o.bridge || q.ch.o.bridge) continue;
+      const dx1 = s.b.x - s.a.x, dz1 = s.b.z - s.a.z, dx2 = q.b.x - q.a.x, dz2 = q.b.z - q.a.z, den = dx1 * dz2 - dz1 * dx2;
+      if (Math.abs(den) < 1e-9) continue;
+      const t = ((q.a.x - s.a.x) * dz2 - (q.a.z - s.a.z) * dx2) / den, u = ((q.a.x - s.a.x) * dz1 - (q.a.z - s.a.z) * dx1) / den;
+      if (t <= 0 || t >= 1 || u <= 0 || u >= 1) continue;
+      const p = pt(s.a.x + dx1 * t, s.a.z + dz1 * t);
+      s.ins.push({ t, p }); q.ins.push({ t: u, p });
+    }
+    // points a few metres apart are one junction (a named one wins, two named ones never merge)
+    const all = new Set();
+    for (const ch of chains) for (const p of ch.pts) all.add(p);
+    for (const s of segs) for (const r of s.ins) all.add(r.p);
+    const list = [...all], root = new Map(list.map((p) => [p, p]));
+    const find = (p) => { let r = p; while (root.get(r) !== r) r = root.get(r); root.set(p, r); return r; };
+    const cell = new Map(), key = (x, z) => Math.floor(x / SNAP) + ',' + Math.floor(z / SNAP);
+    for (const p of list) {
+      const cx = Math.floor(p.x / SNAP), cz = Math.floor(p.z / SNAP);
+      for (let ix = cx - 1; ix <= cx + 1; ix++) for (let iz = cz - 1; iz <= cz + 1; iz++) for (const q of cell.get(ix + ',' + iz) || []) {
+        const a = find(p), b = find(q);
+        if (a === b || Math.hypot(p.x - q.x, p.z - q.z) >= SNAP || (a.id && b.id)) continue;
+        if (b.id) root.set(a, b); else root.set(b, a);
+      }
+      const k = key(p.x, p.z);
+      if (!cell.has(k)) cell.set(k, []);
+      cell.get(k).push(p);
+    }
+    let made = 0;
+    const idOf = (p) => { const r = find(p); if (!r.id) { r.id = 'w' + made++; PTS[r.id] = [Math.round(r.x * 10) / 10, Math.round(r.z * 10) / 10]; } return r.id; };
+    const segsOf = new Map();
+    for (const s of segs) { if (!segsOf.has(s.ch)) segsOf.set(s.ch, []); segsOf.get(s.ch).push(s); }
+    STREETS.length = 0;
+    for (const ch of chains) {
+      const ids = [];
+      for (const s of segsOf.get(ch) || []) {
+        for (const p of [s.a, ...s.ins.sort((m, n) => m.t - n.t).map((r) => r.p), s.b]) { const id = idOf(p); if (ids[ids.length - 1] !== id) ids.push(id); }
+      }
+      if (ids.length > 1) STREETS.push([ch.name, ids.join(' '), ch.o]);
+    }
+  }
+
+  const nodes = [], edges = [], nodeIndex = new Map();
+  function nodeOf(id) {
+    if (nodeIndex.has(id)) return nodeIndex.get(id);
+    const p = PTS[id];
+    if (!p) throw new Error('unknown junction ' + id);
+    nodes.push({ id, x: p[0], z: p[1], nb: [], nbE: [], nbW: [], all: [], r: 0 });
+    nodeIndex.set(id, nodes.length - 1);
+    return nodes.length - 1;
+  }
+  const edgeKey = new Map();
+  for (const [name, chain, o] of STREETS) {
+    const ids = chain.split(' ');
+    for (let i = 0; i < ids.length - 1; i++) {
+      const a = nodeOf(ids[i]), b = nodeOf(ids[i + 1]), A = nodes[a], B = nodes[b];
+      const kind = o.kind || 'street', hw = o.hw || (kind === 'lane' ? 3.2 : 6);
+      const e = {
+        a, b, name, kind, hw, len: Math.hypot(B.x - A.x, B.z - A.z),
+        walk: o.walk !== undefined ? o.walk : kind === 'lane' ? 0.8 : kind === 'ped' ? 0.6 : hw >= 8 ? 6 : 4,
+        bridge: !!o.bridge, stairs: !!o.stairs, drive: kind === 'street', trees: o.trees || null, median: !!o.median,
+        // speed limits, raised for the game: 50 in the lanes, 70 on ordinary streets, 80 on the big streets and the
+        // bridges, 30 where people walk
+        limit: o.limit || (o.bridge ? 80 : kind === 'lane' ? 50 : kind === 'ped' ? 30 : hw >= 7 ? 80 : 70)
+      };
+      // where cars drive: the right-hand lane, the inner lane for overtaking, and the kerb lane for parking
+      e.lane = e.median ? hw * 0.62 : hw >= 8 ? hw * 0.6 : Math.min(LANE, hw * 0.5);
+      e.pass = hw >= 8 ? hw * 0.26 : -e.lane;
+      e.park = hw >= 6 && !e.bridge ? hw - 1.1 : null;
+      // police on blue lights may also take the lanes, the pedestrian streets and the squares, if a car fits
+      e.emerg = e.drive || (!e.stairs && hw >= 1.35);
+      e.i = edges.length;
+      edges.push(e);
+      A.all.push(e.i); B.all.push(e.i);
+      if (e.drive) { A.nb.push(b); B.nb.push(a); }
+      if (e.emerg) { A.nbE.push(b); B.nbE.push(a); }
+      A.nbW.push(b); B.nbW.push(a); // on foot every street, lane and stair goes
+      edgeKey.set(a + ',' + b, e); edgeKey.set(b + ',' + a, e);
+    }
+  }
+  for (const n of nodes) n.r = Math.max(...n.all.map((i) => edges[i].hw)) + 1;
+  const edgeBetween = (a, b) => edgeKey.get(a + ',' + b);
+
+  // edges by area, for finding the nearest street quickly
+  const EG = 64, egCells = new Map();
+  const egKey = (ix, iz) => ix * 10007 + iz;
+  for (const e of edges) {
+    const A = nodes[e.a], B = nodes[e.b], m = e.hw + e.walk + 30;
+    for (let ix = Math.floor((Math.min(A.x, B.x) - m) / EG); ix <= Math.floor((Math.max(A.x, B.x) + m) / EG); ix++)
+      for (let iz = Math.floor((Math.min(A.z, B.z) - m) / EG); iz <= Math.floor((Math.max(A.z, B.z) + m) / EG); iz++) {
+        const k = egKey(ix, iz);
+        if (!egCells.has(k)) egCells.set(k, []);
+        egCells.get(k).push(e);
+      }
+  }
+  const edgeDist = (e, x, z) => { const A = nodes[e.a], B = nodes[e.b]; return segDist(x, z, A.x, A.z, B.x, B.z); };
+  // every street closer than 30 m to a point is listed in that point's cell, so a hit under 30 m is final
+  function nearestEdge(x, z, filter) {
+    const scan = (list) => {
+      let best = null, bd = Infinity;
+      for (const e of list) { if (filter && !filter(e)) continue; const d = edgeDist(e, x, z); if (d < bd) { bd = d; best = e; } }
+      return { e: best, d: bd };
+    };
+    const cell = egCells.get(egKey(Math.floor(x / EG), Math.floor(z / EG)));
+    const r = cell ? scan(cell) : null;
+    return r && r.e && r.d < 30 ? r : scan(edges);
+  }
+  function edgesNear(x0, z0, x1, z1) {
+    const out = new Set();
+    for (let ix = Math.floor(x0 / EG); ix <= Math.floor(x1 / EG); ix++) for (let iz = Math.floor(z0 / EG); iz <= Math.floor(z1 / EG); iz++) {
+      const c = egCells.get(egKey(ix, iz));
+      if (c) for (const e of c) out.add(e);
+    }
+    return out;
+  }
+  // the first stretch from a towards b along the same street, if a junction was put between them
+  function edgeToward(a, b) {
+    const A = nodes[a], B = nodes[b], len = Math.hypot(B.x - A.x, B.z - A.z);
+    for (const i of A.all) {
+      const e = edges[i], o = nodes[e.a === a ? e.b : e.a];
+      if (segDist(o.x, o.z, A.x, A.z, B.x, B.z) < 1 && (o.x - A.x) * (B.x - A.x) + (o.z - A.z) * (B.z - A.z) > 0 && Math.hypot(o.x - A.x, o.z - A.z) < len + 1) return e;
+    }
+    return undefined;
+  }
+  function edgeFrame(a, b) {
+    const A = nodes[a], B = nodes[b], e = edgeBetween(a, b) || edgeToward(a, b);
+    const dx = B.x - A.x, dz = B.z - A.z, len = Math.hypot(dx, dz), ux = dx / len, uz = dz / len;
+    // (rx, rz) is the right-hand side when driving from A to B
+    return { A, B, ux, uz, rx: -uz, rz: ux, len, e, lane: e ? e.lane : LANE, pass: e ? e.pass : -LANE, park: e ? e.park : null };
+  }
+
+  /* ---------- where you can stand: a 1 m raster of land and bridges ---------- */
+  const RW = BOUNDS.x1 - BOUNDS.x0, RH = BOUNDS.z1 - BOUNDS.z0;
+  const ground = new Uint8Array(RW * RH); // 1 land, 2 bridge deck
+  // a bridge deck covers its street from bank to bank, as wide as street plus pavements
+  const bridgeRects = edges.filter((e) => e.bridge).map((e) => {
+    const A = nodes[e.a], B = nodes[e.b], ux = (B.x - A.x) / e.len, uz = (B.z - A.z) / e.len;
+    return { e, A, B, ux, uz, hw: e.hw + e.walk };
+  });
+  {
+    const T = 1024, cv = document.createElement('canvas');
+    cv.width = cv.height = T;
+    const g = cv.getContext('2d', { willReadFrequently: true });
+    for (let ty = 0; ty < RH; ty += T) for (let tx = 0; tx < RW; tx += T) {
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.clearRect(0, 0, T, T);
+      g.setTransform(1, 0, 0, 1, -tx - BOUNDS.x0, -ty - BOUNDS.z0);
+      g.fillStyle = '#f00';
+      for (const L of LANDS) { g.beginPath(); L.poly.forEach(([x, z], i) => (i ? g.lineTo(x, z) : g.moveTo(x, z))); g.closePath(); g.fill(); }
+      g.fillStyle = '#0f0';
+      for (const b of bridgeRects) {
+        const px = -b.uz * b.hw, pz = b.ux * b.hw;
+        g.beginPath(); g.moveTo(b.A.x + px, b.A.z + pz); g.lineTo(b.B.x + px, b.B.z + pz); g.lineTo(b.B.x - px, b.B.z - pz); g.lineTo(b.A.x - px, b.A.z - pz); g.closePath(); g.fill();
+      }
+      const w = Math.min(T, RW - tx), h = Math.min(T, RH - ty), d = g.getImageData(0, 0, w, h).data;
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        ground[(ty + y) * RW + tx + x] = (d[i] > 127 ? 1 : 0) | (d[i + 1] > 127 ? 2 : 0);
+      }
+    }
+  }
+  const groundAt = (x, z) => {
+    const ix = Math.floor(x - BOUNDS.x0), iz = Math.floor(z - BOUNDS.z0);
+    return ix < 0 || iz < 0 || ix >= RW || iz >= RH ? 0 : ground[iz * RW + ix];
+  };
+  const walkable = (x, z) => groundAt(x, z) !== 0;
+  const solidLand = (x, z) => groundAt(x, z) === 1; // land that is not a bridge deck
+  function districtAt(x, z) {
+    const gnd = groundAt(x, z);
+    if (gnd & 2) for (const b of bridgeRects) if (segDist(x, z, b.A.x, b.A.z, b.B.x, b.B.z) <= b.hw + 0.5 && !(gnd & 1)) return b.e.name;
+    return landName(x, z) || waterName(x, z);
+  }
+
+  /* ---------- obstacle grid: boxes (also rotated) and circles ---------- */
+  const GRID = 16, GOFF = 3000, GN = 400;
+  const grid = new Array(GN * GN);
+  let stamp = 0;
+  const gcell = (v) => clamp(Math.floor((v + GOFF) / GRID), 0, GN - 1);
+  function addObstacle(o, x0, z0, x1, z1) {
+    o.stamp = 0;
+    for (let ix = gcell(x0); ix <= gcell(x1); ix++) for (let iz = gcell(z0); iz <= gcell(z1); iz++) {
+      const k = ix * GN + iz; (grid[k] || (grid[k] = [])).push(o);
+    }
+  }
+  const addBox = (x0, z0, x1, z1, h = 99) => addObstacle({ t: 0, x0, z0, x1, z1, h }, x0, z0, x1, z1);
+  const addCircle = (x, z, r, h = 6) => addObstacle({ t: 1, x, z, r, h }, x - r, z - r, x + r, z + r);
+  // rotated box: centre, axis (c, s) for its local x, half sizes hx along it and hz across it
+  function addOBox(cx, cz, c, s, hx, hz, h = 99, y0) {
+    const ex = Math.abs(c) * hx + Math.abs(s) * hz, ez = Math.abs(s) * hx + Math.abs(c) * hz, o = { t: 2, cx, cz, c, s, hx, hz, h };
+    if (y0 !== undefined) o.y0 = y0;
+    addObstacle(o, cx - ex, cz - ez, cx + ex, cz + ez);
+    return o;
+  }
+  function forNear(x0, z0, x1, z1, fn) {
+    stamp++;
+    for (let ix = gcell(x0); ix <= gcell(x1); ix++) for (let iz = gcell(z0); iz <= gcell(z1); iz++) {
+      const cell = grid[ix * GN + iz];
+      if (!cell) continue;
+      // an obstacle can be switched off (an open cell door)
+      for (let i = 0; i < cell.length; i++) { const o = cell[i]; if (o.stamp === stamp || o.off) continue; o.stamp = stamp; fn(o); }
+    }
+  }
+  // push a circle of radius r out of a box given in its own frame; returns [push x, push z] in that frame or null
+  function boxPush(lx, lz, x0, z0, x1, z1, r) {
+    const cx = clamp(lx, x0, x1), cz = clamp(lz, z0, z1), dx = lx - cx, dz = lz - cz, d2 = dx * dx + dz * dz;
+    if (d2 >= r * r) return null;
+    if (d2 > 1e-9) { const d = Math.sqrt(d2); return [(dx / d) * (r - d), (dz / d) * (r - d)]; }
+    const e = [lx - x0, x1 - lx, lz - z0, z1 - lz], m = Math.min(e[0], e[1], e[2], e[3]);
+    return m === e[0] ? [-(m + r), 0] : m === e[1] ? [m + r, 0] : m === e[2] ? [0, -(m + r)] : [0, m + r];
+  }
+  // an obstacle with y0 (walls indoors) only stands between y0 and h, so it blocks someone standing at height y
+  // only on that storey; anything without a height (cars, spawn checks) counts as standing on the street
+  const outOfReach = (o, y = 0) => o.y0 !== undefined && (y + 1.8 <= o.y0 || y + 0.3 >= o.h);
+  function resolveWorld(x, z, r, y) {
+    let nx = 0, nz = 0, hit = false;
+    forNear(x - r, z - r, x + r, z + r, (o) => {
+      if (outOfReach(o, y)) return;
+      let px, pz;
+      if (o.t === 1) {
+        const rr2 = r + o.r, dx = x - o.x, dz = z - o.z, d2 = dx * dx + dz * dz;
+        if (d2 >= rr2 * rr2) return;
+        const d = Math.sqrt(d2) || 1e-4, pen = rr2 - d;
+        px = (dx / d) * pen; pz = (dz / d) * pen;
+      } else if (o.t === 0) {
+        const p = boxPush(x, z, o.x0, o.z0, o.x1, o.z1, r);
+        if (!p) return;
+        px = p[0]; pz = p[1];
+      } else {
+        const dx = x - o.cx, dz = z - o.cz, lx = dx * o.c + dz * o.s, lz = -dx * o.s + dz * o.c;
+        const p = boxPush(lx, lz, -o.hx, -o.hz, o.hx, o.hz, r);
+        if (!p) return;
+        px = p[0] * o.c - p[1] * o.s; pz = p[0] * o.s + p[1] * o.c;
+      }
+      const l = Math.hypot(px, pz) || 1;
+      x += px; z += pz; nx += px / l; nz += pz / l; hit = true;
+    });
+    return { x, z, nx, nz, hit };
+  }
+  const blockedAt = (x, z, r) => resolveWorld(x, z, r).hit;
+  // where a ray from (ax, az) along (dx, dz) first enters a box obstacle, as a fraction 0..1 of the ray (1: never)
+  function rayBox(o, ax, az, dx, dz, pad = 0) {
+    let px = ax, pz = az, vx = dx, vz = dz, x0, z0, x1, z1;
+    if (o.t === 0) { x0 = o.x0 - pad; z0 = o.z0 - pad; x1 = o.x1 + pad; z1 = o.z1 + pad; }
+    else if (o.t === 2) {
+      const ox = ax - o.cx, oz = az - o.cz;
+      px = ox * o.c + oz * o.s; pz = -ox * o.s + oz * o.c; vx = dx * o.c + dz * o.s; vz = -dx * o.s + dz * o.c;
+      x0 = -o.hx - pad; z0 = -o.hz - pad; x1 = o.hx + pad; z1 = o.hz + pad;
+    } else return 1;
+    let t0 = 0, t1 = 1;
+    for (const [p, d, lo, hi] of [[px, vx, x0, x1], [pz, vz, z0, z1]]) {
+      if (Math.abs(d) < 1e-9) { if (p < lo || p > hi) return 1; continue; }
+      let ta = (lo - p) / d, tb = (hi - p) / d;
+      if (ta > tb) { const t = ta; ta = tb; tb = t; }
+      t0 = Math.max(t0, ta); t1 = Math.min(t1, tb);
+      if (t0 > t1) return 1;
+    }
+    return t0;
+  }
+
+  /* ================= the city: ground, quays, streets ================= */
+  const AO = (y) => (y >= 4.5 ? 1 : y <= 0 ? 0.6 : 0.6 + 0.4 * Math.sqrt(y / 4.5));
+  // buildings are merged per 240 m square, so whole squares out of view are skipped when drawing
+  const CHUNK = 240, chunks = new Map();
+  const chunkKey = (x, z) => Math.floor(x / CHUNK) + ',' + Math.floor(z / CHUNK);
+  function cityAt(x, z) {
+    const k = chunkKey(x, z);
+    if (!chunks.has(k)) chunks.set(k, new Builder({ split: true, ao: AO }));
+    return chunks.get(k);
+  }
+  const paveB = new Builder(), roadB = new Builder(), avenueB = new Builder(), medianB = new Builder(), junctionB = new Builder();
+  const cobbleB = new Builder(), slabB = new Builder(), zebraB = new Builder(), signB = new Builder(), tB = new Builder();
+  const plazaB = new Builder(), grassB = new Builder(), railB = new Builder();
+  const mapPolys = [], mapGreens = [], mapSquares = [], mapLabels = [];
+  const lindens = [], cherries = [], lamps = [];
+  const GLASS_DARK = 0x26323c, GRANITE = 0x8f8b84, CURB = 0xa19d96, IRON = 0x2d3b35;
+  const SHOP_SIGNS = [0x0a5ba8, 0xc8102e, 0x1f6b44, 0x222428, 0xf2b705, 0x7a2a5a, 0xe8e8e8, 0xd2691e];
+  const grassTex = canvasTex(256, 256, (g, w, h) => {
+    g.fillStyle = '#5b8a3c'; g.fillRect(0, 0, w, h);
+    blotches(g, w, h, 30, '40,70,25', 0.25, 10, 40);
+    blotches(g, w, h, 20, '130,160,70', 0.18, 10, 30);
+    grain(g, 0, 0, w, h, 16000, 'rgba(30,60,20,.4)', 'rgba(150,190,90,.35)', 1.6);
+  }, true);
+
+  /* ---------- polygon helpers ---------- */
+  function polyBox(P) {
+    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+    for (const [x, z] of P) { x0 = Math.min(x0, x); z0 = Math.min(z0, z); x1 = Math.max(x1, x); z1 = Math.max(z1, z); }
+    return [x0, z0, x1, z1];
+  }
+  const centroid = (P) => [P.reduce((a, p) => a + p[0], 0) / P.length, P.reduce((a, p) => a + p[1], 0) / P.length];
+  const axisPoly = (x0, z0, x1, z1) => [[x0, z0], [x1, z0], [x1, z1], [x0, z1]];
+  // a rectangle in a frame [ox, oz, cos, sin] (see Builder.setFrame), as world corners
+  const rectPoly = (fr, x0, z0, x1, z1) => [[x0, z0], [x1, z0], [x1, z1], [x0, z1]].map(([x, z]) => [fr[0] + x * fr[2] - z * fr[3], fr[1] + x * fr[3] + z * fr[2]]);
+  // separating-axis test for two convex polygons
+  function overlaps(P, Q) {
+    for (const poly of [P, Q]) for (let i = 0; i < poly.length; i++) {
+      const a = poly[i], b = poly[(i + 1) % poly.length], nx = a[1] - b[1], nz = b[0] - a[0];
+      let p0 = Infinity, p1 = -Infinity, q0 = Infinity, q1 = -Infinity;
+      for (const [x, z] of P) { const d = x * nx + z * nz; p0 = Math.min(p0, d); p1 = Math.max(p1, d); }
+      for (const [x, z] of Q) { const d = x * nx + z * nz; q0 = Math.min(q0, d); q1 = Math.max(q1, d); }
+      if (p1 <= q0 + 1e-6 || q1 <= p0 + 1e-6) return false;
+    }
+    return true;
+  }
+  const orient = (ax, az, bx, bz, cx, cz) => (bx - ax) * (cz - az) - (bz - az) * (cx - ax);
+  const segsCross = (ax, az, bx, bz, cx, cz, dx, dz) =>
+    orient(ax, az, bx, bz, cx, cz) * orient(ax, az, bx, bz, dx, dz) < 0 && orient(cx, cz, dx, dz, ax, az) * orient(cx, cz, dx, dz, bx, bz) < 0;
+  function segPolyDist(ax, az, bx, bz, P) {
+    if (pointInPoly(P, ax, az) || pointInPoly(P, bx, bz)) return 0;
+    let d = Infinity;
+    for (let i = 0; i < P.length; i++) {
+      const [px, pz] = P[i], [qx, qz] = P[(i + 1) % P.length];
+      if (segsCross(ax, az, bx, bz, px, pz, qx, qz)) return 0;
+      d = Math.min(d, segDist(px, pz, ax, az, bx, bz), segDist(ax, az, px, pz, qx, qz), segDist(bx, bz, px, pz, qx, qz));
+    }
+    return d;
+  }
+  // everything already built or set aside, by area
+  const PH = 40, taken = new Map();
+  function take(P) {
+    const [x0, z0, x1, z1] = polyBox(P);
+    for (let ix = Math.floor(x0 / PH); ix <= Math.floor(x1 / PH); ix++) for (let iz = Math.floor(z0 / PH); iz <= Math.floor(z1 / PH); iz++) {
+      const k = ix * 10007 + iz;
+      if (!taken.has(k)) taken.set(k, []);
+      taken.get(k).push(P);
+    }
+  }
+  function isTaken(P) {
+    const [x0, z0, x1, z1] = polyBox(P), seen = new Set();
+    for (let ix = Math.floor(x0 / PH); ix <= Math.floor(x1 / PH); ix++) for (let iz = Math.floor(z0 / PH); iz <= Math.floor(z1 / PH); iz++) {
+      const c = taken.get(ix * 10007 + iz);
+      if (c) for (const Q of c) { if (seen.has(Q)) continue; seen.add(Q); if (overlaps(P, Q)) return true; }
+    }
+    return false;
+  }
+  // can a building stand here: firm land all round, clear of every street and its pavements, nothing else in the way
+  function fits(P, margin = 0) {
+    const [x0, z0, x1, z1] = polyBox(P), [cx, cz] = centroid(P);
+    if (!solidLand(cx, cz)) return false;
+    for (let i = 0; i < P.length; i++) {
+      const [ax, az] = P[i], [bx, bz] = P[(i + 1) % P.length];
+      if (!solidLand(ax, az) || !solidLand((ax + bx) / 2, (az + bz) / 2)) return false;
+    }
+    for (const e of edgesNear(x0 - 30, z0 - 30, x1 + 30, z1 + 30)) {
+      const A = nodes[e.a], B = nodes[e.b];
+      if (segPolyDist(A.x, A.z, B.x, B.z, P) < e.hw + e.walk - 0.25 + margin) return false;
+    }
+    return !isTaken(P);
+  }
+  // fill a flat polygon at height y; uvScale maps world metres to texture repeats
+  function triangulate(B, P, y, col, uvScale) {
+    const contour = P.map(([x, z]) => new THREE.Vector2(x, z));
+    if (THREE.ShapeUtils.isClockWise(contour)) contour.reverse();
+    for (const [i, j, k] of THREE.ShapeUtils.triangulateShape(contour, [])) {
+      const t = [contour[i], contour[j], contour[k]];
+      B.tri([t[0].x, y, t[0].y], [t[1].x, y, t[1].y], [t[2].x, y, t[2].y], col, [0, 1, 0], uvScale ? t.map((v) => [v.x / uvScale, -v.y / uvScale]) : null);
+    }
+  }
+
+  /* ---------- land, quays and water edges ---------- */
+  for (const L of LANDS) {
+    triangulate(paveB, L.poly, 0, 0xffffff, 4);
+    // granite quay walls down to the water, with a coping stone along the top
+    for (let i = 0; i < L.poly.length; i++) {
+      const [ax, az] = L.poly[i], [bx, bz] = L.poly[(i + 1) % L.poly.length];
+      const onEdge = (x, z) => x <= BOUNDS.x0 || x >= BOUNDS.x1 || z <= BOUNDS.z0 || z >= BOUNDS.z1;
+      if (onEdge(ax, az) && onEdge(bx, bz)) continue;
+      const B = cityAt((ax + bx) / 2, (az + bz) / 2);
+      const len = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / len, uz = (bz - az) / len;
+      // the wall faces the water: away from the inside of the land
+      let ox = uz, oz = -ux;
+      if (pointInPoly(L.poly, (ax + bx) / 2 + ox, (az + bz) / 2 + oz)) { ox = -ox; oz = -oz; }
+      B.quad([ax, WATER_Y - 1.5, az], [bx, WATER_Y - 1.5, bz], [bx, 0.06, bz], [ax, 0.06, az], GRANITE, null, [ox, 0, oz]);
+      const cx = ox * 0.3, cz = oz * 0.3;
+      B.quad([ax + cx, 0.18, az + cz], [bx + cx, 0.18, bz + cz], [bx - cx, 0.18, bz - cz], [ax - cx, 0.18, az - cz], 0x9d998f, null, [0, 1, 0]);
+      for (const sgn of [1, -1]) B.quad([ax + cx * sgn, 0, az + cz * sgn], [bx + cx * sgn, 0, bz + cz * sgn], [bx + cx * sgn, 0.18, bz + cz * sgn], [ax + cx * sgn, 0.18, az + cz * sgn], 0x9d998f, null, [cx * sgn, 0, cz * sgn]);
+    }
+  }
+
+  /* ---------- parks, squares and the rail yard ---------- */
+  const PARKS = [
+    { name: 'Kungsträdgården', poly: [[-38, -372], [97, -372], [97, -634], [-38, -634]], kind: 'kungstradgarden' },
+    { name: 'Berzelii park', poly: [[130, -640], [262, -640], [275, -565], [130, -565]], trees: 10 },
+    { name: 'Humlegården', poly: [[140, -1012], [168, -1035], [220, -1160], [82, -1162]], trees: 26 },
+    { name: 'Mariatorget', poly: [[-548, 1052], [-492, 1030], [-420, 1068], [-548, 1120]], trees: 12, fountain: true },
+    { name: 'Katarina kyrkogård', poly: [[160, 1190], [320, 1190], [320, 1335], [160, 1335]], trees: 20 },
+    { name: 'Observatorielunden', poly: [[-779, -1408], [-688, -1408], [-688, -1340], [-779, -1340]], trees: 14 },
+    { name: 'Tegnérlunden', poly: [[-845, -1222], [-788, -1222], [-788, -1162], [-845, -1162]], trees: 10 },
+    { name: 'Johannes kyrkogård', poly: [[-294, -1238], [-198, -1238], [-198, -1164], [-294, -1164]], trees: 10 },
+    { name: 'Klara kyrkogård', poly: [[-466, -574], [-437, -574], [-412, -482], [-466, -482]], trees: 6 },
+    { name: 'Nytorget', poly: [[640, 1238], [720, 1238], [720, 1288], [640, 1288]], trees: 10 },
+    // further out: Vanadislunden, the woods of Lill-Jansskogen, the open field of Ladugårdsgärdet, Rålambshovsparken,
+    // Skansen on Djurgården and the woods of Nacka
+    { name: 'Vanadislunden', poly: [[-1280, -1785], [-960, -1770], [-945, -2030], [-1280, -2040]], trees: 40 },
+    { name: 'Lill-Jansskogen', poly: [[920, -1700], [1420, -1580], [1690, -1790], [1760, -2370], [920, -2370]], trees: 170 },
+    { name: 'Ladugårdsgärdet', poly: [[1560, -770], [2450, -840], [2500, -1560], [1950, -1720], [1560, -1380]], trees: 16 },
+    { name: 'Rålambshovsparken', poly: [[-1730, -120], [-2030, -125], [-2035, -395], [-1730, -395]], trees: 30 },
+    { name: 'Skansen', poly: [[1450, 30], [1900, 0], [1980, 300], [1700, 440], [1480, 330]], trees: 50, kind: 'skansen' },
+    { name: 'Nackareservatet', poly: [[2180, 1420], [3270, 1420], [3270, 2970], [2100, 2970], [2140, 1950]], trees: 220 }
+  ];
+  const SQUARES = [
+    { name: 'Karl XII:s torg', poly: [[-5, -352], [97, -352], [97, -280], [-5, -280]], statue: [45, -305] },
+    { name: 'Gustav Adolfs torg', poly: [[-166, -345], [-112, -345], [-112, -292], [-166, -292]], statue: [-140, -320] },
+    { name: 'Hötorget', poly: (() => { const f = edgeFrame(nodeIndex.get('S2'), nodeIndex.get('S3')); return rectPoly(lotFrame(f, -1, 33, 66, f.e.hw + f.e.walk + 0.5 + 33), 0, 0, 66, 22); })(), market: true },
+    { name: 'Sergels torg', poly: [[-308, -622], [-200, -622], [-200, -590], [-308, -590]], plaza: true },
+    { name: 'Stortorget', poly: [[-94, 193], [-39, 193], [-39, 211], [-53, 237], [-95, 234]], cobble: true, well: [-68, 214] },
+    { name: 'Slottsbacken', poly: [[64, -58], [150, -66], [188, 10], [188, 30], [100, 58], [64, 58]], cobble: true, obelisk: [128, 18] },
+    { name: 'Yttre borggården', poly: [[-95, -39], [-63, -39], [-63, 39], [-95, 39]], cobble: true },
+    { name: 'Järntorget', poly: [[-36, 432], [4, 436], [10, 452], [-34, 452]], cobble: true },
+    { name: 'Köpmantorget', poly: [[100, 224], [118, 224], [118, 240], [100, 240]], cobble: true, statue: [109, 232] },
+    { name: 'Brända tomten', poly: [[70, 268], [84, 268], [84, 282], [70, 282]], cobble: true, tree: [76, 275] },
+    { name: 'Riddarhustorget', poly: [[-213, -10], [-201, -10], [-201, 20], [-213, 20]], statue: [-207, 6] },
+    { name: 'Medborgarplatsen', poly: [[100, 1385], [205, 1385], [205, 1460], [100, 1460]] },
+    { name: 'Norrmalmstorg', poly: [[150, -700], [200, -700], [200, -668], [150, -668]] },
+    { name: 'Brunkebergstorg', poly: [[-168, -632], [-132, -632], [-132, -594], [-168, -594]] },
+    { name: 'Östermalmstorg', poly: [[362, -925], [412, -925], [412, -881], [362, -881]] },
+    { name: 'Mosebacke torg', poly: [[185, 800], [235, 800], [235, 845], [185, 845]], cobble: true },
+    { name: 'Gröna Lund', poly: [[1215, 450], [1335, 432], [1430, 500], [1440, 610], [1370, 622], [1290, 545]], tivoli: true }
+  ];
+  const RAIL_YARD = [[-845, -310], [-618, -310], [-660, -430], [-695, -545], [-730, -684], [-768, -835], [-845, -835]];
+  // islands that are mostly lawn and trees
+  const GREEN_ISLANDS = ['Skeppsholmen', 'Kastellholmen', 'Djurgården', 'Långholmen'];
+  /* ---------- Gröna Lund: the amusement park on Djurgården's shore ---------- */
+  // A Ferris wheel turning slowly on its A-frames, the free-fall tower whose ring of seats climbs to the top and drops,
+  // a carousel and a roller coaster, behind the gate with the sign. The moving parts turn in TIVOLI.update.
+  const TIVOLI = (() => {
+    const T = { wheel: null, gondolas: [], ring: null, carousel: null, t: 0, ringY: 2 };
+    const mat = std({ vertexColors: true, roughness: 0.45, metalness: 0.25 });
+    const mesh = (m, x, y, z) => { const o = new THREE.Mesh(m.build(), mat); o.position.set(x, y, z); o.castShadow = true; o.receiveShadow = true; scene.add(o); return o; };
+    const WHEEL = { x: 1330, z: 455, R: 16, y: 19 }, TOWER = { x: 1405, z: 575, h: 80 }, CAROUSEL = { x: 1370, z: 540 };
+    T.build = () => {
+      // the Ferris wheel: A-frames either side, and the wheel (rims, spokes, hub) in a group that turns
+      {
+        const { x, z, R, y } = WHEEL, st = new Merger(), wh = new Merger();
+        for (const s of [-1, 1]) {
+          tubeTo(st, [-9, 0, s * 2.6], [0, y, s * 1.7], 0.32, 0xe8e8e4); tubeTo(st, [9, 0, s * 2.6], [0, y, s * 1.7], 0.32, 0xe8e8e4);
+          tubeTo(st, [-4.5, y / 2, s * 2.2], [4.5, y / 2, s * 2.2], 0.18, 0xe8e8e4);
+          addCircle(x - 9, z + s * 2.6, 0.5, y); addCircle(x + 9, z + s * 2.6, 0.5, y);
+        }
+        tubeTo(st, [0, y, -1.9], [0, y, 1.9], 0.45, 0x8a8f94);
+        mesh(st, x, 0, z);
+        for (const s of [-1, 1]) {
+          wh.add(new THREE.TorusGeometry(R, 0.22, 6, 56), 0xf2f2ee, 0, 0, s * 1.2);
+          wh.add(new THREE.TorusGeometry(R * 0.55, 0.14, 6, 40), 0xd8203a, 0, 0, s * 1.2);
+          for (let k = 0; k < 16; k++) { const a = (k / 16) * TAU; wh.add(new THREE.BoxGeometry(0.14, R, 0.14), 0xf2f2ee, Math.cos(a) * R / 2, Math.sin(a) * R / 2, s * 1.2, 0, 0, a - Math.PI / 2); }
+        }
+        wh.add(new THREE.CylinderGeometry(1.2, 1.2, 2.8, 16), 0xd8203a, 0, 0, 0, Math.PI / 2, 0, 0);
+        T.wheel = mesh(wh, x, y, z);
+        const cols = [0xd8203a, 0xf2c200, 0x1f6bd8, 0x2fa84f];
+        for (let k = 0; k < 12; k++) {
+          const g = new Merger(), c = cols[k % 4];
+          g.box(1.8, 1.5, 1.6, c, 0, -1.25, 0); g.box(2.0, 0.12, 1.8, 0xf2f2ee, 0, -0.45, 0); g.box(1.82, 0.7, 1.62, 0x2a3946, 0, -1.0, 0);
+          T.gondolas.push(mesh(g, x, y, z));
+        }
+        addBox(x - R - 1, z - 2, x + R + 1, z + 2, y + R);
+      }
+      // the free-fall tower: a mast of steel rings and a ring of seats round it
+      {
+        const { x, z, h } = TOWER, m = new Merger(), r = new Merger();
+        m.add(new THREE.CylinderGeometry(1.3, 1.6, h, 10), 0x2a8fa0, 0, h / 2, 0);
+        for (let y = 6; y < h; y += 6) m.add(new THREE.CylinderGeometry(1.75, 1.75, 0.5, 10), 0xf2f2ee, 0, y, 0);
+        m.add(new THREE.CylinderGeometry(2.4, 2.0, 3, 10), 0xd8203a, 0, h + 1.5, 0);
+        m.add(new THREE.CylinderGeometry(4.5, 4.8, 1.2, 16), 0x8a8f94, 0, 0.6, 0);
+        mesh(m, x, 0, z);
+        r.add(new THREE.CylinderGeometry(3.6, 3.6, 0.9, 16), 0xf2c200, 0, 0, 0);
+        for (let k = 0; k < 12; k++) { const a = (k / 12) * TAU; r.box(0.7, 1.1, 0.6, k % 2 ? 0xd8203a : 0x1f6bd8, Math.cos(a) * 3.3, -0.9, Math.sin(a) * 3.3); }
+        T.ring = mesh(r, x, 2, z);
+        addCircle(x, z, 4.8, h + 3);
+      }
+      // the carousel: a striped roof on a pole over a turning platform of horses
+      {
+        const { x, z } = CAROUSEL, m = new Merger(), base = new Merger();
+        base.add(new THREE.CylinderGeometry(7.4, 7.6, 0.5, 24), 0x8a6a46, 0, 0.25, 0);
+        mesh(base, x, 0, z);
+        m.add(new THREE.CylinderGeometry(0.5, 0.5, 5.6, 10), 0xd4a53a, 0, 2.8, 0);
+        for (let k = 0; k < 12; k++) {
+          const a = (k / 12) * TAU, c = k % 2 ? 0xf2f2ee : 0xd8203a;
+          m.add(new THREE.CylinderGeometry(0.3, 7.3, 2.4, 3, 1, true, a, TAU / 12), c, 0, 6.6, 0);
+          const hx = Math.cos(a) * 5.4, hz = Math.sin(a) * 5.4;
+          m.add(new THREE.CylinderGeometry(0.06, 0.06, 4.6, 6), 0xd4a53a, hx, 3.0, hz);
+          m.box(0.4, 0.7, 1.4, k % 3 ? 0xf2f2ee : 0x6b4f35, hx, 1.8 + (k % 2) * 0.4, hz);
+        }
+        T.carousel = mesh(m, x, 0.5, z);
+        addCircle(x, z, 7.8, 8);
+      }
+      // the roller coaster: a red track looping up and down on white legs
+      {
+        const pts = [];
+        for (let i = 0; i < 12; i++) { const a = (i / 12) * TAU; pts.push(new THREE.Vector3(1300 + Math.cos(a) * 30, 3 + 7 * (1 + Math.sin(a * 2 + 0.6)) + (i % 3 === 0 ? 4 : 0), 500 + Math.sin(a) * 17)); }
+        const curve = new THREE.CatmullRomCurve3(pts, true), m = new Merger();
+        const tube = new THREE.TubeGeometry(curve, 160, 0.35, 6, true), track = tube.toNonIndexed(); tube.dispose();
+        m.add(track, 0xd8203a);
+        for (let i = 0; i < 28; i++) {
+          const q = curve.getPoint(i / 28);
+          tubeTo(m, [q.x, 0, q.z], [q.x, q.y - 0.3, q.z], 0.16, 0xf2f2ee, 0.16, 6);
+          addCircle(q.x, q.z, 0.3, q.y);
+        }
+        const o = new THREE.Mesh(m.build(), mat); o.castShadow = true; scene.add(o);
+      }
+      // the gate on the road, its sign lit
+      {
+        const signTex = canvasTex(512, 96, (g, w, h) => {
+          g.fillStyle = '#1d7a3a'; g.fillRect(0, 0, w, h);
+          g.fillStyle = '#ffe14a'; g.font = '900 64px Overpass, "Arial Black", Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('GRÖNA LUND', w / 2, h / 2 + 4, w - 24);
+        });
+        const gx = 1352, gz = 446, c = 0.878, sn = 0.479, B = cityAt(gx, gz), sb = new Builder();
+        for (const s of [-1, 1]) { B.box(gx + s * c * 6 - 0.5, 0, gz + s * sn * 6 - 0.5, gx + s * c * 6 + 0.5, 6.5, gz + s * sn * 6 + 0.5, 0x1d7a3a); addCircle(gx + s * c * 6, gz + s * sn * 6, 0.7, 6.5); }
+        const P = (u, y, o) => [gx + c * u - sn * o, y, gz + sn * u + c * o];
+        sb.quad(P(-6.5, 5, -0.6), P(6.5, 5, -0.6), P(6.5, 7.4, -0.6), P(-6.5, 7.4, -0.6), 0xffffff, [[0, 0], [1, 0], [1, 1], [0, 1]], [sn, 0, -c]);
+        sb.quad(P(6.5, 5, 0.6), P(-6.5, 5, 0.6), P(-6.5, 7.4, 0.6), P(6.5, 7.4, 0.6), 0xffffff, [[0, 0], [1, 0], [1, 1], [0, 1]], [-sn, 0, c]);
+        scene.add(new THREE.Mesh(sb.build(), std({ map: signTex, emissive: 0x555555, emissiveMap: signTex, roughness: 0.4 })));
+      }
+      mapLabels.push(['Gröna Lund', 1330, 530, 'landmark']);
+    };
+    T.update = (dt) => {
+      T.t += dt;
+      if (!T.wheel) return;
+      const a = T.t * 0.07;
+      T.wheel.rotation.z = a;
+      T.gondolas.forEach((g, k) => { const b = a + (k / T.gondolas.length) * TAU; g.position.set(WHEEL.x + Math.cos(b) * WHEEL.R, WHEEL.y + Math.sin(b) * WHEEL.R, WHEEL.z); });
+      T.carousel.rotation.y = T.t * 0.6;
+      // the free fall: up slowly, a wait at the top, the drop, then the brakes
+      const c = T.t % 22, top = TOWER.h - 6;
+      let y;
+      if (c < 9) y = lerp(2, top, c / 9);
+      else if (c < 12) y = top;
+      else if (c < 15) { const u = c - 12; y = Math.max(14, top - 0.5 * 9.81 * u * u); }
+      else if (c < 17) y = lerp(14, 2, (c - 15) / 2);
+      else y = 2;
+      T.ring.position.y = y;
+    };
+    return T;
+  })();
+  for (const p of PARKS) { take(p.poly); mapGreens.push(p.poly); mapLabels.push([p.name, ...centroid(p.poly), 'park']); }
+  for (const q of SQUARES) { take(q.poly); mapSquares.push(q.poly); mapLabels.push([q.name, ...centroid(q.poly), 'square']); }
+  take(RAIL_YARD);
+  for (const L of LANDS) if (GREEN_ISLANDS.includes(L.name)) { triangulate(grassB, L.poly, 0.012, 0xffffff, 6); mapGreens.push(L.poly); }
+  function treesIn(P, n, list, s0 = 0.85, s1 = 1.2) {
+    const [x0, z0, x1, z1] = polyBox(P);
+    for (let tries = 0, made = 0; tries < n * 8 && made < n; tries++) {
+      const x = rr(x0, x1), z = rr(z0, z1);
+      if (!pointInPoly(P, x, z) || !solidLand(x, z)) continue;
+      const ne = nearestEdge(x, z);
+      if (ne.e && ne.d < ne.e.hw + 2) continue;
+      if (blockedAt(x, z, 2.2)) continue;
+      list.push({ x, z, s: rr(s0, s1), r: rand() * TAU, v: rand() });
+      addCircle(x, z, 0.4);
+      made++;
+    }
+  }
+  function statue(x, z, h, col = 0x3b4a44) {
+    const B = cityAt(x, z);
+    B.box(x - 2.4, 0, z - 2.4, x + 2.4, 2.2, z + 2.4, 0x9a968e);
+    B.box(x - 1.8, 2.2, z - 1.8, x + 1.8, 2.5, z + 1.8, 0x8a867f);
+    B.box(x - 0.5, 2.5, z - 1.4, x + 0.5, 2.5 + h * 0.45, z + 1.4, col);
+    B.box(x - 0.35, 2.5 + h * 0.45, z - 0.3, x + 0.35, 2.5 + h, z + 0.4, col);
+    addCircle(x, z, 2.6, 2.5);
+  }
+  function fountain(cx, cz, r) {
+    const B = cityAt(cx, cz);
+    B.prism(cx, cz, r, 0, 0.6, 20, 0x9c9890);
+    B.prism(cx, cz, r - 0.4, 0.6, 0.62, 20, 0x3d86a8);
+    B.prism(cx, cz, 0.5, 0.6, 2.4, 10, 0x9c9890);
+    B.prism(cx, cz, 1.4, 2.0, 2.2, 12, 0x9c9890);
+    addCircle(cx, cz, r);
+  }
+  for (const p of PARKS) {
+    if (p.kind === 'kungstradgarden') {
+      // lawns on either side of the long gravel walk, cherry trees along it and Molins fontän in the middle
+      const [x0, z0, x1, z1] = polyBox(p.poly), mx = (x0 + x1) / 2, mz = (z0 + z1) / 2, pw = 4;
+      for (const [a, b, c, d] of [[x0 + 3, z0 + 3, mx - pw, mz - pw], [mx + pw, z0 + 3, x1 - 3, mz - pw], [x0 + 3, mz + pw, mx - pw, z1 - 3], [mx + pw, mz + pw, x1 - 3, z1 - 3]]) {
+        grassB.quad([a, 0.04, d], [c, 0.04, d], [c, 0.04, b], [a, 0.04, b], 0xffffff, [[a / 6, -d / 6], [c / 6, -d / 6], [c / 6, -b / 6], [a / 6, -b / 6]]);
+      }
+      for (let z = z0 + 8; z <= z1 - 8; z += 8) for (const x of [mx - 10, mx + 10]) {
+        if (Math.abs(z - mz) < 9) continue;
+        cherries.push({ x, z, s: 0.9 + rand() * 0.2, r: rand() * TAU, v: rand() }); addCircle(x, z, 0.35);
+      }
+      fountain(mx, mz, 5);
+      statue(mx, z1 - 30, 4.5);
+      continue;
+    }
+    triangulate(grassB, p.poly, 0.04, 0xffffff, 6);
+    if (p.fountain) { const [cx, cz] = centroid(p.poly); fountain(cx, cz, 4); }
+    if (p.kind === 'skansen') {
+      // Skansen, the open-air museum: red wooden cottages with white corners among the trees, and the brick tower
+      // Bredablick with its green cap
+      const tx = 1700, tz = 150, B = cityAt(tx, tz);
+      B.prism(tx, tz, 4.2, 0, 24, 8, 0x9a4a32);
+      B.prism(tx, tz, 4.7, 24, 25, 8, 0x8a4030);
+      B.prism(tx, tz, 3.8, 25, 29, 8, 0x9a4a32);
+      B.prism(tx, tz, 4.1, 29, 36, 8, 0x5f9c86, 0.3);
+      addCircle(tx, tz, 4.5, 36);
+      mapLabels.push(['Bredablick', tx, tz, 'landmark']);
+      for (const [x, z, a, w, d] of [[1540, 120, 0.2, 9, 6], [1580, 230, 1.1, 8, 6], [1650, 300, -0.3, 10, 7], [1760, 260, 0.6, 8, 6], [1820, 120, 1.4, 9, 6],
+        [1760, 60, 0.1, 8, 5], [1880, 220, -0.8, 9, 6], [1620, 60, 0.9, 7, 5]]) {
+        const c = Math.cos(a), sn = Math.sin(a), C = cityAt(x, z);
+        C.setFrame(x - (w / 2) * c + (d / 2) * sn, z - (w / 2) * sn - (d / 2) * c, c, sn);
+        C.box(0, 0, 0, w, 3.4, d, 0x8f2b1f);
+        for (const cx of [0, w]) C.box(cx - 0.12, 0, -0.06, cx + 0.12, 3.4, d + 0.06, 0xeeeae0, false, false);
+        C.box(w / 2 - 0.6, 1.0, -0.08, w / 2 + 0.6, 2.2, 0, 0xeeeae0, false, false);
+        C.hip(0, 0, w, d, 3.4, d * 0.45, 0.5, d / 2 - 0.05, 0x3d3a36);
+        C.setFrame();
+        addOBox(x, z, c, sn, w / 2 + 0.2, d / 2 + 0.2, 6);
+        mapPolys.push([rectPoly([x - (w / 2) * c + (d / 2) * sn, z - (w / 2) * sn - (d / 2) * c, c, sn], 0, 0, w, d), 0x8f2b1f]);
+      }
+    }
+  }
+  for (const q of SQUARES) {
+    if (q.tivoli) TIVOLI.build(q.poly);
+    if (q.plaza) triangulate(plazaB, q.poly, 0.03, 0xffffff, 4);
+    else triangulate(q.cobble ? cobbleB : slabB, q.poly, 0.03, 0xffffff, 4);
+    if (q.statue) statue(q.statue[0], q.statue[1], 5.5);
+    if (q.tree) { lindens.push({ x: q.tree[0], z: q.tree[1], s: 1.05, r: 0.3, v: 0.5 }); addCircle(q.tree[0], q.tree[1], 0.4); }
+    // the obelisk on Slottsbacken: a granite needle on a stepped plinth
+    if (q.obelisk) {
+      const [x, z] = q.obelisk, B = cityAt(x, z);
+      B.box(x - 3, 0, z - 3, x + 3, 0.5, z + 3, 0x9a968e);
+      B.box(x - 2.2, 0.5, z - 2.2, x + 2.2, 4, z + 2.2, 0x8a867f);
+      B.prism(x, z, 1.75, 4, 26, 4, 0x8f8a84, 1.0, false);
+      B.prism(x, z, 1.0, 26, 28, 4, 0x8f8a84, 0.01);
+      addBox(x - 3, z - 3, x + 3, z + 3, 28);
+    }
+    if (q.well) { const B = cityAt(...q.well); B.prism(q.well[0], q.well[1], 2.2, 0, 1.0, 12, 0x8f8a80); B.prism(q.well[0], q.well[1], 0.5, 1, 3.4, 8, 0x8f8a80); addCircle(q.well[0], q.well[1], 2.4); }
+    if (q.market) {
+      // Hötorget's market stalls with striped awnings, in two rows across the square
+      const [a, b, c, d] = q.poly, at2 = (u, v) => [lerp(lerp(a[0], b[0], u), lerp(d[0], c[0], u), v), lerp(lerp(a[1], b[1], u), lerp(d[1], c[1], u), v)];
+      for (let i = 0; i < 6; i++) {
+        const [x, z] = at2(0.18 + Math.floor(i / 2) * 0.32, i % 2 ? 0.72 : 0.28), B = cityAt(x, z);
+        B.box(x - 2, 0, z - 1.5, x + 2, 0.9, z + 1.5, 0x6b4f35);
+        B.box(x - 2.3, 2.2, z - 1.9, x + 2.3, 2.35, z + 1.9, i % 2 ? 0xc8102e : 0x1f6b44);
+        for (const [px, pz] of [[-2.1, -1.7], [2.1, -1.7], [-2.1, 1.7], [2.1, 1.7]]) B.box(x + px - 0.05, 0, z + pz - 0.05, x + px + 0.05, 2.2, z + pz + 0.05, 0xd8d8d8);
+        addBox(x - 2.3, z - 1.9, x + 2.3, z + 1.9, 2.3);
+      }
+    }
+  }
+  // tracks north of the Central Station, fenced off
+  {
+    triangulate(railB, RAIL_YARD, 0.02, 0xffffff, 9);
+    for (let i = 0; i < RAIL_YARD.length; i++) {
+      const [ax, az] = RAIL_YARD[i], [bx, bz] = RAIL_YARD[(i + 1) % RAIL_YARD.length];
+      const len = Math.hypot(bx - ax, bz - az), c = (bx - ax) / len, s = (bz - az) / len, B = cityAt((ax + bx) / 2, (az + bz) / 2);
+      B.setFrame(ax, az, c, s);
+      B.box(0, 1.6, -0.03, len, 1.75, 0.03, 0x2f3a33);
+      for (let x = 0; x <= len; x += 3) B.box(x - 0.04, 0, -0.04, x + 0.04, 1.8, 0.04, 0x2f3a33);
+      B.box(0, 0.3, -0.01, len, 1.6, 0.01, 0x3c4a40);
+      B.setFrame();
+      addOBox((ax + bx) / 2, (az + bz) / 2, c, s, len / 2, 0.15, 1.8);
+    }
+  }
+
+  /* ---------- streets ---------- */
+  const RY = 0.02;
+  const roadKind = (e) => e.kind === 'street';
+  for (const e of edges) {
+    const A = nodes[e.a], B = nodes[e.b], ux = (B.x - A.x) / e.len, uz = (B.z - A.z) / e.len, rx = -uz, rz = ux;
+    const c0 = A.r, c1 = e.len - B.r;
+    if (c1 - c0 < 0.3) continue;
+    const P = (s, lat) => [A.x + ux * s + rx * lat, RY, A.z + uz * s + rz * lat];
+    const corners = [P(c0, -e.hw), P(c1, -e.hw), P(c1, e.hw), P(c0, e.hw)];
+    if (e.kind === 'lane' || e.kind === 'ped') {
+      const uv = corners.map((p) => [p[0] / 4, -p[2] / 4]);
+      (e.kind === 'lane' ? cobbleB : slabB).quad(corners[0], corners[1], corners[2], corners[3], 0xffffff, uv, [0, 1, 0]);
+      if (e.stairs) for (let s = c0 + 0.4; s < c1 - 0.4; s += 0.9) {
+        const Bs = cityAt(A.x + ux * s, A.z + uz * s);
+        Bs.setFrame(A.x + ux * s - rx * e.hw, A.z + uz * s - rz * e.hw, rx, rz);
+        Bs.box(0, 0, -0.18, e.hw * 2, 0.07, 0.18, 0x8d877d);
+        Bs.setFrame();
+      }
+    } else {
+      const B2 = e.median ? medianB : e.hw >= 8 ? avenueB : roadB;
+      B2.quad(corners[0], corners[1], corners[2], corners[3], 0xffffff, [[0, c0 / 12], [0, c1 / 12], [1, c1 / 12], [1, c0 / 12]], [0, 1, 0]);
+      // kerbs
+      if (!e.bridge) for (const side of [1, -1]) {
+        const lat = side * (e.hw + 0.12), mid = P((c0 + c1) / 2, lat), Bc = cityAt(mid[0], mid[2]);
+        Bc.setFrame(A.x + ux * c0 + rx * lat, A.z + uz * c0 + rz * lat, ux, uz);
+        Bc.box(0, 0, -0.13, c1 - c0, 0.12, 0.13, CURB);
+        Bc.setFrame();
+      }
+      // zebra crossings near each end: stripes along the street, side by side across it
+      if (e.hw >= 4.5 && !e.bridge && c1 - c0 > 14) for (const s0 of [c0 + 1.2, c1 - 4.2]) {
+        for (let lat = -e.hw + 0.6; lat <= e.hw - 0.6; lat += 1.2) {
+          const a = P(s0, lat - 0.3), b = P(s0 + 3, lat - 0.3), cc = P(s0 + 3, lat + 0.3), d = P(s0, lat + 0.3);
+          a[1] = b[1] = cc[1] = d[1] = 0.035;
+          zebraB.quad(a, b, cc, d, 0xffffff, null, [0, 1, 0]);
+        }
+      }
+    }
+    mapLabels.push([e.name, (A.x + B.x) / 2, (A.z + B.z) / 2, 'street', Math.atan2(uz, ux), e]);
+  }
+  // junctions: each street's surface carries on into the middle (plain, without lines), with a small disc
+  // filling the wedges between streets that meet at an angle; the pavement corners stay sharp
+  nodes.forEach((n, ni) => {
+    const inc = n.all.map((i) => edges[i]);
+    const kindB = inc.some(roadKind) ? junctionB : inc.some((e) => e.kind === 'ped') ? slabB : cobbleB, k = kindB === junctionB ? 12 : 4;
+    const y = RY + 0.001, uv = (p) => [p[0] / k, -p[2] / k];
+    for (const e of inc) {
+      if (kindB === junctionB && !roadKind(e)) continue;
+      const o = nodes[e.a === ni ? e.b : e.a], ux = (o.x - n.x) / e.len, uz = (o.z - n.z) / e.len, rx = -uz, rz = ux;
+      const P = (s, lat) => [n.x + ux * s + rx * lat, y, n.z + uz * s + rz * lat];
+      const q = [P(0, -e.hw), P(n.r, -e.hw), P(n.r, e.hw), P(0, e.hw)];
+      kindB.quad(q[0], q[1], q[2], q[3], 0xffffff, q.map(uv), [0, 1, 0]);
+    }
+    const R = Math.min(...inc.filter((e) => kindB !== junctionB || roadKind(e)).map((e) => e.hw)), P = [];
+    for (let i = 0; i < 16; i++) { const a = (i / 16) * TAU; P.push([n.x + Math.cos(a) * R, y, n.z + Math.sin(a) * R]); }
+    for (let i = 1; i < P.length - 1; i++) kindB.tri(P[0], P[i], P[i + 1], 0xffffff, [0, 1, 0], [uv(P[0]), uv(P[i]), uv(P[i + 1])]);
+  });
+
+  /* ---------- bridges ---------- */
+  const bridgeTrims = [];
+  for (const br of bridgeRects) {
+    const e = br.e, A = br.A, len = e.len, ux = br.ux, uz = br.uz, rx = -uz, rz = ux;
+    // the stretch actually over water
+    let w0 = -1, w1 = -1;
+    for (let s = 0; s <= len; s += 1) if (!(groundAt(A.x + ux * s, A.z + uz * s) & 1)) { if (w0 < 0) w0 = s; w1 = s; }
+    if (w0 < 0) continue;
+    // the deck stops where the junctions at its ends begin, so its railings never cross the street at the end
+    let s0 = Math.max(br.A.r + 0.5, w0 - 3), s1 = Math.min(len - br.B.r - 0.5, w1 + 3);
+    const half = e.hw + e.walk, s00 = s0, s10 = s1;
+    // ... nor run out over another street that passes close to the bridgehead: walk each railing and pull the end of
+    // the deck back to where it is clear of every other carriageway (cars would otherwise be caught on the railing)
+    const near = [...edgesNear(Math.min(A.x, br.B.x) - 40, Math.min(A.z, br.B.z) - 40, Math.max(A.x, br.B.x) + 40, Math.max(A.z, br.B.z) + 40)].filter((o) => o !== e);
+    const hits = (s) => {
+      for (const side of [1, -1]) {
+        const px = A.x + ux * s + rx * side * (half - 0.21), pz = A.z + uz * s + rz * side * (half - 0.21);
+        for (const o of near) if (edgeDist(o, px, pz) < o.hw + (o.drive ? 0.9 : 0.4)) return true;
+      }
+      return false;
+    };
+    for (let s = s0; s <= s1; s += 0.5) if (hits(s)) { if (s < (s00 + s10) / 2) s0 = s + 0.75; else { s1 = s - 0.75; break; } }
+    if (s0 !== s00 || s1 !== s10) bridgeTrims.push({ name: e.name, cut0: +(s0 - s00).toFixed(1), cut1: +(s10 - s1).toFixed(1) });
+    if (s1 - s0 < 4) continue;
+    const B = cityAt(A.x + ux * (s0 + s1) / 2, A.z + uz * (s0 + s1) / 2);
+    B.setFrame(A.x + ux * s0 - rx * half, A.z + uz * s0 - rz * half, ux, uz);
+    const L = s1 - s0, W = half * 2;
+    const stone = e.name === 'Norrbro' || e.name === 'Riksbron' || e.name === 'Stallbron' ? 0x9a948a : 0x6e7378;
+    // a slim deck, so a boat fits underneath, on granite piers standing in the water
+    B.box(-0.3, -0.8, -0.3, L + 0.3, 0, W + 0.3, stone, false, false);
+    for (let x = 6; x < L - 4; x += 32) {
+      B.box(x, WATER_Y - 1.5, 1.2, x + 3.2, -0.8, W - 1.2, GRANITE, false, false);
+      // (only a boat down on the water can run into a pier)
+      addOBox(A.x + ux * (s0 + x + 1.6), A.z + uz * (s0 + x + 1.6), ux, uz, 1.75, half - 1.1, -0.8, WATER_Y - 1.5);
+    }
+    for (const [z0, z1] of [[0.1, 0.32], [W - 0.32, W - 0.1]]) {
+      B.box(0, 0.95, z0, L, 1.07, z1, IRON);
+      B.box(0, 0.48, z0 + 0.05, L, 0.54, z1 - 0.05, IRON);
+      B.box(-0.1, 0, z0 - 0.1, L + 0.1, 0.16, z1 + 0.1, 0x8a867f);
+      for (let x = 0.4; x < L; x += 2.4) B.box(x - 0.05, 0.16, z0 + 0.02, x + 0.05, 0.95, z1 - 0.02, IRON);
+    }
+    B.setFrame();
+    // pavements on the deck
+    for (const side of [1, -1]) {
+      const p = (s, lat) => [A.x + ux * s + rx * lat, 0.03, A.z + uz * s + rz * lat];
+      const q = [p(s0, side * e.hw), p(s1, side * e.hw), p(s1, side * half), p(s0, side * half)];
+      slabB.quad(q[0], q[1], q[2], q[3], 0xffffff, q.map((v) => [v[0] / 4, -v[2] / 4]), [0, 1, 0]);
+      const mx = A.x + ux * (s0 + s1) / 2 + rx * side * (half - 0.21), mz = A.z + uz * (s0 + s1) / 2 + rz * side * (half - 0.21);
+      // (the railings stand on the deck, so a boat underneath passes below them)
+      addOBox(mx, mz, ux, uz, L / 2, 0.2, 1.07, 0);
+    }
+  }
+
+  /* ---------- street lamps and trees ---------- */
+  for (const e of edges) {
+    if (e.kind === 'lane') continue;
+    const f = edgeFrame(e.a, e.b), r0 = nodes[e.a].r + 4, r1 = e.len - nodes[e.b].r - 4;
+    let side = 1;
+    const lat = e.kind === 'ped' ? e.hw - 1 : e.hw + 0.7;
+    for (let s = r0 + 6; s < r1; s += e.kind === 'ped' ? 22 : 28) {
+      const x = f.A.x + f.ux * s + f.rx * lat * side, z = f.A.z + f.uz * s + f.rz * lat * side;
+      if (walkable(x, z) && !blockedAt(x, z, 0.5)) { lamps.push({ x, z, rot: Math.atan2(-f.rx * side, -f.rz * side) }); addCircle(x, z, 0.2); }
+      side = -side;
+    }
+    if (!e.trees && !e.median) continue;
+    for (let s = r0 + 3; s < r1; s += 11) {
+      const spots = e.median ? [0] : e.trees === 'both' ? [1, -1] : e.trees === 'left' ? [-1] : [1];
+      for (const sd of spots) {
+        const tl = e.median ? 0 : sd * (e.hw + e.walk * 0.5);
+        const x = f.A.x + f.ux * s + f.rx * tl, z = f.A.z + f.uz * s + f.rz * tl;
+        if (!walkable(x, z) || blockedAt(x, z, 1.2)) continue;
+        lindens.push({ x, z, s: rr(0.85, 1.1), r: rand() * TAU, v: rand() });
+        addCircle(x, z, 0.35);
+      }
+    }
+  }
+  for (const p of PARKS) if (p.trees) treesIn(p.poly, p.trees, lindens);
+
+  /* ---------- the car park on the quay at Skeppsbron ---------- */
+  // Two rows of marked bays between the pavement and the water with an aisle down the middle, a bus bay at the north
+  // end and a way in from the street at either end. s runs along Skeppsbron from Slottsbacken, d out towards the water.
+  const LOT = (() => {
+    const f = edgeFrame(nodeIndex.get('SK1'), nodeIndex.get('SK2')), wx = -f.rx, wz = -f.rz;
+    const at = (s, d) => [f.A.x + f.ux * s + wx * d, f.A.z + f.uz * s + wz * d];
+    const BAY = 2.6, rows = [{ s0: 26, s1: 128, d0: 15.5, d1: 21.5 }, { s0: 34, s1: 136, d0: 28.5, d1: 34.5 }], bays = [];
+    rows.forEach((r, row) => {
+      r.n = Math.floor((r.s1 - r.s0) / BAY);
+      for (let k = 0; k < r.n; k++) bays.push({ row, s: r.s0 + (k + 0.5) * BAY });
+    });
+    return { f, wx, wz, at, BAY, rows, bays, s0: 16, s1: 138, d0: 15.2, d1: 35.2, aisle: 25, bus: { s0: 18, s1: 32, d0: 30.8, d1: 34.2 } };
+  })();
+  {
+    const { f, at, BAY, rows, bus } = LOT;
+    const corners = (s0, s1, d0, d1) => [at(s0, d0), at(s1, d0), at(s1, d1), at(s0, d1)];
+    const flatQuad = (B, P, y, uvScale) => B.quad(...P.map(([x, z]) => [x, y, z]), 0xffffff, uvScale ? P.map(([x, z]) => [x / uvScale, -z / uvScale]) : null, [0, 1, 0]);
+    const paint = (s0, s1, d0, d1) => flatQuad(zebraB, corners(s0, s1, d0, d1), 0.036);
+    const lotPoly = corners(LOT.s0, LOT.s1, LOT.d0, LOT.d1);
+    flatQuad(junctionB, lotPoly, 0.024, 12);
+    const W = 0.06;
+    for (const r of rows) {
+      const back = r === rows[0] ? r.d0 : r.d1, end = r.s0 + r.n * BAY;
+      for (let k = 0; k <= r.n; k++) paint(r.s0 + k * BAY - W, r.s0 + k * BAY + W, r.d0, r.d1);
+      paint(r.s0 - W, end + W, back - W, back + W);
+    }
+    for (const [s0, s1, d0, d1] of [[bus.s0, bus.s1, bus.d0 - W, bus.d0 + W], [bus.s0, bus.s1, bus.d1 - W, bus.d1 + W], [bus.s0 - W, bus.s0 + W, bus.d0, bus.d1], [bus.s1 - W, bus.s1 + W, bus.d0, bus.d1]]) paint(s0, s1, d0, d1);
+    // a blue P sign at each way in, facing the street
+    const pTex = canvasTex(128, 128, (g, w, h) => {
+      g.fillStyle = '#fff'; g.fillRect(0, 0, w, h);
+      g.fillStyle = '#1d5fae'; roundRect(g, 6, 6, w - 12, h - 12, 10); g.fill();
+      g.fillStyle = '#fff'; g.font = 'bold 96px Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('P', w / 2, h / 2 + 5);
+    });
+    const pB = new Builder(), y0 = 2.2, y1 = 2.85, hs = 0.33;
+    for (const s of [rows[0].s0 - 1, rows[0].s0 + rows[0].n * BAY + 1]) {
+      const [x, z] = at(s, LOT.d0 + 0.3), B = cityAt(x, z);
+      B.prism(x, z, 0.045, 0, y1, 6, 0x8a8f94);
+      addCircle(x, z, 0.12);
+      for (const side of [1, -1]) {
+        const ox = x - LOT.wx * 0.06 * side, oz = z - LOT.wz * 0.06 * side, a = [ox + f.ux * hs * side, oz + f.uz * hs * side], b = [ox - f.ux * hs * side, oz - f.uz * hs * side];
+        pB.quad([a[0], y0, a[1]], [b[0], y0, b[1]], [b[0], y1, b[1]], [a[0], y1, a[1]], 0xffffff, [[1, 0], [0, 0], [0, 1], [1, 1]], [-LOT.wx * side, 0, -LOT.wz * side]);
+      }
+    }
+    scene.add(new THREE.Mesh(pB.build(), std({ map: pTex, roughness: 0.5 })));
+    // ticket machines on the pavement edge, and lamps along the quay
+    for (const s of [52, 102]) {
+      const [x, z] = at(s, 14.6), B = cityAt(x, z);
+      B.setFrame(x, z, f.ux, f.uz);
+      B.box(-0.25, 0, -0.18, 0.25, 1.45, 0.18, 0x3a3d41);
+      B.box(-0.2, 1.0, -0.19, 0.2, 1.3, -0.17, 0xc9d6c0);
+      B.box(-0.3, 1.45, -0.24, 0.3, 1.55, 0.24, 0x1d5fae);
+      B.setFrame();
+      addOBox(x, z, f.ux, f.uz, 0.3, 0.24, 1.55);
+    }
+    for (let s = 30; s < 136; s += 26) { const [x, z] = at(s, 35.7); lamps.push({ x, z, rot: Math.atan2(-LOT.wx, -LOT.wz) }); addCircle(x, z, 0.2); }
+    // no houses on the quay
+    take(corners(-40, 175, LOT.d0, 60));
+    mapSquares.push(lotPoly);
+    mapLabels.push(['Parkering', ...centroid(lotPoly), 'square']);
+  }
+
+  /* ---------- buildings ---------- */
+  const STYLE = {
+    norr: {
+      floors: [5, 7], tall: 0.12, lot: [12, 22], depth: 14, roof: 'mansard', shops: 0.85,
+      colors: [0xd8c7a3, 0xcdb48a, 0xe3d6bd, 0xbba98d, 0xd6ab7c, 0xcbc5b8, 0xe3d2a7, 0xc2a98d, 0xd9b8a0, 0xa9b3ae], roofs: [0x3a3e42, 0x3a3e42, 0x3a3e42, 0x5f9c86]
+    },
+    // the 1960s city centre around Sergels torg, Hötorget and Klara: offices with ribbon windows and flat roofs
+    city: {
+      floors: [6, 9], tall: 0.2, lot: [22, 38], depth: 18, roof: 'flat', modern: true, shops: 0.95,
+      colors: [0xbcbab4, 0x8d8a84, 0xa9a49a, 0x7d7a74, 0xc7c2b6, 0x9a8f80, 0xb4a48c], roofs: [0x4a4d50]
+    },
+    oster: {
+      floors: [6, 7], tall: 0.15, lot: [15, 26], depth: 15, roof: 'mansard', turret: 0.22, shops: 0.55,
+      colors: [0xd9c7a8, 0xc39a72, 0x9b5a40, 0xe0d2b6, 0xb88a64, 0xcbb595, 0x8e4f3a, 0xd6c0a0], roofs: [0x3a3e42, 0x5f9c86, 0x3a3e42, 0x4a3a32]
+    },
+    gamla: {
+      floors: [4, 6], tall: 0.08, lot: [7, 12], depth: 11, roof: 'pitch', pitch: 0.55, shops: 0.75,
+      colors: [0xd9a441, 0xc8643a, 0xe3a47f, 0xedd59a, 0xcf7f3c, 0xb54a32, 0xe8c26e, 0xd88e5a, 0xa9472f, 0xf0dfb4, 0xc9a074], roofs: [0x3a3e42, 0x9e4a33, 0x3a3e42, 0x9e4a33, 0x5f9c86]
+    },
+    soder: {
+      floors: [4, 6], tall: 0.1, lot: [10, 18], depth: 12, roof: 'pitch', pitch: 0.38, shops: 0.55,
+      colors: [0xe7d39c, 0xd99a6c, 0xc9b07a, 0xe6b98a, 0xbfcab9, 0xd7a24f, 0xe2cfb0, 0xb86c4a, 0xd6c3a0], roofs: [0x3a3e42, 0x9e4a33, 0x3a3e42, 0x4a4e52]
+    },
+    kungs: {
+      floors: [5, 7], tall: 0.1, lot: [14, 24], depth: 14, roof: 'mansard', shops: 0.55,
+      colors: [0xa45a3d, 0xd6c3a2, 0xc4a27e, 0x8f4c36, 0xe0d0b0, 0xb7a58a, 0xcfb48c], roofs: [0x3a3e42, 0x3a3e42, 0x5f9c86]
+    },
+    // (sparse: only that share of the lots along the roads gets a house, the rest is park and woods)
+    skepps: { floors: [2, 3], tall: 0, lot: [18, 32], depth: 12, roof: 'pitch', pitch: 0.5, shops: 0, sparse: 0.3, colors: [0xe0b864, 0xd9a65a, 0xe8d6a8, 0xc9824e], roofs: [0x9e4a33, 0x3a3e42] },
+    // Hammarby sjöstad: new blocks by the water in white render and glass, flat roofs
+    sjostad: {
+      floors: [5, 8], tall: 0.1, lot: [20, 34], depth: 15, roof: 'flat', modern: true, shops: 0.5,
+      colors: [0xe9e7e1, 0xc9c2b3, 0xb3b9bd, 0xe0d2b4, 0x9aa6ad, 0xd9d3c8], roofs: [0x4a4d50]
+    },
+    // the suburbs of the 1930s to 50s (Johanneshov, Liljeholmen, Nacka): three- and four-storey lamellhus in light render
+    funkis: {
+      floors: [3, 4], tall: 0.05, lot: [24, 40], depth: 11, roof: 'pitch', pitch: 0.22, shops: 0.15,
+      colors: [0xe6dfcf, 0xd9cfb8, 0xcfd6d2, 0xe2c9a0, 0xd6b89a, 0xbfc9c2], roofs: [0x3a3e42, 0x9e4a33, 0x4a4e52]
+    }
+  };
+  function styleAt(x, z) {
+    const d = landName(x, z);
+    if (d === 'Gamla stan' || d === 'Riddarholmen' || d === 'Helgeandsholmen') return STYLE.gamla;
+    if (d === 'Södermalm') return STYLE.soder;
+    if (d === 'Kungsholmen') return STYLE.kungs;
+    if (d === 'Östermalm' || d === 'Blasieholmen') return STYLE.oster;
+    if (d === 'Skeppsholmen' || d === 'Kastellholmen' || d === 'Djurgården' || d === 'Långholmen') return STYLE.skepps;
+    if (d === 'Johanneshov' || d === 'Liljeholmen' || d === 'Nacka') return STYLE.funkis;
+    if (d === 'Hammarby sjöstad') return STYLE.sjostad;
+    if (d === 'Hagastaden') return STYLE.city;
+    if (d === 'Gärdet' || d === 'Norra Djurgården') return STYLE.oster;
+    if (x > -720 && x < -60 && z < -540 && z > -960) return STYLE.city;
+    return STYLE.norr;
+  }
+  // a lot along a street: frame origin on the facade line, local x along the street, local z away from it
+  function lotFrame(f, side, s, w, set) {
+    return side > 0
+      ? [f.A.x + f.ux * s + f.rx * set, f.A.z + f.uz * s + f.rz * set, f.ux, f.uz]
+      : [f.A.x + f.ux * (s + w) - f.rx * set, f.A.z + f.uz * (s + w) - f.rz * set, -f.ux, -f.uz];
+  }
+  // glass shop windows and a sign band on the street side (local z = 0)
+  function shopfront(B, w, sc) {
+    const m = 0.7, t = 0.12;
+    B.box(m, 0.65, -t, w - m, 2.9, 0, GLASS_DARK);
+    B.box(m, 2.95, -t - 0.05, w - m, 3.45, 0, sc);
+  }
+  function addBuilding(fr, w, d, S, o = {}) {
+    const poly = rectPoly(fr, 0, 0, w, d), [cx, cz] = centroid(poly), B = cityAt(cx, cz);
+    const floors = (o.floors || S.floors[0] + Math.floor(rand() * (S.floors[1] - S.floors[0] + 1))) + (rand() < S.tall ? 1 : 0);
+    const h = floors * FLOOR_H + 0.6, col = o.col || pick(S.colors), rc = pick(S.roofs);
+    B.setFrame(fr[0], fr[1], fr[2], fr[3]);
+    B.modern = !!S.modern;
+    B.box(0, 0, 0, w, h, d, col, true, false);
+    B.modern = false;
+    if (!o.simple) B.box(-0.06, 0, -0.06, w + 0.06, 0.65, d + 0.06, shade(col, 0.7), false, false);
+    B.box(-0.22, h - 0.1, -0.22, w + 0.22, h + 0.22, d + 0.22, shade(col, 1.1));
+    const sh = Math.min(w, d);
+    if (S.roof === 'flat') {
+      if (!o.simple && w > 8 && d > 8) B.box(w * 0.3, h + 0.22, d * 0.35, w * 0.6, h + 2.8, d * 0.7, 0x8a8d90);
+    } else if (S.roof === 'mansard') {
+      B.hip(0, 0, w, d, h + 0.22, 2.6, Math.min(1.7, w / 2 - 0.1), Math.min(1.7, d / 2 - 0.1), rc);
+      // Östermalm's corner turrets
+      if (S.turret && !o.simple && rand() < S.turret && w > 12) {
+        const tx = rand() < 0.5 ? 0 : w - 5;
+        B.box(tx - 0.2, h, -0.2, tx + 5.2, h + 3.4, 5.2, col, true, false);
+        B.hip(tx - 0.3, -0.3, tx + 5.3, 5.3, h + 3.4, 4.5, 2.8, 2.8, 0x5f9c86);
+      }
+    } else {
+      const rh = sh * S.pitch;
+      if (w >= d) B.hip(0, 0, w, d, h + 0.22, rh, sh * 0.42, sh / 2 - 0.02, rc);
+      else B.hip(0, 0, w, d, h + 0.22, rh, sh / 2 - 0.02, sh * 0.42, rc);
+    }
+    if (!o.simple && w > 2.2 && rand() < S.shops) shopfront(B, w, pick(SHOP_SIGNS));
+    B.setFrame();
+    addOBox(cx, cz, fr[2], fr[3], w / 2 + 0.15, d / 2 + 0.15, h);
+    take(poly);
+    mapPolys.push([poly, col]);
+    return h;
+  }
+  // a landmark: one building, modelled in a frame (use [x0, z0, 1, 0] for one that lines up with the map)
+  const landmarkList = [];
+  function landmark(fr, w, d, col, h, o = {}) {
+    const poly = rectPoly(fr, 0, 0, w, d), [cx, cz] = centroid(poly), B = cityAt(cx, cz);
+    landmarkList.push({ name: o.name || '', poly });
+    B.setFrame(fr[0], fr[1], fr[2], fr[3]);
+    B.modern = !!o.modern;
+    B.box(0, 0, 0, w, h, d, col, o.win !== false, o.roof === 'none');
+    B.modern = false;
+    if (o.plinth !== false) B.box(-0.1, 0, -0.1, w + 0.1, o.plinthH || 1.2, d + 0.1, shade(col, 0.78), false, false);
+    if (o.roof !== 'none') {
+      B.box(-0.3, h - 0.2, -0.3, w + 0.3, h + 0.3, d + 0.3, o.cornice || shade(col, 1.1));
+      if (o.roof === 'flat') B.box(w * 0.25, h + 0.3, d * 0.3, w * 0.55, h + 2.4, d * 0.6, 0x8a8d90);
+      else B.hip(0, 0, w, d, h + 0.3, o.rh || 3, Math.min(o.ri || 4, w / 2 - 0.1), Math.min(o.ri || 4, d / 2 - 0.1), o.roofCol || 0x4a4f52);
+    }
+    B.setFrame();
+    addOBox(cx, cz, fr[2], fr[3], w / 2 + 0.15, d / 2 + 0.15, h);
+    take(poly);
+    mapPolys.push([poly, col]);
+    if (o.name) mapLabels.push([o.name, cx, cz, 'landmark']);
+    return B;
+  }
+  const at = (id) => nodeIndex.get(id);
+  const streetFrame = (a, b) => edgeFrame(at(a), at(b));
+  const f0len = (a, b) => streetFrame(a, b).len;
+
+  /* ---------- landmarks ---------- */
+  // Kungliga slottet: four wings round the inner courtyard, two short west wings round the outer one
+  {
+    const col = 0xcfb48c, H = 25;
+    for (const [x0, z0, x1, z1] of [[-62, -58, 62, -36], [-62, 36, 62, 58], [-62, -36, -40, 36], [40, -36, 62, 36], [-96, -58, -62, -40], [-96, 40, -62, 58]]) {
+      landmark([x0, z0, 1, 0], x1 - x0, z1 - z0, col, H, { rh: 2.2, ri: 3, roofCol: 0x55524c, plinthH: 5 });
+    }
+    const B = cityAt(0, 0);
+    for (const z0 of [-61, 57]) B.box(-16, 0, z0, 16, H + 3, z0 + 4, shade(col, 1.04), true, true);
+    for (const x0 of [-65, 61]) B.box(x0, 0, -14, x0 + 4, H + 3, 14, shade(col, 1.04), true, true);
+    mapLabels.push(['Kungliga slottet', 0, 0, 'landmark']);
+    take(axisPoly(-40, -36, 40, 36));
+  }
+  landmark([-176, -222, 1, 0], 64, 94, 0xb3aea3, 24, { rh: 4, roofCol: 0x5f9c86, name: 'Riksdagshuset' });
+  landmark([-285, -218, 1, 0], 82, 90, 0xc4bcaa, 20, { rh: 3, roofCol: 0x5f9c86 });
+  // Stadshuset: brick round Borgargården, the tower with the three crowns at the south-east corner
+  {
+    const brick = 0xa34a33, copper = 0x5f9c86, H = 24, D = 14, X0 = -1062, X1 = -938, Z0 = -170, Z1 = -46;
+    for (const [a, b, c, d] of [[X0, Z0, X1, Z0 + D], [X0, Z1 - D, X1, Z1], [X0, Z0 + D, X0 + D, Z1 - D], [X1 - D, Z0 + D, X1, Z1 - D]]) {
+      landmark([a, b, 1, 0], c - a, d - b, brick, H, { rh: 3.6, roofCol: copper, plinth: false });
+    }
+    const tx0 = -957, tx1 = -939, tz0 = -65, tz1 = -47, tcx = (tx0 + tx1) / 2, tcz = (tz0 + tz1) / 2, B = cityAt(tcx, tcz);
+    B.box(tx0, 0, tz0, tx1, 76, tz1, brick, true, false);
+    B.box(tx0 - 0.4, 75.6, tz0 - 0.4, tx1 + 0.4, 76.4, tz1 + 0.4, shade(brick, 1.15));
+    B.box(tx0 + 2, 76.4, tz0 + 2, tx1 - 2, 84, tz1 - 2, brick, true, false);
+    B.hip(tx0 + 2, tz0 + 2, tx1 - 2, tz1 - 2, 84, 9, 3.6, 3.6, copper);
+    B.box(tcx - 1.8, 93, tcz - 1.8, tcx + 1.8, 96, tcz + 1.8, copper);
+    B.box(tcx - 0.25, 96, tcz - 0.25, tcx + 0.25, 103, tcz + 0.25, copper);
+    addBox(tx0 - 0.15, tz0 - 0.15, tx1 + 0.15, tz1 + 0.15, 104);
+    const gold = new Merger(), topY = 103;
+    for (let k = 0; k < 3; k++) {
+      const a = (k / 3) * TAU + Math.PI / 2, cx = tcx + Math.cos(a) * 1.5, cz = tcz + Math.sin(a) * 1.5, cy = topY + 1;
+      gold.add(new THREE.CylinderGeometry(0.9, 0.7, 0.8, 12), 0xffffff, cx, cy, cz);
+      for (let s = 0; s < 5; s++) { const b = (s / 5) * TAU; gold.add(new THREE.ConeGeometry(0.17, 0.6, 5), 0xffffff, cx + Math.cos(b) * 0.75, cy + 0.7, cz + Math.sin(b) * 0.75); }
+      gold.add(new THREE.SphereGeometry(0.22, 8, 6), 0xffffff, cx, cy + 0.8, cz);
+    }
+    scene.add(new THREE.Mesh(gold.build(), new THREE.MeshStandardMaterial({ color: 0xe2b240, metalness: 0.9, roughness: 0.25, emissive: 0x3a2800 })));
+    mapLabels.push(['Stadshuset', (X0 + X1) / 2, (Z0 + Z1) / 2, 'landmark']);
+  }
+  // Centralstationen along Vasagatan, with the taller main hall in the middle
+  {
+    const f = streetFrame('V2', 'V3'), fr = lotFrame(f, -1, 4, 112, f.e.hw + f.e.walk + 0.5);
+    const B = landmark(fr, 112, 48, 0xc9a97f, 17, { rh: 5, roofCol: 0x3a3e42, name: 'Centralstationen' });
+    B.setFrame(fr[0], fr[1], fr[2], fr[3]);
+    B.box(40, 0, -0.6, 72, 23, 32, shade(0xc9a97f, 1.05), true, false);
+    B.hip(40, -0.6, 72, 32, 23, 7, 6, 6, 0x3a3e42);
+    B.box(52, 17, -1.2, 60, 21, -0.6, 0xf3efe2);
+    B.setFrame();
+    // two trains on the tracks behind
+    for (const [x, z0, n, col, band] of [[-722, -380, 6, 0xc9ced3, 0x22272c], [-782, -440, 4, 0xe9e9e6, 0x1f4fae]]) {
+      const T = cityAt(x, z0 - 60);
+      for (let i = 0; i < n; i++) {
+        const za = z0 - i * 26, zb = za - 25;
+        T.box(x - 1.6, 0.4, zb, x + 1.6, 4.1, za, col);
+        T.box(x - 1.62, 2.2, zb + 1, x + 1.62, 3.2, za - 1, band);
+        T.box(x - 1.3, 0, zb + 2, x + 1.3, 0.6, za - 2, 0x2a2c2f);
+      }
+      addBox(x - 1.7, z0 - n * 26, x + 1.7, z0, 4.2);
+    }
+  }
+  landmark([-102, -352, 1, 0], 92, 61, 0xdfc897, 22, { rh: 4, roofCol: 0x5f9c86, name: 'Kungliga Operan' });
+  landmark([-192, -349, 1, 0], 22, 46, 0xd9a48c, 18, { rh: 3, roofCol: 0x3a3e42, name: 'Arvfurstens palats' });
+  // NK on Hamngatan with its rotating clock sign on the roof
+  let nkSign = null;
+  {
+    const w = f0len('R2', 'VT2') - 20, f = streetFrame('R2', 'VT2'), fr = lotFrame(f, -1, 13, w, f.e.hw + f.e.walk + 0.4);
+    landmark(fr, w, 45, 0xb9ab92, 27, { roof: 'flat', name: 'NK' });
+    const poly = rectPoly(fr, 0, 0, w, 45), [cx, cz] = centroid(poly);
+    const nkTex = canvasTex(256, 128, (g, w, h) => {
+      g.fillStyle = '#f4f1ea'; g.fillRect(0, 0, w, h);
+      g.fillStyle = '#c8102e'; g.font = '900 104px Overpass, "Arial Black", Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText('NK', w / 2, h / 2 + 6);
+    });
+    nkSign = new THREE.Mesh(new THREE.BoxGeometry(5, 2.6, 5), std({ map: nkTex, roughness: 0.4, emissive: 0x222222, emissiveMap: nkTex }));
+    nkSign.position.set(cx, 27.3 + 3.2 + 1.3, cz);
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 3.2, 8), std({ color: 0x5d646a, metalness: 0.6, roughness: 0.4 }));
+    post.position.set(cx, 27.3 + 1.6, cz);
+    scene.add(nkSign, post);
+    nkSign.userData.tex = nkTex;
+  }
+  // Kulturhuset's long glass front over Sergels torg, and the glass obelisk in its pool
+  let obeliskPos = null;
+  {
+    const B = landmark([-305, -585, 1, 0], 105, 33, 0x9aa3a8, 26, { modern: true, roof: 'flat', plinth: false, name: 'Kulturhuset' });
+    for (let y = 3.2; y < 26; y += 4.3) B.box(-305.6, y, -585.6, -199.4, y + 0.45, -551.4, 0xf2f2ee, false, false);
+    const ox = -262, oz = -606, P = cityAt(ox, oz);
+    P.prism(ox, oz, 9, 0, 0.6, 28, 0x2c3236);
+    P.prism(ox, oz, 8.4, 0.6, 0.62, 28, 0x3d86a8);
+    addCircle(ox, oz, 9.1);
+    obeliskPos = { x: ox, z: oz };
+  }
+  // Hötorgsskraporna: five towers on a low block along Sveavägen
+  {
+    const f = streetFrame('S1', 'S2'), set = f.e.hw + f.e.walk + 0.5, fr = lotFrame(f, -1, 40, 130, set);
+    landmark(fr, 130, 28, 0xc4c6c4, 8, { modern: true, roof: 'flat', plinth: false });
+    for (let i = 0; i < 5; i++) landmark(lotFrame(f, -1, 44 + i * 25, 18, set + 3), 18, 24, 0xb7bdc2, 72, { modern: true, roof: 'flat', plinth: false });
+    mapLabels.push(['Hötorgsskraporna', ...centroid(rectPoly(fr, 0, 0, 130, 28)), 'landmark']);
+  }
+  // Konserthuset, blue, with columns facing Hötorget
+  {
+    const f = streetFrame('S2', 'S3'), fr = lotFrame(f, -1, 33, 66, f.e.hw + f.e.walk + 0.5);
+    const B = landmark(fr, 66, 30, 0x3e6aa8, 21, { roof: 'flat', name: 'Konserthuset' });
+    B.setFrame(fr[0], fr[1], fr[2], fr[3]);
+    for (let i = 0; i < 10; i++) B.prism(8 + i * 5.6, 31.2, 0.7, 0, 16, 10, 0xe9e4d6, 0.7, false);
+    B.box(5, 16, 30, 61, 18, 32.2, 0xe9e4d6);
+    B.setFrame();
+  }
+  // Grand Hôtel on the quay facing the palace, and Nationalmuseum on the tip of Blasieholmen
+  {
+    const f = streetFrame('KT0', 'GH'), fr = lotFrame(f, -1, 25, 110, f.e.hw + f.e.walk + 0.4);
+    const B = landmark(fr, 110, 45, 0xe6dccb, 26, { rh: 5, ri: 3, roofCol: 0x5f9c86, name: 'Grand Hôtel' });
+    B.setFrame(fr[0], fr[1], fr[2], fr[3]);
+    for (const x of [0, 102]) { B.box(x - 0.5, 26, -0.5, x + 8.5, 31, 8.5, 0xe6dccb, true, false); B.hip(x - 0.6, -0.6, x + 8.6, 8.6, 31, 6, 4.6, 4.6, 0x5f9c86); }
+    B.setFrame();
+  }
+  {
+    const B = landmark([295, -345, 1, 0], 80, 83, 0xd9d1c1, 24, { rh: 5, roofCol: 0x5f9c86, name: 'Nationalmuseum' });
+    B.prism(335, -303.5, 9, 29, 34, 16, 0x5f9c86, 3);
+  }
+  // Gamla stan's churches and halls
+  function steeple(B, x0, z0, x1, z1, h, spireH, wall, spire, bulb) {
+    const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, w = x1 - x0;
+    B.box(x0, 0, z0, x1, h, z1, wall, true, false);
+    B.box(x0 - 0.4, h - 0.4, z0 - 0.4, x1 + 0.4, h + 0.4, z1 + 0.4, shade(wall, 1.1));
+    if (bulb) {
+      B.prism(cx, cz, w * 0.42, h + 0.4, h + spireH * 0.25, 12, spire, w * 0.5);
+      B.prism(cx, cz, w * 0.5, h + spireH * 0.25, h + spireH * 0.45, 12, spire, w * 0.18);
+      B.prism(cx, cz, w * 0.16, h + spireH * 0.45, h + spireH * 0.7, 8, spire, w * 0.16);
+      B.prism(cx, cz, w * 0.16, h + spireH * 0.7, h + spireH, 8, spire, 0.05);
+    } else B.hip(x0, z0, x1, z1, h + 0.4, spireH, w / 2, (z1 - z0) / 2, spire);
+    B.box(cx - 0.12, h + spireH, cz - 0.12, cx + 0.12, h + spireH + 3, cz + 0.12, 0xd4a53a);
+    addBox(x0 - 0.15, z0 - 0.15, x1 + 0.15, z1 + 0.15, h + spireH);
+    take(axisPoly(x0, z0, x1, z1));
+    mapPolys.push([axisPoly(x0, z0, x1, z1), wall]);
+  }
+  {
+    const B = landmark([-50, 95, 1, 0], 57, 45, 0xc58f5a, 18, { rh: 9, ri: 22, roofCol: 0x4b3b2c, name: 'Storkyrkan' });
+    steeple(B, -64, 110, -50, 124, 44, 22, 0xc58f5a, 0x4a4038, true);
+  }
+  landmark([-84, 154, 1, 0], 46, 32, 0xebe2c8, 16, { rh: 3, roofCol: 0x5f9c86, name: 'Börshuset' }).prism(-61, 170, 4, 19.3, 25, 12, 0x5f9c86, 1);
+  {
+    const B = landmark([-30, 292, 1, 0], 50, 50, 0x9c5a3c, 17, { rh: 11, ri: 25, roofCol: 0x3a3e42, name: 'Tyska kyrkan' });
+    steeple(B, -30, 320, -16, 334, 40, 56, 0x9c5a3c, 0x5f9c86, false);
+  }
+  {
+    const B = landmark([-264, -6, 1, 0], 47, 48, 0x8f4a36, 15, { rh: 3, ri: 4, roofCol: 0x2b2b2d, name: 'Riddarhuset' });
+    B.hip(-261, -3, -220, 39, 18.3, 5, 8, 8, 0x2b2b2d);
+  }
+  /* ---------- Polisstationen on Stora Nygatan ---------- */
+  // A three-storey house with the blue POLIS sign and the police lamp over the door. The ground floor is open to walk
+  // into: the lobby with the counter, a corridor with three cells behind bars (one of them yours if you are arrested)
+  // and an interview room. While you are inside, the floors above are lifted off so the camera can see in.
+  const STATION = (() => {
+    const X0 = -227.0, X1 = -198.0, Z0 = 202.4, Z1 = 242.6, GH = 4.2, TOP = GH + 2 * FLOOR_H, T = 0.4, IT = 0.25;
+    const low = new Builder({ split: true, ao: AO }), high = new Builder({ split: true, ao: AO }), floorB = new Builder(), glassB = new Builder(), signB2 = new Builder();
+    const OUT = 0xd9c39a, PLINTH = 0xa8916a, IN = 0xe8e6e0, STEEL = 0x3a4047, WOOD = 0x7a5a3c, NAVY = 0x16305f;
+    const foot = axisPoly(X0, Z0, X1, Z1);
+    // walls: a box in the inside colour; outer walls get their outside face painted over in the facade colour
+    const wallBox = (x0, z0, x1, z1, h, col = IN) => { low.box(x0, 0, z0, x1, h, z1, col, false, true); addBox(x0, z0, x1, z1, h); };
+    const skin = (ax, az, bx, bz, y0, y1, nx, nz, col) => low.quad([ax + nx * 0.02, y0, az + nz * 0.02], [bx + nx * 0.02, y0, bz + nz * 0.02], [bx + nx * 0.02, y1, bz + nz * 0.02], [ax + nx * 0.02, y1, az + nz * 0.02], col, null, [nx, 0, nz]);
+    // the outer walls of the ground floor, the door gap in the east facade
+    const DZ0 = 220.2, DZ1 = 223.8;
+    for (const [x0, z0, x1, z1, nx, nz] of [[X0, Z0, X1, Z0 + T, 0, -1], [X0, Z1 - T, X1, Z1, 0, 1], [X0, Z0, X0 + T, Z1, -1, 0], [X1 - T, Z0, X1, DZ0, 1, 0], [X1 - T, DZ1, X1, Z1, 1, 0]]) {
+      low.box(x0, 0, z0, x1, GH, z1, IN, false, false);
+      addBox(x0, z0, x1, z1, TOP + 3);
+      if (nz) skin(x0, nz < 0 ? z0 : z1, x1, nz < 0 ? z0 : z1, 0, GH, 0, nz, OUT);
+      else skin(nx < 0 ? x0 : x1, z0, nx < 0 ? x0 : x1, z1, 0, GH, nx, 0, OUT);
+      if (nz) skin(x0, nz < 0 ? z0 : z1, x1, nz < 0 ? z0 : z1, 0, 0.7, 0, nz * 1.6, PLINTH);
+      else skin(nx < 0 ? x0 : x1, z0, nx < 0 ? x0 : x1, z1, 0, 0.7, nx * 1.6, 0, PLINTH);
+    }
+    low.box(X1 - T, 3.0, DZ0, X1, GH, DZ1, IN, false, false);
+    skin(X1, DZ0, X1, DZ1, 3.0, GH, 1, 0, OUT);
+    // door frame in police blue, the glass doors slid open to either side
+    low.box(X1 - 0.05, 0, DZ0 - 0.18, X1 + 0.12, 3.1, DZ0, NAVY); low.box(X1 - 0.05, 0, DZ1, X1 + 0.12, 3.1, DZ1 + 0.18, NAVY);
+    low.box(X1 - 0.05, 2.95, DZ0 - 0.18, X1 + 0.12, 3.15, DZ1 + 0.18, NAVY);
+    for (const [z0, z1] of [[DZ0 - 1.55, DZ0 - 0.1], [DZ1 + 0.1, DZ1 + 1.55]]) glassB.box(X1 - 0.22, 0.05, z0, X1 - 0.14, 2.9, z1, 0xffffff);
+    // windows in the ground floor facade: dark glass in blue frames
+    const winE = (z0, z1) => { low.box(X1, 0.9, z0 - 0.08, X1 + 0.06, 2.9, z1 + 0.08, NAVY); glassB.box(X1 + 0.06, 1.0, z0, X1 + 0.08, 2.8, z1, 0xffffff); };
+    for (const [z0, z1] of [[204.6, 208.6], [211.0, 215.0], [227.6, 231.6], [234.0, 238.0]]) winE(z0, z1);
+    // the floors above: plastered, with windows, a cornice and a pitched roof
+    high.box(X0, GH, Z0, X1, GH + 0.3, Z1, 0xf1f0ec, false, true);
+    high.setFrame(X0, Z0, 1, 0);
+    high.box(0, GH, 0, X1 - X0, TOP, Z1 - Z0, OUT, true, false);
+    high.box(-0.25, TOP - 0.1, -0.25, X1 - X0 + 0.25, TOP + 0.25, Z1 - Z0 + 0.25, shade(OUT, 1.1));
+    high.hip(0, 0, X1 - X0, Z1 - Z0, TOP + 0.25, 7.5, 9, 9, 0x3a3e42);
+    high.box(-0.08, GH - 0.25, -0.08, X1 - X0 + 0.08, GH + 0.05, Z1 - Z0 + 0.08, shade(OUT, 0.92));
+    high.setFrame();
+    // the big sign over the door and the blue police lamp beside it
+    const signTex = canvasTex(512, 96, (g, w, h) => {
+      g.fillStyle = '#16305f'; g.fillRect(0, 0, w, h);
+      g.fillStyle = '#f2c200'; g.fillRect(0, h - 10, w, 10);
+      g.beginPath(); g.arc(52, h / 2 - 4, 30, 0, TAU); g.fill();
+      g.fillStyle = '#16305f'; g.font = '900 34px Overpass, "Arial Black", Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('★', 52, h / 2 - 3);
+      g.fillStyle = '#ffffff'; g.font = '900 58px Overpass, "Arial Black", Arial, sans-serif'; g.textAlign = 'left'; g.fillText('POLISEN', 104, h / 2 - 2);
+    });
+    const lampTex = canvasTex(128, 128, (g, w, h) => {
+      g.fillStyle = '#1f5fd6'; g.fillRect(0, 0, w, h);
+      g.fillStyle = '#ffffff'; g.font = '900 38px Overpass, "Arial Black", Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('POLIS', w / 2, h / 2 + 2);
+      g.strokeStyle = '#0d2a63'; g.lineWidth = 8; g.strokeRect(4, 4, w - 8, h - 8);
+    });
+    const sq = (B, ax, az, bx, bz, y0, y1, nx, nz) => B.quad([ax, y0, az], [bx, y0, bz], [bx, y1, bz], [ax, y1, az], 0xffffff, [[0, 0], [1, 0], [1, 1], [0, 1]], [nx, 0, nz]);
+    sq(signB2, X1 + 0.06, DZ1 + 1.4, X1 + 0.06, DZ0 - 1.4, 3.3, 4.05, 1, 0);
+    const lampB = new Builder(), lx = X1 + 0.75, lz = DZ0 - 2.3, ly = 3.2, ls = 0.32;
+    low.box(X1, ly + ls - 0.06, lz - 0.04, lx, ly + ls - 0.02, lz + 0.04, STEEL);
+    // (each face's texture runs left to right as seen from outside it, so the word reads the right way round on all four)
+    sq(lampB, lx + ls, lz - ls, lx - ls, lz - ls, ly - ls, ly + ls, 0, -1); sq(lampB, lx - ls, lz + ls, lx + ls, lz + ls, ly - ls, ly + ls, 0, 1);
+    sq(lampB, lx + ls, lz + ls, lx + ls, lz - ls, ly - ls, ly + ls, 1, 0); sq(lampB, lx - ls, lz - ls, lx - ls, lz + ls, ly - ls, ly + ls, -1, 0);
+    low.box(lx - ls - 0.03, ly + ls, lz - ls - 0.03, lx + ls + 0.03, ly + ls + 0.07, lz + ls + 0.03, STEEL);
+    low.box(lx - ls - 0.03, ly - ls - 0.07, lz - ls - 0.03, lx + ls + 0.03, ly - ls, lz + ls + 0.03, STEEL);
+    // inside: the floor, the walls between the rooms
+    floorB.quad([X0 + T, 0.015, Z1 - T], [X1 - T, 0.015, Z1 - T], [X1 - T, 0.015, Z0 + T], [X0 + T, 0.015, Z0 + T], 0xffffff,
+      [[0, 0], [(X1 - X0) / 0.8, 0], [(X1 - X0) / 0.8, (Z1 - Z0) / 0.8], [0, (Z1 - Z0) / 0.8]], [0, 1, 0]);
+    const CZ = 219.6, CORR = 224.4, LW = -212.0, BACK = 211.0, SOUTH = 233.0;
+    wallBox(X0 + T, BACK - IT / 2, X1 - T, BACK + IT / 2, GH);                 // behind the cells and the counter
+    wallBox(X0 + T, SOUTH - IT / 2, X1 - T, SOUTH + IT / 2, GH);               // south of the lobby and the interview room
+    wallBox(LW - IT / 2, BACK, LW + IT / 2, CZ, GH);                            // lobby | cells
+    wallBox(LW - IT / 2, CORR, LW + IT / 2, SOUTH, GH);                         // lobby | store room
+    wallBox(-216.0 - IT / 2, CORR, -216.0 + IT / 2, SOUTH, GH);                 // interview room | store room
+    wallBox(X0 + T, CORR - IT / 2, -218.4, CORR + IT / 2, GH);                  // corridor south wall, the interview room door
+    wallBox(-217.0, CORR - IT / 2, LW, CORR + IT / 2, GH);
+    const CELLS = [[X0 + T, -222.2], [-222.2, -217.1], [-217.1, LW]];
+    for (const x of [-222.2, -217.1]) wallBox(x - IT / 2, BACK, x + IT / 2, CZ, GH);
+    // the bars along the corridor, with a sliding door into each cell
+    const barsB = new Builder(), doors = [];
+    const bars = (B, x0, x1) => {
+      for (let x = x0 + 0.07; x < x1 - 0.03; x += 0.14) B.box(x - 0.022, 0.02, CZ - 0.022, x + 0.022, GH - 0.25, CZ + 0.022, STEEL);
+      for (const y of [0.02, 1.15, GH - 0.35]) B.box(x0, y, CZ - 0.045, x1, y + 0.1, CZ + 0.045, STEEL);
+    };
+    CELLS.forEach(([cx0, cx1], i) => {
+      const dx0 = (cx0 + cx1) / 2 - 0.6, dx1 = dx0 + 1.2;
+      bars(barsB, cx0 + (i ? IT / 2 : 0), dx0); bars(barsB, dx1, cx1 - (i < 2 ? IT / 2 : 0));
+      barsB.box(cx0, GH - 0.25, CZ - 0.06, cx1, GH, CZ + 0.06, STEEL);
+      addBox(cx0, CZ - 0.06, dx0, CZ + 0.06, 2.4); addBox(dx1, CZ - 0.06, cx1, CZ + 0.06, 2.4);
+      const dB = new Builder();
+      bars(dB, 0, 1.2);
+      dB.box(1.08, 1.0, CZ - 0.09, 1.16, 1.3, CZ + 0.09, 0x1d2126);
+      // (the door runs on its own track a hand's width out in the corridor, so it slides past the fixed bars)
+      const obst = { t: 0, x0: dx0, z0: CZ - 0.04, x1: dx1, z1: CZ + 0.17, h: 2.4 };
+      addObstacle(obst, obst.x0, obst.z0, obst.x1, obst.z1);
+      // a bunk along the side wall and a steel toilet in the corner
+      low.box(cx0 + 0.15 + (i ? IT / 2 : 0), 0, BACK + 0.4, cx0 + 1.0 + (i ? IT / 2 : 0), 0.45, BACK + 4.6, 0x5c6168);
+      low.box(cx0 + 0.18 + (i ? IT / 2 : 0), 0.45, BACK + 0.45, cx0 + 0.97 + (i ? IT / 2 : 0), 0.58, BACK + 4.55, 0x2f5f9e);
+      addBox(cx0 + 0.15, BACK + 0.4, cx0 + 1.0 + IT, BACK + 4.6, 0.58);
+      low.box(cx1 - 0.75, 0, BACK + 0.4, cx1 - 0.3, 0.48, BACK + 0.9, 0xc9ccd0);
+      addBox(cx1 - 0.75, BACK + 0.4, cx1 - 0.3, BACK + 0.9, 0.48);
+      doors.push({ x0: dx0, x1: dx1, geo: dB, obst, open: 0, want: i === 2 ? 1 : 0, inside: [cx0 + IT, BACK + 0.4, cx1 - IT, CZ - 0.25], door: { x: (dx0 + dx1) / 2, z: CZ } });
+    });
+    // the lobby: counter with a glass screen, a bench, the queue-ticket machine, the police plaque on the wall
+    low.box(-209.6, 0, 213.3, -202.8, 1.05, 214.3, WOOD); low.box(-209.7, 1.05, 213.2, -202.7, 1.12, 214.4, 0xd9d6cf);
+    glassB.box(-209.6, 1.12, 213.72, -202.8, 2.1, 213.8, 0xffffff);
+    addBox(-209.7, 213.2, -202.7, 214.4, 1.12);
+    low.box(-209.6, 0, 211.15, -209.4, 1.05, 213.3, WOOD); addBox(-209.6, 211.15, -209.4, 213.3, 1.05);
+    for (const [x0, x1] of [[-208.8, -202.8]]) {
+      low.box(x0, 0.42, 231.7, x1, 0.5, 232.7, WOOD); low.box(x0, 0.5, 232.55, x1, 1.0, 232.7, WOOD);
+      for (const x of [x0 + 0.2, x1 - 0.3]) low.box(x, 0, 231.8, x + 0.1, 0.42, 232.6, STEEL);
+      addBox(x0, 231.7, x1, 232.75, 0.5);
+    }
+    low.box(-200.2, 0, 216.2, -199.6, 1.4, 216.8, 0xd23b2b); low.box(-200.15, 1.0, 216.1, -199.65, 1.3, 216.2, 0x111111); addBox(-200.2, 216.2, -199.6, 216.8, 1.4);
+    sq(signB2, -208.0, BACK + IT / 2 + 0.01, -203.6, BACK + IT / 2 + 0.01, 2.25, 3.0, 0, 1);
+    // posters, a plant, and in the interview room a table with two chairs
+    for (const [x0, x1, c] of [[-207.5, -206.3, 0xf2c200], [-205.4, -204.2, 0x2f6fdb]]) low.box(x0, 1.4, SOUTH - IT / 2 - 0.02, x1, 2.3, SOUTH - IT / 2, c);
+    low.prism(-201.2, 231.6, 0.3, 0, 0.5, 8, 0x7a5a3c); low.prism(-201.2, 231.6, 0.55, 0.5, 1.4, 8, 0x2e7d4f, 0.2); addCircle(-201.2, 231.6, 0.4, 1.4);
+    low.box(-223.5, 0, 227.4, -220.5, 0.75, 229.0, 0xd9d6cf); addBox(-223.5, 227.4, -220.5, 229.0, 0.75);
+    for (const z of [226.6, 229.8]) { low.box(-222.4, 0, z - 0.25, -221.6, 0.45, z + 0.25, STEEL); low.box(-222.4, 0.45, z + (z < 228 ? -0.25 : 0.2), -221.6, 1.0, z + (z < 228 ? -0.2 : 0.25), STEEL); }
+    // offices behind the walls (only seen from above while you are inside): desks and lockers
+    for (let x = X0 + 2; x < X1 - 4; x += 5) { low.box(x, 0, Z0 + 2.5, x + 2.4, 0.75, Z0 + 3.7, 0xcfc9bd); low.box(x + 0.6, 0.75, Z0 + 2.6, x + 1.8, 1.2, Z0 + 2.7, 0x222428); }
+    for (let x = -215.5; x < -212.6; x += 0.7) low.box(x, 0, SOUTH - 0.75, x + 0.6, 1.9, SOUTH - 0.2, 0x8a939b);
+    // the ceiling of the ground floor: white acoustic tiles with light panels in every room. It faces down only, so
+    // from above (while the floors over it are lifted off) you still look straight in
+    const ceilB = new Builder(), panelB = new Builder(), CY = GH - 0.02;
+    ceilB.quad([X0 + T, CY, Z0 + T], [X1 - T, CY, Z0 + T], [X1 - T, CY, Z1 - T], [X0 + T, CY, Z1 - T], 0xffffff,
+      [[0, 0], [(X1 - X0) / 0.6, 0], [(X1 - X0) / 0.6, (Z1 - Z0) / 0.6], [0, (Z1 - Z0) / 0.6]], [0, -1, 0]);
+    const panel = (cx, cz, w, d) => panelB.quad([cx - w / 2, CY - 0.015, cz - d / 2], [cx + w / 2, CY - 0.015, cz - d / 2], [cx + w / 2, CY - 0.015, cz + d / 2], [cx - w / 2, CY - 0.015, cz + d / 2], 0xffffff, null, [0, -1, 0]);
+    for (const z of [216.5, 222, 228]) for (const x of [-208.5, -203]) panel(x, z, 1.2, 0.6);   // lobby
+    for (const x of [-225, -219.5, -214.5]) panel(x, 222, 1.2, 0.3);                          // corridor
+    CELLS.forEach(([cx0, cx1]) => panel((cx0 + cx1) / 2, (BACK + CZ) / 2, 0.6, 0.6));            // cells
+    panel(-222, 228.5, 1.2, 0.6); panel(-214, 228.5, 0.6, 0.6);                                // interview room, store
+    for (let x = X0 + 4; x < X1 - 3; x += 7) panel(x, (Z0 + BACK) / 2, 1.2, 0.6);               // offices behind
+    take(foot);
+    mapPolys.push([foot, 0x6f86a8]);
+    mapLabels.push(['Polisstationen', (X0 + X1) / 2, (Z0 + Z1) / 2, 'landmark']);
+    landmarkList.push({ name: 'Polisstationen', poly: foot });
+    // the rooms as waypoints, for walking someone in or chasing you through the building
+    const dx = doors.map((d) => d.door.x);
+    const P = {
+      E0: [-196.9, 222.0], E1: [-200.0, 222.0], L: [-205.5, 222.6], C0: [-213.3, 222.0], C3: [dx[2], 222.0], CF: [-217.7, 222.0],
+      C2: [dx[1], 222.0], C1: [dx[0], 222.0], F0: [-217.7, 226.2], D1: [dx[0], 218.0], D2: [dx[1], 218.0], D3: [dx[2], 218.0]
+    };
+    const LINKS = [['E0', 'E1'], ['E1', 'L'], ['L', 'C0'], ['C0', 'C3'], ['C3', 'CF'], ['CF', 'C2'], ['C2', 'C1'], ['CF', 'F0'], ['C1', 'D1'], ['C2', 'D2'], ['C3', 'D3']];
+    const inside = (x, z) => x > X0 + 0.2 && x < X1 && z > Z0 + 0.2 && z < Z1 - 0.2;
+    let lowMesh = null, highMeshes = [], doorMeshes = [];
+    return {
+      X0, X1, Z0, Z1, GH, P, LINKS, inside, doors, desk: [-206.2, 212.3],
+      // a police car pulls up at the kerb outside the door: facing south on the near side, or north on the far side
+      curb: (h) => (Math.cos(h) >= 0 ? { x: -193.3, z: 221.0, h: 0 } : { x: -189.1, z: 223.5, h: Math.PI }),
+      finish(facade, solid, modern) {
+        const add = (B, mat, list) => { if (B.empty) return; const m = new THREE.Mesh(B.build(), mat); m.castShadow = true; m.receiveShadow = true; scene.add(m); list && list.push(m); return m; };
+        for (const [B, mat] of [[low, facade], [low.altB, modern], [low.solidB, solid]]) add(B, mat);
+        for (const [B, mat] of [[high, facade], [high.altB, modern], [high.solidB, solid]]) add(B, mat, highMeshes);
+        const tile = canvasTex(128, 128, (g, w, h) => {
+          g.fillStyle = '#c9ccce'; g.fillRect(0, 0, w, h);
+          grain(g, 0, 0, w, h, 2400, 'rgba(90,96,102,.25)', 'rgba(255,255,255,.3)', 1.2);
+          g.strokeStyle = 'rgba(80,86,92,.55)'; g.lineWidth = 2; g.strokeRect(1, 1, w - 2, h - 2);
+        }, true);
+        add(floorB, std({ map: tile, roughness: 0.45 }));
+        add(glassB, new THREE.MeshPhysicalMaterial({ color: 0x9fc4d6, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.35 }));
+        add(signB2, std({ map: signTex, roughness: 0.4, emissive: 0x334466, emissiveMap: signTex }));
+        add(lampB, std({ map: lampTex, roughness: 0.3, emissive: 0xffffff, emissiveMap: lampTex, emissiveIntensity: 0.9 }));
+        add(barsB, std({ color: 0xffffff, vertexColors: true, roughness: 0.4, metalness: 0.6 }));
+        const dmat = std({ vertexColors: true, roughness: 0.4, metalness: 0.6 });
+        for (const d of doors) { const m = new THREE.Mesh(d.geo.build(), dmat); m.position.set(d.x0, 0, 0.1); m.castShadow = true; scene.add(m); d.mesh = m; }
+        const tiles = canvasTex(128, 128, (g, w, h) => {
+          g.fillStyle = '#eceae4'; g.fillRect(0, 0, w, h);
+          grain(g, 0, 0, w, h, 1800, 'rgba(120,118,110,.18)', 'rgba(255,255,255,.4)', 1.1);
+          g.fillStyle = 'rgba(150,148,140,.8)'; g.fillRect(0, 0, w, 3); g.fillRect(0, 0, 3, h);
+        }, true);
+        // lit by the panels rather than the sun: a little light of its own so it never reads as a hole
+        const ceil = new THREE.Mesh(ceilB.build(), std({ map: tiles, roughness: 0.9, emissive: 0x6a6964, emissiveMap: tiles }));
+        const panels = new THREE.Mesh(panelB.build(), new THREE.MeshBasicMaterial({ color: 0xfff6e2 }));
+        scene.add(ceil, panels);
+      },
+      // the floors above come off while you are inside; cell doors slide towards where they are told to be
+      update(dt, px, pz) {
+        const show = !inside(px, pz);
+        for (const m of highMeshes) m.visible = show;
+        for (const d of doors) {
+          d.open += clamp(d.want - d.open, -dt * 1.2, dt * 1.2);
+          if (d.mesh) d.mesh.position.x = d.x0 - d.open * 1.1;
+          d.obst.off = d.open > 0.6;
+        }
+      }
+    };
+  })();
+
+  // Tessinska palatset and Finska kyrkan across Slottsbacken from the palace, and Järnpojken, the smallest statue
+  // in town, in the yard behind the church
+  landmark([20, 91, 1, 0], 25, 36, 0xe7dcc4, 17, { rh: 3, ri: 4, roofCol: 0x3a3e42, name: 'Tessinska palatset' });
+  landmark([56, 91, 1, 0], 44, 24, 0xf0e2b6, 12, { rh: 6, ri: 8, roofCol: 0x3a3e42, name: 'Finska kyrkan' }).box(76, 12.4, 98, 80, 16, 102, 0xf0e2b6);
+  {
+    const B = cityAt(66, 122);
+    B.box(65.6, 0, 121.6, 66.4, 0.5, 122.4, 0x8a867f);
+    B.box(65.85, 0.5, 121.9, 66.15, 0.65, 122.1, 0x3b4a44);
+    addCircle(66, 122, 0.45, 0.7);
+    take(axisPoly(53, 116, 72, 130));
+    mapLabels.push(['Järnpojken', 66, 122, 'landmark']);
+  }
+  // Drakens gränd got its name from the tavern Draken at its western end: its sign, a gilded dragon on a green board,
+  // hangs from a wrought-iron arm over the corner of Österlånggatan
+  {
+    const dragonTex = canvasTex(256, 192, (g, w, h) => {
+      g.fillStyle = '#1d3b2c'; roundRect(g, 4, 4, w - 8, h - 8, 14); g.fill();
+      g.strokeStyle = '#d4a53a'; g.lineWidth = 6; roundRect(g, 12, 12, w - 24, h - 24, 10); g.stroke();
+      g.fillStyle = '#e2b240'; g.strokeStyle = '#8a6418'; g.lineWidth = 2;
+      g.beginPath(); // body, neck and head
+      g.moveTo(70, 112); g.bezierCurveTo(90, 86, 140, 84, 160, 100); g.bezierCurveTo(176, 84, 178, 60, 196, 52);
+      g.lineTo(214, 58); g.lineTo(200, 64); g.lineTo(212, 72); g.lineTo(194, 72); g.bezierCurveTo(186, 92, 180, 112, 160, 122);
+      g.bezierCurveTo(140, 132, 96, 132, 80, 122); g.closePath(); g.fill(); g.stroke();
+      g.beginPath(); // wing
+      g.moveTo(108, 96); g.lineTo(96, 40); g.lineTo(118, 62); g.lineTo(130, 34); g.lineTo(140, 64); g.lineTo(160, 46); g.lineTo(146, 96); g.closePath(); g.fill(); g.stroke();
+      g.beginPath(); // tail, curling round to an arrow point
+      g.moveTo(80, 118); g.bezierCurveTo(52, 128, 38, 104, 52, 92); g.lineTo(42, 84); g.lineTo(60, 86); g.lineTo(58, 98); g.bezierCurveTo(52, 106, 62, 114, 78, 108); g.closePath(); g.fill(); g.stroke();
+      for (const lx of [96, 140]) { g.beginPath(); g.moveTo(lx, 124); g.lineTo(lx - 4, 142); g.lineTo(lx + 8, 142); g.lineTo(lx + 8, 124); g.fill(); }
+      g.fillStyle = '#7a1414'; g.beginPath(); g.moveTo(212, 66); g.lineTo(228, 60); g.lineTo(222, 70); g.closePath(); g.fill();
+      g.fillStyle = '#e9cf8a'; g.font = '900 30px Georgia, "Times New Roman", serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText('DRAKEN', w / 2, h - 34);
+    });
+    const x0 = 135.5, x1 = 136.7, z = 308.4, y0 = 2.55, y1 = 3.45, B = cityAt(136, z), sB = new Builder();
+    B.box(x0 - 0.15, y1 + 0.08, z - 0.03, 137.2, y1 + 0.14, z + 0.03, 0x1c1d1f);
+    B.box(x0 + 0.05, y1, z - 0.015, x0 + 0.08, y1 + 0.1, z + 0.015, 0x1c1d1f);
+    B.box(x1 - 0.08, y1, z - 0.015, x1 - 0.05, y1 + 0.1, z + 0.015, 0x1c1d1f);
+    B.box(x0, y0, z - 0.03, x1, y1, z + 0.03, 0x3a2a1a);
+    for (const s of [1, -1]) sB.quad([s > 0 ? x0 : x1, y0, z + s * 0.035], [s > 0 ? x1 : x0, y0, z + s * 0.035], [s > 0 ? x1 : x0, y1, z + s * 0.035], [s > 0 ? x0 : x1, y1, z + s * 0.035], 0xffffff, [[0, 0], [1, 0], [1, 1], [0, 1]], [0, 0, s]);
+    scene.add(new THREE.Mesh(sB.build(), std({ map: dragonTex, roughness: 0.45, metalness: 0.1 })));
+  }
+  {
+    const B = landmark([-455, 80, 1, 0], 40, 90, 0x9a4a32, 18, { rh: 10, ri: 20, roofCol: 0x3a3e42, name: 'Riddarholmskyrkan' });
+    steeple(B, -444, 62, -426, 80, 32, 58, 0x9a4a32, 0x2f3236, false);
+  }
+  // Katarina kyrka: a Greek cross under a big dome
+  {
+    const cx = 240, cz = 1262, wall = 0xe9cf7c, dome = 0x3d4144, B = cityAt(cx, cz);
+    landmark([cx - 24, cz - 12, 1, 0], 48, 24, wall, 16, { rh: 6, ri: 10, roofCol: dome });
+    B.box(cx - 12, 0, cz - 24, cx + 12, 16, cz + 24, wall, true, false);
+    B.hip(cx - 12, cz - 24, cx + 12, cz + 24, 16, 6, 10, 10, dome);
+    B.prism(cx, cz, 10, 16, 26, 16, wall, 10, false);
+    B.prism(cx, cz, 10.5, 26, 36, 16, dome, 3);
+    B.prism(cx, cz, 2.2, 36, 42, 8, wall, 1.2);
+    B.box(cx - 0.12, 42, cz - 0.12, cx + 0.12, 45, cz + 0.12, 0xd4a53a);
+    addBox(cx - 12, cz - 24, cx + 12, cz + 24, 40);
+    mapLabels.push(['Katarina kyrka', cx, cz, 'landmark']);
+  }
+  // Katarinahissen: the lift tower at Slussen, its footbridge with Gondolen underneath, up to the heights above
+  {
+    const B = cityAt(120, 740), steel = 0x3b4248;
+    landmark([95, 775, 1, 0], 75, 55, 0x9a7a5c, 38, { roof: 'flat', modern: true, name: 'Katarinahissen' });
+    for (const [px, pz] of [[116, 701], [124, 701], [116, 709], [124, 709]]) B.box(px - 0.3, 0, pz - 0.3, px + 0.3, 38, pz + 0.3, steel);
+    for (let y = 4; y < 38; y += 4) B.box(115.7, y, 700.7, 124.3, y + 0.25, 709.3, steel);
+    B.box(117.5, 0, 702.5, 122.5, 36, 707.5, 0x5a6670);
+    B.box(117.5, 36, 700, 122.5, 38.5, 776, steel);
+    B.box(116, 31, 712, 124, 35.6, 738, 0x2a3540);
+    B.box(115.8, 35.6, 711.8, 124.2, 36, 738.2, 0xe8e8e8);
+    addBox(115.7, 700.7, 124.3, 709.3, 38);
+  }
+  landmark([1008, -300, 1, 0], 42, 70, 0x5b4636, 20, { rh: 8, ri: 8, roofCol: 0x3f3229, name: 'Vasamuseet' })
+    .box(1027.8, 28, -262, 1028.6, 58, -261.2, 0x3a2c22);
+  landmark([125, -1125, 1, 0], 60, 22, 0xe2d6bd, 14, { rh: 3, roofCol: 0x5f9c86, name: 'Kungliga biblioteket' });
+  // further out: Stadion with its towers, KTH, the armed forces' headquarters on Gärdet, DN-skrapan at Marieberg, the
+  // old prison on Långholmen, Rosendals slott on Djurgården and Tele2 Arena beside Globen
+  {
+    const cx = 420, cz = -1840, a = 100, b = 72, brick = 0x9a4a32, n = 44, B = cityAt(cx, cz), ring = [];
+    for (let i = 0; i < n; i++) {
+      const t0 = (i / n) * TAU, t1 = ((i + 1) / n) * TAU, p0 = [cx + Math.cos(t0) * a, cz + Math.sin(t0) * b], p1 = [cx + Math.cos(t1) * a, cz + Math.sin(t1) * b];
+      const len = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]), c = (p1[0] - p0[0]) / len, sn = (p1[1] - p0[1]) / len;
+      B.setFrame(p0[0], p0[1], c, sn);
+      B.box(0, 0, 0, len + 0.3, 15, 7, brick, true, true);
+      B.setFrame();
+      ring.push(p0);
+    }
+    const inner = (k) => Array.from({ length: 40 }, (_, i) => [cx + Math.cos((i / 40) * TAU) * (a - k), cz + Math.sin((i / 40) * TAU) * (b - k)]);
+    const track = inner(8), field = inner(16);
+    for (let i = 0; i < 40; i++) {
+      const [ax, az] = track[i], [bx, bz] = track[(i + 1) % 40], [cx2, cz2] = field[(i + 1) % 40], [dx, dz] = field[i];
+      B.quad([ax, 0.03, az], [bx, 0.03, bz], [cx2, 0.03, cz2], [dx, 0.03, dz], 0xa5523a, null, [0, 1, 0]);
+    }
+    triangulate(grassB, field, 0.035, 0xffffff, 6);
+    for (const s of [-1, 1]) {
+      const tx = cx + s * 16, tz = cz + b - 2;
+      B.box(tx - 5, 0, tz - 5, tx + 5, 30, tz + 5, brick, true, false);
+      B.hip(tx - 5.3, tz - 5.3, tx + 5.3, tz + 5.3, 30, 7, 5.3, 5.3, 0x5f9c86);
+    }
+    addBox(cx - a, cz - b, cx + a, cz + b, 15);
+    take(ring); mapPolys.push([ring, brick]); mapGreens.push(field);
+    mapLabels.push(['Stadion', cx, cz, 'landmark']);
+  }
+  {
+    const B = landmark([150, -1810, 1, 0], 90, 40, 0x9a4a32, 18, { rh: 4, roofCol: 0x3a3e42, name: 'KTH' });
+    B.box(189, 0, -1822, 201, 42, -1810, 0x9a4a32, true, false);
+    B.hip(188.7, -1822.3, 201.3, -1809.7, 42, 8, 6.3, 6.3, 0x5f9c86);
+  }
+  landmark([1250, -1458, 1, 0], 60, 36, 0xc9bfa6, 18, { rh: 3, roofCol: 0x3a3e42, name: 'Försvarsmaktens högkvarter' });
+  landmark([-2212.5, -292.5, 1, 0], 25, 25, 0x9aa3a8, 82, { modern: true, roof: 'flat', plinth: false, name: 'DN-skrapan' });
+  landmark([-1630, 596, 1, 0], 70, 24, 0xe0b864, 12, { rh: 3, roofCol: 0x3a3e42, name: 'Långholmens fängelse' });
+  landmark([2185, -262, 1, 0], 34, 16, 0xe7b4a2, 10, { rh: 4, roofCol: 0x3a3e42, name: 'Rosendals slott' });
+  landmark([560, 2715, 1, 0], 160, 140, 0x5b6268, 30, { modern: true, roof: 'flat', plinth: false, name: 'Tele2 Arena' });
+  // Globen, the white ball of the arena in Johanneshov (110 m across, 85 m tall), and Kaknästornet, the 155 m television
+  // tower on Gärdet. They tower over everything, so they are drawn even beyond the fog (see FAR)
+  const GLOBE = { x: 560, z: 2620, R: 55, y: 30 }, KAKNAS = { x: 2540, z: -1000 };
+  {
+    const poly = Array.from({ length: 24 }, (_, i) => [GLOBE.x + Math.cos((i / 24) * TAU) * 46.1, GLOBE.z + Math.sin((i / 24) * TAU) * 46.1]);
+    addCircle(GLOBE.x, GLOBE.z, 46.5, 85); take(poly); mapPolys.push([poly, 0xf1f1ef]); mapLabels.push(['Globen', GLOBE.x, GLOBE.z, 'landmark']);
+    const kp = Array.from({ length: 8 }, (_, i) => [KAKNAS.x + Math.cos((i / 8) * TAU + 0.39) * 6, KAKNAS.z + Math.sin((i / 8) * TAU + 0.39) * 6]);
+    addCircle(KAKNAS.x, KAKNAS.z, 6.2, 172); take(kp); mapPolys.push([kp, 0xc9c6bf]); mapLabels.push(['Kaknästornet', KAKNAS.x, KAKNAS.z, 'landmark']);
+  }
+  // more of the city: Klara kyrka's tall spire, Rosenbad by the water, Johannes kyrka in Vasastan, Östermalms saluhall,
+  // and on Kungsholmen the Rådhuset court house and Polishuset, the police headquarters
+  {
+    const B = landmark([-458, -548, 1, 0], 26, 46, 0xa3503a, 15, { rh: 9, ri: 12, roofCol: 0x3a3e42, name: 'Klara kyrka' });
+    steeple(B, -452, -562, -438, -548, 42, 62, 0xa3503a, 0x5f9c86, false);
+  }
+  landmark([-300, -345, 1, 0], 60, 38, 0xd9b8a0, 22, { rh: 4, ri: 4, roofCol: 0x5f9c86, name: 'Rosenbad' });
+  {
+    const B = landmark([-266, -1218, 1, 0], 22, 40, 0xa3503a, 14, { rh: 8, ri: 10, roofCol: 0x3a3e42, name: 'Johannes kyrka' });
+    steeple(B, -262, -1232, -248, -1218, 32, 46, 0xa3503a, 0x3a3e42, false);
+  }
+  {
+    const B = landmark([364, -990, 1, 0], 48, 52, 0x9a4a32, 11, { rh: 5, ri: 10, roofCol: 0x4a4f52, name: 'Östermalms saluhall' });
+    for (const x of [364, 404]) { B.box(x, 0, -990, x + 8, 17, -982, 0x9a4a32, true, false); B.hip(x - 0.3, -990.3, x + 8.3, -981.7, 17, 4, 4, 4, 0x4a4f52); }
+  }
+  {
+    const B = landmark([-1100, -626, 1, 0], 65, 52, 0xa45a3d, 18, { rh: 4, ri: 4, roofCol: 0x5f9c86, name: 'Rådhuset' });
+    B.box(-1072, 18, -626, -1062, 30, -616, 0xa45a3d, true, false); B.hip(-1072.3, -626.3, -1061.7, -615.7, 30, 6, 5, 5, 0x5f9c86);
+  }
+  landmark([-1340, -634, 1, 0], 50, 59, 0xd6c49c, 21, { roof: 'flat', name: 'Polishuset' });
+  {
+    const B = cityAt(650, 40);
+    B.prism(650, 40, 13, 0, 14, 20, 0xe6d8b0);
+    B.prism(650, 40, 13.6, 14, 22, 20, 0x5f9c86, 3);
+    B.prism(650, 40, 2.4, 22, 27, 8, 0xe6d8b0, 1.4);
+    addCircle(650, 40, 13.2, 22);
+    take(axisPoly(636, 26, 664, 54));
+    mapPolys.push([axisPoly(637, 27, 663, 53), 0xe6d8b0]);
+    mapLabels.push(['Skeppsholmskyrkan', 650, 40, 'landmark']);
+  }
+  landmark([560, 110, 1, 0], 80, 50, 0xd8d5ce, 7, { roof: 'flat', modern: true, name: 'Moderna museet' });
+  {
+    const B = cityAt(730, 430);
+    landmark([718, 420, 1, 0], 24, 22, 0xa45a3d, 8, { rh: 2, roofCol: 0x3a3e42 });
+    B.prism(722, 424, 5, 0, 16, 14, 0xa45a3d);
+    B.prism(722, 424, 5.4, 16, 17, 14, 0x8a4a35);
+    B.box(721.9, 17, 423.9, 722.1, 24, 424.1, 0xe8e8e8);
+    B.box(722.1, 21.6, 423.95, 725.1, 23.6, 424.05, 0xf2c200);
+    mapLabels.push(['Kastellet', 722, 424, 'landmark']);
+  }
+
+  /* ---------- Drakens gränd: the yellow house in the middle, with a penthouse on its top three floors ---------- */
+  // Modelled by hand in its own frame: local x along the lane, local z from the facade on the lane (z = 0) back into
+  // the block, y up. Six storeys. The street door opens on a wide stairwell where the stairs climb in half flights on
+  // either side of an open iron lift cage, with a landing on every floor at the front and a half landing at the back.
+  // The stairs end on the third floor at the flat's front door; the lift goes on up into the flat. The flat is the whole
+  // of the top three floors: the hall, the living room and the kitchen on the first, a library round the lift, a big
+  // family room with a billiard table, an office and a sauna on the second, and under the roof beams on the third the
+  // bedrooms and their bathroom, all joined by a stair of its own. Walls indoors only block the storey they are on.
+  const DRAKEN = (() => {
+    const f = streetFrame('gO3c', 'gS312'), W = 15, D = 12, FLOORS = 6, F = FLOOR_H, H = FLOORS * F + 0.6, TOP = (FLOORS - 1) * F, FL = 3;
+    const fr = lotFrame(f, -1, f.len / 2 - W / 2, W, f.e.hw + f.e.walk + 0.2), [ox, oz, c, s] = fr;
+    const poly = rectPoly(fr, 0, 0, W, D), col = 0xe9c25a;
+    const toWorld = (lx, lz) => [ox + lx * c - lz * s, oz + lx * s + lz * c];
+    const toLocal = (x, z) => { const dx = x - ox, dz = z - oz; return [dx * c + dz * s, -dx * s + dz * c]; };
+    take(poly);
+    mapPolys.push([poly, col]);
+    // a wall in the local frame; y0 and y1 keep it to the storeys it stands on; see: the camera looks through it
+    const wall = (x0, z0, x1, z1, y0, y1 = 99, see) => {
+      const [cx, cz] = toWorld((x0 + x1) / 2, (z0 + z1) / 2), o = addOBox(cx, cz, c, s, (x1 - x0) / 2, (z1 - z0) / 2, y1, y0);
+      if (see) o.see = true;
+      return o;
+    };
+    // the stairwell: flights up the outer lane (x0-a1) and back down the inner one (b0-x1) on either side of the lift
+    // cage (s0-s1); landings at z0-z1, flights to z2, half landings to z3. It serves floors 0 to 3
+    const ST = { x0: 0.4, a1: 1.75, s0: 1.75, s1: 3.95, b0: 3.95, x1: 5.3, z0: 0.4, z1: 1.8, z2: 4.4, z3: 6.0 };
+    // the lift: the cab inside the cage and the door in the front of it
+    const CAB = { x0: 1.85, x1: 3.85, z0: 1.9, z1: 3.5, d0: 2.35, d1: 3.35 };
+    // the flat's own stair, between its floors: landing at the front (z0-z1), flights to z2, half landing to z3
+    const FS = { x0: 5.5, m: 6.6, x1: 7.7, z0: 2.2, z1: 3.4, z2: 6.0, z3: 7.2 };
+    // outer walls, with the street door (x 0.75-2.25) at the bottom of the front
+    wall(0, 0, 0.75, 0.4); wall(2.25, 0, W, 0.4); wall(0.75, 0, 2.25, 0.4, 2.85);
+    wall(0, D - 0.4, W, D); wall(0, 0, 0.4, D); wall(W - 0.4, 0, W, D);
+    // a wall with doorways: holes [a0, a1, y0] are 2.1 m high openings in a wall running along x (or z)
+    const wallWith = (along, a0, a1, t0, t1, y0, y1, holes) => {
+      const cuts = [a0, a1, ...holes.flatMap((h) => [h[0], h[1]])].sort((p, q) => p - q);
+      for (let i = 0; i < cuts.length - 1; i++) {
+        const p = cuts[i], q = cuts[i + 1], m = (p + q) / 2;
+        if (q - p < 1e-3) continue;
+        const ys = holes.filter((h) => h[0] < m && h[1] > m).map((h) => h[2]).sort((u, v) => u - v);
+        let y = y0;
+        const piece = (ya, yb) => { if (yb - ya > 0.15) along === 'x' ? wall(p, t0, q, t1, ya, yb) : wall(t0, p, t1, q, ya, yb); };
+        // (a piece ending just above a floor, or starting a door's height above it, blocks only the storeys it stands on)
+        for (const hy of ys) { piece(y, hy + 0.1); y = hy + 2.1; }
+        piece(y, y1);
+      }
+    };
+    // round the stairwell: the wall to the flat with the neighbours' doors (shut), the flat's door on the third floor and
+    // doorways on the floors above; the back wall, with doorways on the fourth and fifth floors
+    wallWith('z', 0.4, 6.2, ST.x1, ST.x1 + 0.2, 0, 99, [[0.6, 1.6, FL * F], [0.6, 1.6, 4 * F], [0.6, 1.6, 5 * F]]);
+    wallWith('x', 0.4, ST.x1 + 0.2, ST.z3, ST.z3 + 0.2, 0, 99, [[0.8, 1.7, 4 * F], [0.8, 1.7, 5 * F]]);
+    // the lift cage, all the way up (the camera sees through its bars); its doors are walls of their own on each floor
+    wall(ST.s0, ST.z1, ST.s0 + 0.1, ST.z2, 0, 99, true); wall(ST.s1 - 0.1, ST.z1, ST.s1, ST.z2, 0, 99, true);
+    wall(ST.s0, CAB.z1, ST.s1, ST.z2, 0, 99, true);
+    wall(ST.s0, ST.z1, CAB.d0, ST.z1 + 0.1, 0, 99, true); wall(CAB.d1, ST.z1, ST.s1, ST.z1 + 0.1, 0, 99, true);
+    const liftDoors = [];
+    for (let k = 0; k < FLOORS; k++) liftDoors.push(wall(CAB.d0, ST.z1, CAB.d1, ST.z1 + 0.1, k * F, k * F + 2.2, true));
+    // the space under the first flights is shut off, and a railing stops you stepping off the top landing
+    wall(ST.b0, ST.z1, ST.x1, ST.z3, 0, F / 2); wall(ST.s0, ST.z2, ST.b0, ST.z3, 0, F / 2);
+    wall(ST.x0, ST.z1 - 0.05, ST.a1, ST.z1 + 0.05, FL * F - 0.2, FL * F + 1.1);
+    // the flat's stair: a wall down the middle and round the sides, shut off under its first flights, a railing at the top
+    wall(FS.m - 0.05, FS.z1, FS.m + 0.05, FS.z2, FL * F); wall(FS.x1, FS.z1, FS.x1 + 0.15, FS.z3 + 0.15, FL * F); wall(FS.x0, FS.z3, FS.x1 + 0.15, FS.z3 + 0.15, FL * F);
+    wall(FS.m + 0.05, FS.z1, FS.x1, FS.z2, FL * F, FL * F + F / 2);
+    wall(FS.x0, FS.z1 - 0.05, FS.m, FS.z1 + 0.05, 5 * F - 0.2, 5 * F + 1.1);
+    // the rooms behind the stairwell, on the floors of the flat: the laundry's door from the kitchen on the third floor
+    wallWith('z', 6.2, D - 0.4, ST.x1, ST.x1 + 0.2, 0, 99, [[9.0, 9.9, FL * F]]);
+    // the walls between the rooms, storey by storey (a wall built from y0 = k F to k F + 3 blocks that floor only)
+    const room = (k, along, a0, a1, t0, t1, doors = []) => wallWith(along, a0, a1, t0, t1, k * F, k * F + 3.0, doors.map(([p, q]) => [p, q, k * F]));
+    room(3, 'z', 0.4, FS.z1, 8.9, 9.05, [[1.2, 2.6]]);
+    room(4, 'z', 0.4, 7.35, 8.9, 9.05, [[1.0, 2.6], [4.8, 6.6]]); room(4, 'z', 7.35, D - 0.4, 8.9, 9.05);
+    room(5, 'z', 0.4, 7.35, 8.9, 9.05, [[4.3, 5.2]]); room(5, 'z', 7.35, D - 0.4, 8.9, 9.05);
+    room(5, 'x', 9.05, W - 0.4, 7.35, 7.5, [[9.4, 10.3]]);
+    // (the rooms behind the flat's stair, the sauna and the third bedroom, are reached past the end of its east wall)
+    // the lift: where the cab is, which floor it is at, where it is going, how far its doors are open
+    const lift = { y: 0, floor: 0, want: null, doors: 0, phase: 'idle', t: 0, v: 0 };
+    return { f, W, D, FLOORS, F, H, TOP, FL, fr, col, poly, toWorld, toLocal, wall, ST, CAB, FS, lift, liftDoors, doors: [], home: false };
+  })();
+  // the floor under someone standing at height y in the yellow house and the ceiling over them, or null outside it
+  function indoorSpan(x, z, y) {
+    const { W, D, F, FL, ST, FS, CAB, lift } = DRAKEN, [lx, lz] = DRAKEN.toLocal(x, z);
+    if (lx < 0 || lx > W || lz < 0 || lz > D) return null;
+    // in the lift cage: the floor of the cab, wherever it is
+    if (lx > ST.s0 && lx < ST.s1 && lz > ST.z1 && lz < ST.z2) return { floor: lift.y, ceil: lift.y + 2.2, lx, lz, cab: true };
+    const S = [0], ramp = (first, t, k) => k * F + (first ? t : 2 - t) * F / 2;
+    if (lx < ST.x1 + 0.1 && lz < ST.z3 + 0.1) {
+      // the stairwell up to the third floor, and the flat's floors over it
+      if (lz < ST.z1) for (let k = 1; k <= FL; k++) S.push(k * F);
+      else if (lz < ST.z2) {
+        // the flights are ramps: up the outer lane to the half landing, back up the inner lane to the next floor
+        const t = (lz - ST.z1) / (ST.z2 - ST.z1);
+        for (let k = 0; k < FL; k++) S.push(ramp(lx < ST.s0, t, k));
+      } else for (let k = 0; k < FL; k++) S.push(k * F + F / 2);
+      S.push(4 * F, 5 * F);
+    } else if (lx > FS.x0 - 0.1 && lx < FS.x1 + 0.1 && lz > FS.z1 && lz < FS.z3 + 0.1) {
+      // the flat's own stair: open from the third floor up to the roof
+      S.push(FL * F);
+      if (lz < FS.z2) { const t = (lz - FS.z1) / (FS.z2 - FS.z1); for (const k of [FL, FL + 1]) S.push(ramp(lx < FS.m, t, k)); }
+      else for (const k of [FL, FL + 1]) S.push(k * F + F / 2);
+    } else S.push(FL * F, 4 * F, 5 * F);
+    let floor = 0, ceil = 6 * F - 0.3;
+    for (const h of S) {
+      if (h <= y + 0.5 && h > floor) floor = h;
+      if (h > 0 && h - 0.35 >= y + 1.2 && h - 0.35 < ceil) ceil = h - 0.35;
+    }
+    return { floor, ceil, lx, lz };
+  }
+
+  /* ---------- the rest of the city: buildings along every street ---------- */
+  for (const e of edges) {
+    if (e.bridge) continue;
+    const f = edgeFrame(e.a, e.b), set = e.hw + e.walk + 0.2;
+    for (const side of [1, -1]) {
+      let s = Math.max(1, nodes[e.a].r - 4);
+      const end = e.len - Math.max(1, nodes[e.b].r - 4);
+      while (s < end - 5) {
+        const S = styleAt(f.A.x + f.ux * s + f.rx * side * (set + 6), f.A.z + f.uz * s + f.rz * side * (set + 6));
+        let lot = rr(S.lot[0], S.lot[1]);
+        if (end - (s + lot) < S.lot[0] * 0.6) lot = end - s;
+        if (lot < 5) break;
+        if (S.sparse && rand() > S.sparse) { s += lot + rr(10, 40); continue; }
+        let built = false;
+        for (const depth of [S.depth * rr(0.85, 1.15), S.depth * 0.6]) {
+          const fr = lotFrame(f, side, s, lot, set);
+          if (fits(rectPoly(fr, 0, 0, lot, depth))) { addBuilding(fr, lot, depth, S); built = true; break; }
+        }
+        s += built ? lot : 3;
+      }
+    }
+  }
+  // the old town is built solid: whatever is left inside the blocks behind the street fronts gets houses too, turned
+  // to line up with the nearest lane, so from above Gamla stan is one sea of roofs cut by narrow lanes
+  for (const L of LANDS) {
+    if (L.name !== 'Gamla stan') continue;
+    const [x0, z0, x1, z1] = polyBox(L.poly);
+    for (let z = z0 + 3; z < z1; z += 4) for (let x = x0 + 3; x < x1; x += 4) {
+      if (!solidLand(x, z)) continue;
+      const ne = nearestEdge(x, z);
+      if (!ne.e) continue;
+      const A = nodes[ne.e.a], B = nodes[ne.e.b], c = (B.x - A.x) / ne.e.len, s = (B.z - A.z) / ne.e.len;
+      for (const [w, d] of [[11, 10], [8, 8], [6, 6], [4.5, 4.5]]) {
+        const fr = [x - (w / 2) * c + (d / 2) * s, z - (w / 2) * s - (d / 2) * c, c, s];
+        if (fits(rectPoly(fr, 0, 0, w, d))) { addBuilding(fr, w, d, STYLE.gamla, { simple: true }); break; }
+      }
+    }
+  }
+  // further out, the city goes on in blocks without streets you can drive on
+  const FILLER = [
+    { poly: [[-845, -1165], [55, -1195], [80, -1450], [-845, -1450]], ang: -0.139, S: STYLE.norr },
+    { poly: [[-845, -1160], [-778, -1150], [-748, -1010], [-712, -866], [-845, -872]], ang: -0.139, S: STYLE.norr },
+    { poly: [[60, -1196], [1000, -1196], [1000, -1450], [80, -1450]], ang: 0, S: STYLE.oster },
+    { poly: [[938, -588], [1150, -568], [1150, -1196], [938, -1196]], ang: 0, S: STYLE.oster },
+    { poly: [[-1395, -900], [-913, -900], [-913, -1450], [-1395, -1450]], ang: 0, S: STYLE.kungs },
+    { poly: [[-1250, 778], [-860, 778], [-955, 1212], [-1250, 1212]], ang: -0.38, S: STYLE.soder },
+    { poly: [[-945, 1216], [-566, 1152], [-563, 1505], [-945, 1505]], ang: 0, S: STYLE.soder },
+    { poly: [[-1250, 1526], [1250, 1526], [1250, 1700], [-1250, 1700]], ang: 0, S: STYLE.soder },
+    { poly: [[612, 768], [1250, 805], [1250, 1522], [612, 1500]], ang: 0.03, S: STYLE.soder },
+    // the new districts round the old city
+    { poly: [[-1690, -1462], [-60, -1462], [-60, -2035], [-1690, -2060]], ang: -0.03, S: STYLE.norr },
+    { poly: [[-2690, -1262], [-1590, -1262], [-1590, -2085], [-2690, -2090]], ang: 0, S: STYLE.norr },
+    { poly: [[-2690, -2100], [-80, -2060], [-80, -2390], [-2690, -2390]], ang: 0, S: STYLE.city },
+    { poly: [[60, -1460], [1250, -1460], [1250, -1630], [60, -1690]], ang: 0, S: STYLE.oster },
+    { poly: [[0, -1720], [900, -1680], [900, -2390], [0, -2390]], ang: 0, S: STYLE.kungs },
+    { poly: [[1800, -1960], [2900, -2050], [2880, -2390], [1800, -2390]], ang: 0, S: STYLE.oster },
+    { poly: [[-2690, -100], [-1590, -80], [-1590, -1175], [-2690, -1180]], ang: 0, S: STYLE.kungs },
+    { poly: [[1250, 815], [1940, 900], [1960, 1450], [1700, 1930], [1250, 1960]], ang: 0.03, S: STYLE.soder },
+    { poly: [[-1250, 1700], [1250, 1700], [1250, 1975], [-1250, 1955]], ang: 0, S: STYLE.soder },
+    { poly: [[-1690, 800], [-1260, 790], [-1260, 1700], [-1250, 1950], [-1600, 1800], [-1690, 1500]], ang: 0, S: STYLE.soder },
+    { poly: [[700, 2165], [1990, 2160], [1990, 2700], [700, 2700]], ang: 0, S: STYLE.sjostad },
+    { poly: [[-1000, 2170], [700, 2165], [700, 2990], [-1000, 2990]], ang: 0.2, S: STYLE.funkis, slabs: true },
+    { poly: [[700, 2700], [2050, 2700], [2050, 2990], [700, 2990]], ang: 0.2, S: STYLE.funkis, slabs: true },
+    { poly: [[-2690, 2060], [-1000, 2170], [-1000, 2990], [-2690, 2990]], ang: -0.3, S: STYLE.funkis, slabs: true }
+  ];
+  for (const F of FILLER) {
+    const c = Math.cos(F.ang), s = Math.sin(F.ang), [x0, z0, x1, z1] = polyBox(F.poly), BW = 76, BD = 64, GAP = 14;
+    // walk a rotated grid of blocks over the region; each block gets four wings round a courtyard (in the suburbs two
+    // long lamellhus side by side)
+    const R = Math.hypot(x1 - x0, z1 - z0) / 2 + BW, mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
+    for (let u = -R; u < R; u += BW + GAP) for (let v = -R; v < R; v += BD + GAP) {
+      const ox = mx + u * c - v * s, oz = mz + u * s + v * c, fr = [ox, oz, c, s];
+      const [bx, bz] = centroid(rectPoly(fr, 0, 0, BW, BD));
+      if (!pointInPoly(F.poly, bx, bz)) continue;
+      const D = F.slabs ? 11 : 13;
+      for (const [a, b, w, d] of F.slabs ? [[4, 2, BW - 8, D], [4, BD - D - 2, BW - 8, D]] : [[0, 0, BW, D], [0, BD - D, BW, D], [0, D, D, BD - 2 * D], [BW - D, D, D, BD - 2 * D]]) {
+        const sub = [ox + a * c - b * s, oz + a * s + b * c, c, s];
+        if (fits(rectPoly(sub, 0, 0, w, d), 1)) addBuilding(sub, w, d, F.S, { simple: true });
+      }
+    }
+  }
+
+  // woods all over Djurgården and Långholmen, wherever there is room between the houses and the roads
+  for (const [name, n] of [['Djurgården', 650], ['Långholmen', 80]]) treesIn(LANDS.find((L) => L.name === name).poly, n, lindens, 0.9, 1.35);
+
+  /* ---------- boats ---------- */
+  // (everything afloat is modelled from a waterline 1.6 m below the quays and lowered to the water)
+  const WL = WATER_Y + 1.6;
+  function boat(bx, cz, L, ang = 0) {
+    const B = cityAt(bx, cz), W = 5;
+    B.setFrame(bx, cz, Math.cos(ang), Math.sin(ang));
+    B.hexa([[-L / 2 + 1, WL - 2.4, -W / 2 + 0.8], [L / 2 - 3, WL - 2.4, -W / 2 + 0.8], [L / 2 - 3, WL - 2.4, W / 2 - 0.8], [-L / 2 + 1, WL - 2.4, W / 2 - 0.8],
+      [-L / 2, WL - 0.3, -W / 2], [L / 2, WL - 0.3, -0.4], [L / 2, WL - 0.3, 0.4], [-L / 2, WL - 0.3, W / 2]], 0xf2f2ee);
+    B.box(-6, WL - 0.3, -1.8, 4, WL + 1.9, 1.8, 0xf6f6f2);
+    B.box(-6.05, WL + 0.7, -1.85, 4.05, WL + 1.4, 1.85, 0x2a3946);
+    B.box(1, WL + 1.9, -1.4, 4, WL + 3.4, 1.4, 0xf6f6f2);
+    B.box(1.0, WL + 2.5, -1.45, 4.05, WL + 3.0, 1.45, 0x2a3946);
+    B.prism(-2, 0, 0.6, WL + 1.9, WL + 4.6, 10, 0x1c1d20);
+    B.prism(-2, 0, 0.62, WL + 3.6, WL + 4.1, 10, 0xf2b705, 0.62, false);
+    B.setFrame();
+    const c = Math.cos(ang), sn = Math.sin(ang);
+    addOBox(bx, cz, c, sn, L / 2, W / 2, WL + 4.6);
+  }
+  // moored along Strandvägen, just off the quay (which runs slightly south-east)
+  for (const x of [450, 530, 610, 690, 780, 860, 940]) boat(x, -632 + (x - 420) * 0.0897 + 10, 20, 0.09);
+  for (const z of [10, 250, 310]) boat(250, z, 20, Math.PI / 2);
+  for (const s of [45, 110]) boat(...LOT.at(s, 39.5), 20, Math.atan2(LOT.f.uz, LOT.f.ux));
+  // af Chapman, the white full-rigged ship moored at Skeppsholmen
+  {
+    const B = cityAt(426, 60), x = 426;
+    B.hexa([[x - 3, WL - 3, 34], [x + 3, WL - 3, 34], [x + 3, WL - 3, 86], [x - 3, WL - 3, 86], [x - 4.6, WL + 1.4, 28], [x + 4.6, WL + 1.4, 28], [x + 4.6, WL + 1.4, 88], [x - 4.6, WL + 1.4, 88]], 0xf4f4f0);
+    B.box(x - 4.7, WL + 1.0, 28, x + 4.7, WL + 1.6, 88, 0x2a2a2a);
+    B.box(x - 0.2, WL + 1.2, 18, x + 0.2, WL + 1.6, 28, 0x8a6a46);
+    for (const [z, h] of [[40, 38], [58, 40], [76, 32]]) {
+      B.box(x - 0.25, WL + 1.4, z - 0.25, x + 0.25, WL + 1.4 + h, z + 0.25, 0x6b4f35);
+      for (let k = 0; k < 4; k++) { const y = WL + 8 + k * (h - 10) / 3; B.box(x - 7 + k * 1.1, y, z - 0.12, x + 7 - k * 1.1, y + 0.25, z + 0.12, 0x6b4f35); }
+    }
+    addBox(x - 4.8, 28, x + 4.8, 88, 3);
+    mapPolys.push([axisPoly(x - 4.6, 28, x + 4.6, 88), 0xf4f4f0]);
+    mapLabels.push(['af Chapman', x, 58, 'landmark']);
+  }
+  // a Viking Line ferry at Stadsgården
+  {
+    const B = cityAt(430, 650), x0 = 340, x1 = 520, z0 = 637, z1 = 663;
+    B.hexa([[x0 + 10, WL - 3, z0 + 4], [x1 - 22, WL - 3, z0 + 4], [x1 - 22, WL - 3, z1 - 4], [x0 + 10, WL - 3, z1 - 4], [x0, WL + 6, z0], [x1, WL + 6, (z0 + z1) / 2 - 2], [x1, WL + 6, (z0 + z1) / 2 + 2], [x0, WL + 6, z1]], 0xc8102e);
+    B.box(x0 + 2, WL + 6, z0 + 0.5, x1 - 26, WL + 18, z1 - 0.5, 0xf4f4f2);
+    for (let y = WL + 8; y < WL + 18; y += 3) B.box(x0 + 1.8, y, z0 + 0.3, x1 - 25.8, y + 1.1, z1 - 0.3, 0x2a3946);
+    B.box(x0 + 20, WL + 18, z0 + 3, x1 - 50, WL + 22, z1 - 3, 0xf4f4f2);
+    B.box(x0 + 40, WL + 22, (z0 + z1) / 2 - 3, x0 + 52, WL + 30, (z0 + z1) / 2 + 3, 0xc8102e);
+    addBox(x0, z0, x1, z1, 30);
+    mapPolys.push([axisPoly(x0, z0, x1, z1), 0xf4f4f2]);
+  }
+
+  /* ---------- street signs and T-bana signs ---------- */
+  const SIGN_NAMES = [...new Set(edges.map((e) => e.name))];
+  const SIGN_ROWS = Math.ceil(SIGN_NAMES.length / 2);
+  const signTex = canvasTex(1024, 64 * SIGN_ROWS, (g) => {
+    SIGN_NAMES.forEach((name, i) => {
+      const x = (i % 2) * 512, y = Math.floor(i / 2) * 64;
+      g.fillStyle = '#0a5ba8'; roundRect(g, x + 2, y + 3, 508, 58, 8); g.fill();
+      g.strokeStyle = '#ffffff'; g.lineWidth = 4; roundRect(g, x + 9, y + 10, 494, 44, 5); g.stroke();
+      g.fillStyle = '#ffffff'; g.font = '700 31px Overpass, "Arial Narrow", Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(name, x + 256, y + 34, 460);
+    });
+  });
+  function signFace(name, cx, y, cz, ux, uz) {
+    const i = SIGN_NAMES.indexOf(name);
+    if (i < 0) return;
+    const H = 64 * SIGN_ROWS, u0 = (i % 2) * 0.5, u1 = u0 + 0.5, row = Math.floor(i / 2);
+    const v1 = 1 - (row * 64 + 3) / H, v0 = 1 - (row * 64 + 61) / H, hw = 1.3, y0 = y - 0.165, y1 = y + 0.165, nx = -uz * 0.012, nz = ux * 0.012;
+    const P = (s, yy, sd) => [cx + ux * s + nx * sd, yy, cz + uz * s + nz * sd];
+    const uv = [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
+    signB.quad(P(-hw, y0, 1), P(hw, y0, 1), P(hw, y1, 1), P(-hw, y1, 1), 0xffffff, uv, [nx, 0, nz]);
+    signB.quad(P(hw, y0, -1), P(-hw, y0, -1), P(-hw, y1, -1), P(hw, y1, -1), 0xffffff, uv, [-nx, 0, -nz]);
+  }
+  nodes.forEach((n, ni) => {
+    const inc = n.all.map((i) => edges[i]);
+    if (new Set(inc.map((e) => e.name)).size < 2) return;
+    const dir = (e) => { const o = nodes[e.a === ni ? e.b : e.a]; const l = Math.hypot(o.x - n.x, o.z - n.z); return [(o.x - n.x) / l, (o.z - n.z) / l]; };
+    let done = false;
+    for (let i = 0; i < inc.length && !done; i++) for (let j = 0; j < inc.length && !done; j++) {
+      const e1 = inc[i], e2 = inc[j];
+      if (e1.name === e2.name) continue;
+      const u1 = dir(e1), u2 = dir(e2), bx = u1[0] + u2[0], bz = u1[1] + u2[1], bl = Math.hypot(bx, bz);
+      if (bl < 0.3) continue;
+      const half = Math.acos(clamp(u1[0] * u2[0] + u1[1] * u2[1], -1, 1)) / 2;
+      const dist = Math.min(22, (Math.max(e1.hw, e2.hw) + 1.4) / Math.max(0.2, Math.sin(half)));
+      const px = n.x + (bx / bl) * dist, pz = n.z + (bz / bl) * dist;
+      if (!walkable(px, pz) || blockedAt(px, pz, 0.4)) continue;
+      const B = cityAt(px, pz);
+      B.box(px - 0.06, 0, pz - 0.06, px + 0.06, 3.5, pz + 0.06, 0x5d646a);
+      addCircle(px, pz, 0.1);
+      signFace(e1.name, px, 3.2, pz, u1[0], u1[1]);
+      signFace(e2.name, px, 2.78, pz, u2[0], u2[1]);
+      done = true;
+    }
+  });
+  const STATIONS = [['T-Centralen', -335, -640], ['Hötorget', -470, -900], ['Östermalmstorg', 300, -880], ['Kungsträdgården', 100, -500], ['Gamla stan', -300, 330],
+    ['Slussen', 70, 705], ['Mariatorget', -440, 1045], ['Medborgarplatsen', 95, 1392], ['Rådhuset', -990, -430]];
+  for (const [name, sx, sz] of STATIONS) {
+    let spot = null;
+    for (let r = 0; r < 30 && !spot; r += 2) for (let a = 0; a < TAU && !spot; a += 0.5) {
+      const x = sx + Math.cos(a) * r, z = sz + Math.sin(a) * r, ne = nearestEdge(x, z);
+      if (walkable(x, z) && !blockedAt(x, z, 0.6) && ne.e && ne.d > ne.e.hw + 0.6 && ne.d < ne.e.hw + ne.e.walk + 0.5) spot = [x, z];
+    }
+    if (!spot) continue;
+    const [px, pz] = spot, B = cityAt(px, pz);
+    B.box(px - 0.07, 0, pz - 0.07, px + 0.07, 3.0, pz + 0.07, 0x5d646a);
+    addCircle(px, pz, 0.12);
+    const s = 0.42, y = 3.3;
+    tB.quad([px - s, y - s, pz + 0.02], [px + s, y - s, pz + 0.02], [px + s, y + s, pz + 0.02], [px - s, y + s, pz + 0.02], 0xffffff, [[0, 0], [1, 0], [1, 1], [0, 1]], [0, 0, 1]);
+    tB.quad([px + s, y - s, pz - 0.02], [px - s, y - s, pz - 0.02], [px - s, y + s, pz - 0.02], [px + s, y + s, pz - 0.02], 0xffffff, [[0, 0], [1, 0], [1, 1], [0, 1]], [0, 0, -1]);
+    mapLabels.push([name, px, pz, 'tbana']);
+  }
+
+  /* ---------- Globen and Kaknästornet, seen from anywhere ---------- */
+  // They stand where they stand, but are seen from all over town: hazed by hand instead of by the fog, and when the
+  // camera is too far off for them to fit inside the view distance, drawn smaller at the edge of it in their direction.
+  const FAR = [];
+  {
+    const hazeLin = new THREE.Color().setRGB(HAZE[0], HAZE[1], HAZE[2]).convertSRGBToLinear();
+    const far = (geo, col, x, z, vertexColors, map) => {
+      const mat = std({ color: col, roughness: 0.35, metalness: 0.05, fog: false, vertexColors: !!vertexColors, map: map || null });
+      const m = new THREE.Mesh(geo, mat);
+      m.position.set(x, 0, z); m.castShadow = true; m.receiveShadow = true;
+      scene.add(m);
+      FAR.push({ m, x, z, base: mat.color.clone(), haze: hazeLin });
+    };
+    const globe = new THREE.SphereGeometry(GLOBE.R, 56, 30, 0, TAU, 0, Math.acos(-GLOBE.y / GLOBE.R));
+    globe.translate(0, GLOBE.y, 0);
+    // the white panels of the ball, in a grid of seams
+    const panels = canvasTex(512, 256, (g, w, h) => {
+      g.fillStyle = '#f4f4f1'; g.fillRect(0, 0, w, h);
+      g.fillStyle = '#c4c7c9';
+      for (let i = 0; i < 48; i++) g.fillRect((i / 48) * w, 0, 1.5, h);
+      for (let j = 1; j < 24; j++) g.fillRect(0, (j / 24) * h, w, 1.5);
+    });
+    far(globe, 0xffffff, GLOBE.x, GLOBE.z, false, panels);
+    const kak = new Builder();
+    kak.prism(0, 0, 9, 0, 3, 8, 0xc9c6bf, 6.5);
+    kak.prism(0, 0, 5.2, 3, 118, 8, 0xc9c6bf, 4.4);
+    kak.prism(0, 0, 9.5, 118, 121, 12, 0xd9d6cf, 9.5);
+    kak.prism(0, 0, 9.4, 121, 129, 12, 0x2a3946, 9.4);
+    kak.prism(0, 0, 9.6, 129, 132, 12, 0xd9d6cf, 7);
+    kak.prism(0, 0, 1.6, 132, 155, 8, 0xd8203a, 0.9);
+    kak.prism(0, 0, 0.9, 155, 172, 6, 0xe8e8e8, 0.2);
+    far(kak.build(), 0xffffff, KAKNAS.x, KAKNAS.z, true);
+  }
+  function updateFar() {
+    const cx = camera.position.x, cy = camera.position.y, cz = camera.position.z, MAXD = 2150;
+    for (const f of FAR) {
+      const dx = f.x - cx, dz = f.z - cz, d = Math.hypot(dx, dz), s = d > MAXD ? MAXD / d : 1;
+      f.m.position.set(cx + dx * s, cy * (1 - s), cz + dz * s);
+      f.m.scale.setScalar(s);
+      const k = clamp((d - 250) / 2400, 0, 0.72);
+      f.m.material.color.copy(f.base).multiplyScalar(1 - k);
+      f.m.material.emissive.copy(f.haze).multiplyScalar(k);
+    }
+  }
+
+  /* ---------- finer materials ---------- */
+  // The ground gets sharper textures with relief: a normal map worked out from each texture's brightness, so stones
+  // stand up out of their joints and the asphalt is rough. Drawn with a random sequence of their own, so the city
+  // itself stays exactly as it was laid out above.
+  let tseed = 77;
+  const trand = () => { tseed = (tseed * 16807) % 2147483647; return (tseed - 1) / 2147483646; };
+  const trr = (a, b) => a + trand() * (b - a);
+  function tgrain(g, x, y, w, h, n, dark, light, size) {
+    for (let i = 0; i < n; i++) { g.fillStyle = trand() < 0.5 ? dark : light; const s = size * (0.6 + trand()); g.fillRect(x + trand() * w, y + trand() * h, s, s); }
+  }
+  function tblotches(g, w, h, n, rgb, alpha, rmin, rmax) {
+    for (let i = 0; i < n; i++) {
+      const x = trand() * w, y = trand() * h, r = trr(rmin, rmax), gr = g.createRadialGradient(x, y, 0, x, y, r);
+      gr.addColorStop(0, `rgba(${rgb},${alpha * (0.4 + trand() * 0.6)})`); gr.addColorStop(1, `rgba(${rgb},0)`);
+      g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2);
+      // wrapped round the edges, so the texture tiles without a seam
+      for (const [ox, oy] of [[w, 0], [-w, 0], [0, h], [0, -h]]) if (x + ox - r < w && x + ox + r > 0 && y + oy - r < h && y + oy + r > 0) { g.save(); g.translate(ox, oy); g.fillRect(x - r, y - r, r * 2, r * 2); g.restore(); }
+    }
+  }
+  // fine grain, pixel by pixel (much faster than drawing it speck by speck): a share p of the pixels darkened by up to
+  // dark, as many lightened by up to light
+  function pixelNoise(g, x0, y0, w, h, p, dark, light) {
+    const img = g.getImageData(x0, y0, w, h), d = img.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const r = trand();
+      if (r < p) { const k = 1 - dark * trand(); d[i] *= k; d[i + 1] *= k; d[i + 2] *= k; }
+      else if (r > 1 - p) { const k = light * trand(); d[i] += (255 - d[i]) * k; d[i + 1] += (255 - d[i + 1]) * k; d[i + 2] += (255 - d[i + 2]) * k; }
+    }
+    g.putImageData(img, x0, y0);
+  }
+  // tangent-space normals from brightness (bright stands up), wrapping at the edges
+  function normalFrom(tex, strength, invert) {
+    const src = tex.image, w = src.width, h = src.height, d = src.getContext('2d').getImageData(0, 0, w, h).data, H = new Float32Array(w * h);
+    for (let i = 0; i < w * h; i++) H[i] = (d[i * 4] * 0.299 + d[i * 4 + 1] * 0.587 + d[i * 4 + 2] * 0.114) / 255 * (invert ? -1 : 1);
+    const out = document.createElement('canvas');
+    out.width = w; out.height = h;
+    const og = out.getContext('2d'), img = og.createImageData(w, h), o = img.data;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const xl = (x + w - 1) % w, xr = (x + 1) % w, yu = (y + h - 1) % h, yd = (y + 1) % h;
+      const gu = (H[y * w + xr] - H[y * w + xl]) * strength, gv = (H[yu * w + x] - H[yd * w + x]) * strength, l = Math.hypot(gu, gv, 1), i = (y * w + x) * 4;
+      o[i] = (-gu / l * 0.5 + 0.5) * 255; o[i + 1] = (-gv / l * 0.5 + 0.5) * 255; o[i + 2] = (1 / l * 0.5 + 0.5) * 255; o[i + 3] = 255;
+    }
+    og.putImageData(img, 0, 0);
+    const t = new THREE.CanvasTexture(out);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = maxAniso; t.repeat.copy(tex.repeat);
+    return t;
+  }
+  // asphalt: fine aggregate, patches of repair and wear, oil
+  function asphalt2(g, w, h) {
+    g.fillStyle = '#43464a'; g.fillRect(0, 0, w, h);
+    tblotches(g, w, h, 70, '24,26,29', 0.14, w * 0.03, w * 0.14);
+    tblotches(g, w, h, 45, '118,120,124', 0.06, w * 0.03, w * 0.1);
+    pixelNoise(g, 0, 0, w, h, 0.14, 0.42, 0.16);
+    tgrain(g, 0, 0, w, h, w * h * 0.004, 'rgba(12,13,15,.4)', 'rgba(175,176,180,.22)', 1.8);
+  }
+  const crack = (g, x, y, n, step, w) => {
+    g.strokeStyle = 'rgba(16,17,19,.32)'; g.lineWidth = w * 0.6; g.beginPath(); g.moveTo(x, y);
+    for (let k = 0; k < n; k++) { x += trr(-step, step); y += trr(step * 0.4, step * 1.6); g.lineTo(x, y); }
+    g.stroke();
+  };
+  const paint = (g, x, y, w, h) => { g.fillStyle = '#e7e8e3'; g.fillRect(x, y, w, h); tgrain(g, x, y, w, h, w * h * 0.08, 'rgba(70,70,70,.4)', 'rgba(255,255,255,.25)', 1.3); };
+  const road2 = canvasTex(512, 1024, (g, w, h) => {
+    asphalt2(g, w, h);
+    // polished, darker wheel tracks in both lanes
+    for (const u of [0.225, 0.358, 0.642, 0.775]) {
+      const gr = g.createLinearGradient(u * w - 26, 0, u * w + 26, 0);
+      gr.addColorStop(0, 'rgba(14,15,17,0)'); gr.addColorStop(0.5, 'rgba(14,15,17,.2)'); gr.addColorStop(1, 'rgba(14,15,17,0)');
+      g.fillStyle = gr; g.fillRect(u * w - 26, 0, 52, h);
+    }
+    for (let i = 0; i < 7; i++) crack(g, trand() * w, trand() * h, 10, 18, 2.2);
+    paint(g, w / 2 - 9, h * 0.05, 18, h * 0.25);
+  }, true, false, true);
+  const avenue2 = canvasTex(512, 1024, (g, w, h) => {
+    asphalt2(g, w, h);
+    for (let i = 0; i < 6; i++) crack(g, trand() * w, trand() * h, 10, 18, 2.2);
+    paint(g, w / 2 - 13, 0, 7, h); paint(g, w / 2 + 6, 0, 7, h);
+    for (const u of [0.25, 0.75]) paint(g, u * w - 5, h * 0.05, 10, h * 0.25);
+  }, true, false, true);
+  const median2 = canvasTex(512, 1024, (g, w, h) => {
+    asphalt2(g, w, h);
+    g.fillStyle = '#a7a39b'; g.fillRect(w * 0.41, 0, w * 0.18, h);
+    g.fillStyle = '#4c7535'; g.fillRect(w * 0.425, 0, w * 0.15, h);
+    tgrain(g, w * 0.425, 0, w * 0.15, h, 16000, 'rgba(28,48,18,.5)', 'rgba(140,180,90,.4)', 2.4);
+    for (const u of [0.2, 0.8]) paint(g, u * w - 5, h * 0.05, 10, h * 0.25);
+  }, true, false, true);
+  const junction2 = canvasTex(512, 512, (g, w, h) => { asphalt2(g, w, h); for (let i = 0; i < 4; i++) crack(g, trand() * w, trand() * h, 9, 20, 2.2); }, true, false, true);
+  // gatsten: rows of rounded granite setts, each shaded like a little dome, in sand-filled joints
+  const cobble2 = canvasTex(512, 512, (g, w, h) => {
+    g.fillStyle = '#4a4640'; g.fillRect(0, 0, w, h);
+    pixelNoise(g, 0, 0, w, h, 0.2, 0.5, 0.25);
+    const s = 16;
+    for (let y = 0; y < h; y += s) {
+      const off = (y / s) % 2 ? s / 2 : 0;
+      for (let x = -s; x < w + s; x += s) {
+        const v = Math.round(trr(105, 165)), t = trr(-10, 10), sx = x + off + 1.2 + trr(-0.8, 0.8), sw = s - 2.4 + trr(-1, 1), sh = s - 2.6;
+        const gr = g.createRadialGradient(sx + sw * 0.35, y + sh * 0.3, 1, sx + sw / 2, y + sh / 2, sw * 0.75);
+        gr.addColorStop(0, `rgb(${v + 38 + t},${v + 34},${v + 28 - t})`); gr.addColorStop(0.6, `rgb(${v + t},${v - 3},${v - 9 - t})`); gr.addColorStop(1, `rgb(${v - 45},${v - 47},${v - 50})`);
+        g.fillStyle = gr; roundRect(g, sx, y + 1.3, sw, sh, 4.5); g.fill();
+      }
+    }
+    tblotches(g, w, h, 26, '35,32,28', 0.2, 14, 50);
+    pixelNoise(g, 0, 0, w, h, 0.05, 0.25, 0.15);
+  }, true, false, true);
+  // granite slabs (gågator, torg, the bridges' pavements) and the 50 cm concrete pavement slabs
+  const slab2 = canvasTex(512, 512, (g, w, h) => {
+    const rows = 5, rh = h / rows;
+    for (let r = 0; r < rows; r++) {
+      let x = -trr(0, 80);
+      while (x < w) {
+        const sw = trr(68, 128), v = Math.round(trr(166, 196));
+        g.fillStyle = `rgb(${v},${v - 2},${v - 6})`; g.fillRect(x, r * rh, sw, rh);
+        g.fillStyle = 'rgba(60,56,50,.7)'; g.fillRect(x, r * rh, 2.5, rh);
+        x += sw;
+      }
+      g.fillStyle = 'rgba(60,56,50,.7)'; g.fillRect(0, r * rh, w, 2.5);
+    }
+    tblotches(g, w, h, 22, '80,76,70', 0.12, 12, 48);
+    pixelNoise(g, 0, 0, w, h, 0.1, 0.3, 0.3);
+  }, true, false, true);
+  const pave2 = canvasTex(512, 512, (g, w, h) => {
+    const n = 8, s = w / n;
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+      const v = Math.round(176 + trr(-12, 12));
+      g.fillStyle = `rgb(${v},${v - 4},${v - 10})`; g.fillRect(c * s, r * s, s, s);
+      // the edges of each slab worn a little lighter, the joints dark
+      g.fillStyle = 'rgba(255,255,255,.08)'; g.fillRect(c * s + 3, r * s + 3, s - 6, 3); g.fillRect(c * s + 3, r * s + 3, 3, s - 6);
+    }
+    tblotches(g, w, h, 40, '90,85,78', 0.12, 10, 46);
+    pixelNoise(g, 0, 0, w, h, 0.12, 0.25, 0.22);
+    g.fillStyle = 'rgba(62,58,52,.75)';
+    for (let i = 0; i <= n; i++) { g.fillRect(i * s - 1.5, 0, 3, h); g.fillRect(0, i * s - 1.5, w, 3); }
+  }, true, false, true);
+  const NRM = {
+    road: normalFrom(road2, 2.2), avenue: normalFrom(avenue2, 2.2), median: normalFrom(median2, 2.2), junction: normalFrom(junction2, 2.2),
+    cobble: normalFrom(cobble2, 5), slab: normalFrom(slab2, 2.5), pave: normalFrom(pave2, 2.5),
+    // windows sit in from the plaster, the frames and sills stand out
+    facade: normalFrom(facadeTex, 2.4), modern: normalFrom(modernTex, 1.6)
+  };
+  // roofs and plain walls have no texture of their own: the shader draws standing-seam sheet metal on the grey and
+  // copper roofs, rows of tiles on the red ones, and a little weathering on everything, from the world position
+  function roofDetail(sh) {
+    sh.vertexShader = 'varying vec3 vWPos;\nvarying vec3 vWNrm;\n' + sh.vertexShader.replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\n\tvWPos = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;\n\tvWNrm = normalize( mat3( modelMatrix ) * objectNormal );');
+    sh.fragmentShader = 'varying vec3 vWPos;\nvarying vec3 vWNrm;\nfloat rhash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }\nfloat rnoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(rhash(i), rhash(i + vec2(1.0, 0.0)), f.x), mix(rhash(i + vec2(0.0, 1.0)), rhash(i + vec2(1.0, 1.0)), f.x), f.y); }\n' +
+      sh.fragmentShader.replace('#include <color_fragment>', [
+        '#include <color_fragment>',
+        '\t{',
+        '\t\tvec3 wn = normalize( vWNrm ); float slope = wn.y;',
+        '\t\tfloat grime = rnoise( vWPos.xz * 0.35 + vWPos.y * 0.2 ) * 0.5 + rnoise( vWPos.xz * 2.3 + vWPos.yy ) * 0.25;',
+        '\t\tif ( slope > 0.25 && slope < 0.97 ) {',
+        '\t\t\tvec2 fall = normalize( wn.xz ); float across = dot( vWPos.xz, vec2( -fall.y, fall.x ) ), down = dot( vWPos.xz, fall );',
+        '\t\t\tbool tiles = vColor.r > vColor.g * 1.5 && vColor.r > 0.12;',
+        '\t\t\tfloat k;',
+        '\t\t\tif ( tiles ) { float row = floor( down / 0.32 ); float u = fract( ( across + row * 0.15 ) / 0.3 ); float v = fract( down / 0.32 ); k = 0.82 + 0.18 * smoothstep( 0.0, 0.25, v ) * ( 1.0 - smoothstep( 0.88, 1.0, u ) ) + 0.06 * ( rhash( vec2( floor( ( across + row * 0.15 ) / 0.3 ), row ) ) - 0.5 ); }',
+        '\t\t\telse { float u = fract( across / 0.55 ); k = 1.0 - 0.28 * ( 1.0 - smoothstep( 0.0, 0.05, u ) ) + 0.12 * smoothstep( 0.05, 0.15, u ) * ( 1.0 - smoothstep( 0.15, 0.3, u ) ); }',
+        '\t\t\tdiffuseColor.rgb *= k * ( 0.92 + grime * 0.16 );',
+        '\t\t} else if ( slope >= 0.97 ) diffuseColor.rgb *= 0.85 + grime * 0.25;',
+        '\t\telse diffuseColor.rgb *= 0.93 + grime * 0.12 - 0.1 * ( 1.0 - smoothstep( 0.0, 1.5, vWPos.y ) );',
+        '\t}'
+      ].join('\n'));
+  }
+
+  /* ---------- assemble the meshes ---------- */
+  const facadeMat = std({ map: facadeTex, roughnessMap: facadeRough, roughness: 1, vertexColors: true, normalMap: NRM.facade, normalScale: new THREE.Vector2(0.9, 0.9) });
+  const modernMat = std({ map: modernTex, roughnessMap: modernRough, roughness: 1, metalness: 0.2, vertexColors: true, normalMap: NRM.modern, normalScale: new THREE.Vector2(0.6, 0.6) });
+  const solidMat = std({ vertexColors: true, roughness: 0.82 });
+  solidMat.onBeforeCompile = roofDetail;
+  STATION.finish(facadeMat, solidMat, modernMat);
+  // (each square of the city, and each group of trees and lamps, is left out of the picture beyond FAR_CULL metres,
+  // well inside the fog: the town is too big to draw all of it)
+  const FAR_CULL = 1650, culled = [];
+  for (const [key, B] of chunks) {
+    const [ix, iz] = key.split(',').map(Number);
+    for (const [b, mat] of [[B, facadeMat], [B.altB, modernMat], [B.solidB, solidMat]]) {
+      if (b.empty) continue;
+      const m = new THREE.Mesh(b.build(), mat);
+      m.castShadow = true; m.receiveShadow = true;
+      scene.add(m);
+      culled.push({ m, x: (ix + 0.5) * CHUNK, z: (iz + 0.5) * CHUNK });
+    }
+  }
+  function cullFar() {
+    const px = camera.position.x, pz = camera.position.z;
+    for (const c of culled) c.m.visible = Math.hypot(c.x - px, c.z - pz) < FAR_CULL;
+  }
+  /* ---------- Drakens gränd: building the yellow house ---------- */
+  {
+    const { W, D, FLOORS, F, H, FL, fr, col, ST, CAB, FS } = DRAKEN, Y3 = FL * F, Y4 = 4 * F, Y5 = 5 * F, ROOF = 6 * F - 0.3;
+    const root = new THREE.Group();
+    root.position.set(fr[0], 0, fr[1]);
+    root.rotation.y = Math.atan2(-fr[3], fr[2]);
+    scene.add(root);
+    DRAKEN.root = root;
+    const ext = new Builder({ split: true, ao: AO }), inn = new Builder(), woodB = new Builder(), tileB = new Builder(), glassB = new Builder(), glowB = new Builder();
+    const STAIR = 0xe4d9bf, STAIR_LOW = 0x7d8f6e, STONE = 0xbab3a6, STEP = 0xa8a195, FLAT = 0xf1ece2, BATH = 0xe9eeec, FRAME = 0xf4f1ea, OAK = 0xa8784c;
+    const REVEAL = shade(col, 0.93), CEIL = 0xf6f3ec, BEAM = 0x5b4330, IRON = 0x23272b, BED_WALL = 0xa9bccb, KID = 0xe8d9a8, KID2 = 0xd7e2cf, SAUNA = 0xc89b62;
+    const FACES = (x0, y0, z0, x1, y1, z1) => [
+      [[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0], [0, 0, -1]],
+      [[x1, y0, z1], [x0, y0, z1], [x0, y1, z1], [x1, y1, z1], [0, 0, 1]],
+      [[x0, y0, z1], [x0, y0, z0], [x0, y1, z0], [x0, y1, z1], [-1, 0, 0]],
+      [[x1, y0, z0], [x1, y0, z1], [x1, y1, z1], [x1, y1, z0], [1, 0, 0]],
+      [[x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1], [0, 1, 0]],
+      [[x0, y0, z1], [x1, y0, z1], [x1, y0, z0], [x0, y0, z0], [0, -1, 0]]
+    ];
+    // a block with all six faces; paint is a colour, or (normal, corners) => colour, [colour, uvs] or null to leave the face out
+    function block(B, x0, y0, z0, x1, y1, z1, paint) {
+      for (const [a, b, cc, d, n] of FACES(x0, y0, z0, x1, y1, z1)) {
+        const p = typeof paint === 'function' ? paint(n, [a, b, cc, d]) : paint;
+        if (p === null || p === undefined) continue;
+        if (Array.isArray(p)) B.quad(a, b, cc, d, p[0], p[1], n); else B.quad(a, b, cc, d, p, null, n);
+      }
+    }
+    const cube = (x0, y0, z0, x1, y1, z1, c) => block(inn, x0, y0, z0, x1, y1, z1, c);
+    // a straight wall along x (or z) from a0 to a1, t0-t1 thick, y0-y1 high, with holes [a0, a1, y0, y1] cut through it
+    function wallRun(B, along, a0, a1, t0, t1, y0, y1, holes, paint) {
+      const xs = [...new Set([a0, a1, ...holes.flatMap((h) => [clamp(h[0], a0, a1), clamp(h[1], a0, a1)])])].sort((p, q) => p - q);
+      for (let i = 0; i < xs.length - 1; i++) {
+        const p = xs[i], q = xs[i + 1], m = (p + q) / 2;
+        if (q - p < 1e-4) continue;
+        const piece = (ya, yb) => {
+          if (yb - ya < 1e-4) return;
+          if (along === 'x') block(B, p, ya, t0, q, yb, t1, paint); else block(B, t0, ya, p, t1, yb, q, paint);
+        };
+        let y = y0;
+        for (const [g0, g1] of holes.filter((h) => h[0] < m && h[1] > m).map((h) => [h[2], h[3]]).sort((u, v) => u[0] - v[0])) { piece(y, Math.min(g0, y1)); y = Math.max(y, g1); }
+        piece(y, y1);
+      }
+    }
+    const same = (n, m) => n[0] === m[0] && n[1] === m[1] && n[2] === m[2];
+    // outer walls: the facade texture outside (lined up with the window cells, so a real window can replace a painted one),
+    // plaster inside in the colour of the room behind
+    const facadePaint = (out, inner) => (n, q) => {
+      if (same(n, out)) return [col, q.map((v) => [(out[0] ? v[2] : v[0]) / CELL_W, v[1] / FLOOR_H])];
+      if (same(n, [-out[0], 0, -out[2]])) return inner;
+      return REVEAL;
+    };
+    const cell = (i, y) => [i * CELL_W + 0.8, i * CELL_W + 2.2, y + 0.7, y + 2.8];
+    // real windows: the stairwell's on its floors, every window of the flat
+    const frontWin = (k) => (k === 0 ? [] : k < FL ? [0, 1] : k < FLOORS ? [0, 1, 2, 3, 4] : []);
+    const backWin = (k) => (k >= FL && k < FLOORS ? [0, 1, 2, 3, 4] : []);
+    // the colour of the inside of the outer wall in front of each room
+    const frontIn = (k, x) => (x < 5.4 ? (k <= FL ? STAIR : FLAT) : k === 5 && x > 9 ? BED_WALL : FLAT);
+    const backIn = (k, x) => (k < FL ? STAIR : x < 5.4 ? [BATH, FLAT, KID][k - FL] : x < 9 ? [FLAT, BATH, KID2][k - FL] : k === 5 ? BATH : FLAT);
+    for (let k = 0; k <= FLOORS; k++) {
+      const y0 = k * F, y1 = k < FLOORS ? y0 + F : H;
+      for (const [a, b] of [[0, 5.4], [5.4, 9], [9, W]]) {
+        const inF = k < FLOORS ? [a + 0.1, b - 0.1].map((x) => frontIn(k, x)) : [FLAT], inB = k < FLOORS ? [a + 0.1, b - 0.1].map((x) => backIn(k, x)) : [FLAT];
+        const fh = (k === 0 && a === 0 ? [[0.75, 2.25, 0, 2.85]] : []).concat(frontWin(k).map((i) => cell(i, y0)).filter((h) => h[0] >= a && h[1] <= b));
+        const bh = backWin(k).map((i) => cell(i, y0)).filter((h) => h[0] >= a && h[1] <= b);
+        wallRun(ext, 'x', a, b, 0, 0.4, y0, y1, fh, facadePaint([0, 0, -1], inF[0]));
+        wallRun(ext, 'x', a, b, D - 0.4, D, y0, y1, bh, facadePaint([0, 0, 1], inB[0]));
+      }
+      wallRun(ext, 'z', 0.4, 6.2, 0, 0.4, y0, y1, [], facadePaint([-1, 0, 0], k <= FL ? STAIR : FLAT));
+      wallRun(ext, 'z', 6.2, D - 0.4, 0, 0.4, y0, y1, [], facadePaint([-1, 0, 0], k < FL ? STAIR : backIn(k, 1)));
+      wallRun(ext, 'z', 0.4, D - 0.4, W - 0.4, W, y0, y1, [], facadePaint([1, 0, 0], k === 5 ? BED_WALL : FLAT));
+    }
+    // plinth, cornice and a steep tiled roof
+    const plinth = shade(col, 0.7);
+    for (const [x0, z0, x1, z1] of [[-0.06, -0.06, 0.75, 0], [2.25, -0.06, W + 0.06, 0], [-0.06, D, W + 0.06, D + 0.06], [-0.06, 0, 0, D], [W, 0, W + 0.06, D]]) block(ext, x0, 0, z0, x1, 0.65, z1, plinth);
+    ext.box(-0.22, H - 0.1, -0.22, W + 0.22, H + 0.22, D + 0.22, shade(col, 1.1));
+    ext.hip(0, 0, W, D, H + 0.22, D * 0.5, D * 0.42, D / 2 - 0.02, 0x9e4a33);
+    // a cornice band between the storeys of the flat and the ones below
+    ext.box(-0.08, Y3 - 0.22, -0.08, W + 0.08, Y3 + 0.04, 0, shade(col, 1.08));
+
+    // windows: frame and glazing bars like the painted ones, a pane of glass, a sill inside and a metal one outside
+    function windowAt(x0, x1, y0, y1, t0, t1, inSign) {
+      const tm = (t0 + t1) / 2, a = tm - 0.04, b = tm + 0.04, hy = y0 + (y1 - y0) * 0.66, mx = (x0 + x1) / 2;
+      cube(x0, y0, a, x0 + 0.07, y1, b, FRAME); cube(x1 - 0.07, y0, a, x1, y1, b, FRAME);
+      cube(x0, y0, a, x1, y0 + 0.08, b, FRAME); cube(x0, y1 - 0.07, a, x1, y1, b, FRAME);
+      cube(mx - 0.03, y0, a, mx + 0.03, y1, b, FRAME); cube(x0, hy - 0.03, a, x1, hy + 0.03, b, FRAME);
+      glassB.quad([x0, y0, tm], [x1, y0, tm], [x1, y1, tm], [x0, y1, tm], 0xffffff, null, [0, 0, 1]);
+      const tin = inSign > 0 ? t1 : t0, tout = inSign > 0 ? t0 : t1;
+      cube(x0 - 0.06, y0 - 0.04, Math.min(tm, tin + inSign * 0.06), x1 + 0.06, y0, Math.max(tm, tin + inSign * 0.06), FRAME);
+      cube(x0 - 0.04, y0 - 0.06, Math.min(tm, tout - inSign * 0.08), x1 + 0.04, y0 - 0.02, Math.max(tm, tout - inSign * 0.08), 0x4a4f54);
+    }
+    for (let k = 0; k < FLOORS; k++) {
+      for (const i of frontWin(k)) windowAt(...cell(i, k * F), 0, 0.4, 1);
+      for (const i of backWin(k)) windowAt(...cell(i, k * F), D - 0.4, D, -1);
+    }
+
+    // the street door: a stone surround, a step, a lantern beside it; the two leaves swing in as you come up to them
+    const SURROUND = 0xb8ad98;
+    cube(0.5, 0, -0.1, 0.75, 3.1, 0, SURROUND); cube(2.25, 0, -0.1, 2.5, 3.1, 0, SURROUND); cube(0.5, 2.85, -0.12, 2.5, 3.1, 0, SURROUND);
+    cube(0.6, 0, -0.4, 2.4, 0.06, 0.2, 0x9c968c);
+    cube(2.78, 2.55, -0.32, 2.82, 2.6, 0, 0x22262a); cube(2.68, 2.3, -0.44, 2.92, 2.6, -0.2, 0x22262a);
+    block(glowB, 2.71, 2.33, -0.41, 2.89, 2.55, -0.23, 0xffe2a6);
+    function leaf(w, h, thick, c0, c1, handleAt) {
+      const B = new Builder(), x0 = Math.min(0, w), x1 = Math.max(0, w);
+      block(B, x0, 0, -thick / 2, x1, h, thick / 2, c0);
+      // raised panels on both faces
+      for (const [py0, py1] of [[0.25, h * 0.45], [h * 0.52, h - 0.25]]) for (const sd of [-1, 1]) {
+        const zz = sd * (thick / 2), z0 = Math.min(zz, zz + sd * 0.02), z1 = Math.max(zz, zz + sd * 0.02);
+        block(B, x0 + 0.12, py0, z0, x1 - 0.12, py1, z1, c1);
+      }
+      for (const sd of [-1, 1]) block(B, handleAt - 0.03, h * 0.45, sd * thick / 2 - 0.03, handleAt + 0.03, h * 0.45 + 0.16, sd * thick / 2 + 0.03, 0xc9a24a);
+      return B.build();
+    }
+    const doorMat = std({ vertexColors: true, roughness: 0.6 });
+    function addDoor(geo, x, y, z, rot0, swing, cx, cz) {
+      const pivot = new THREE.Group(), m = new THREE.Mesh(geo, doorMat);
+      m.castShadow = true; m.receiveShadow = true;
+      pivot.add(m); pivot.position.set(x, y, z); pivot.rotation.y = rot0;
+      root.add(pivot);
+      DRAKEN.doors.push({ pivot, rot0, swing, cx, cz, y, open: 0 });
+    }
+    addDoor(leaf(0.75, 2.84, 0.07, 0x2f4a3a, 0x3a5a48, 0.64), 0.75, 0, 0.3, 0, -1.75, 1.5, 0.2);
+    addDoor(leaf(-0.75, 2.84, 0.07, 0x2f4a3a, 0x3a5a48, -0.64), 2.25, 0, 0.3, 0, 1.75, 1.5, 0.2);
+
+    /* the stairwell */
+    const stairPaint = (top) => (n) => (n[1] > 0 ? top : n[1] < 0 ? shade(STAIR, 1.04) : STEP);
+    inn.quad([ST.x0, 0.03, ST.z1], [ST.x1, 0.03, ST.z1], [ST.x1, 0.03, ST.z0], [ST.x0, 0.03, ST.z0], STONE, null, [0, 1, 0]);
+    for (let k = 1; k <= FL; k++) block(inn, ST.x0, k * F - 0.3, ST.z0, ST.x1, k * F, ST.z1, stairPaint(STONE));
+    for (let k = 0; k < FL; k++) block(inn, ST.x0, k ? k * F + F / 2 - 0.3 : 0, ST.z2, ST.x1, k * F + F / 2, ST.z3, stairPaint(STONE));
+    const N = 10, tread = (ST.z2 - ST.z1) / N, rise = F / 2 / N;
+    for (let k = 0; k < FL; k++) for (let i = 0; i < N; i++) {
+      // steps sit on the walking ramp, half a step above and below it
+      const ya = k * F + (i + 0.5) * rise, yb = k * F + F / 2 + (i + 0.5) * rise;
+      block(inn, ST.x0, k ? ya - 0.4 : 0, ST.z1 + i * tread, ST.a1, ya, ST.z1 + (i + 1) * tread, stairPaint(STEP));
+      block(inn, ST.b0, yb - 0.4, ST.z2 - (i + 1) * tread, ST.x1, yb, ST.z2 - i * tread, stairPaint(STEP));
+    }
+    // its walls, painted dark up to the dado and light above, and on its far sides the rooms of the flat
+    for (let k = 0; k < FLOORS; k++) {
+      const y0 = k * F, inFlat = k > FL, doorH = [[0.6, 1.6, y0, y0 + 2.1]];
+      wallRun(inn, 'z', 0.4, 6.2, ST.x1, ST.x1 + 0.2, y0, y0 + F, k >= FL ? doorH : [], (n) => (n[0] < 0 ? (inFlat ? FLAT : STAIR) : k >= FL ? FLAT : null));
+      wallRun(inn, 'x', 0.4, ST.x1 + 0.2, ST.z3, ST.z3 + 0.2, y0, y0 + F, inFlat ? [[0.8, 1.7, y0, y0 + 2.1]] : [], (n) => (n[2] < 0 ? (inFlat ? FLAT : STAIR) : k >= FL ? backIn(k, 1) : null));
+      if (inFlat) continue;
+      const dz = (z0, z1, x0, x1, ya, yb) => cube(x0, ya, z0, x1, yb, z1, STAIR_LOW);
+      dz(ST.z0, ST.z3, ST.x0, ST.x0 + 0.015, y0, y0 + 1.05);
+      dz(ST.z0, 0.66, ST.x1 - 0.015, ST.x1, y0, y0 + 1.05); dz(1.64, ST.z3, ST.x1 - 0.015, ST.x1, y0, y0 + 1.05);
+      if (k < FL) dz(ST.z3 - 0.015, ST.z3, ST.x0, ST.x1, y0 + F / 2, y0 + F / 2 + 1.05);
+      if (k > 0) { dz(ST.z0, ST.z0 + 0.015, ST.x0, 0.8, y0, y0 + 0.7); dz(ST.z0, ST.z0 + 0.015, 2.2, 3.8, y0, y0 + 0.7); dz(ST.z0, ST.z0 + 0.015, 5.2, ST.x1, y0, y0 + 0.7); }
+      // a globe lamp over each landing, and one over each half landing
+      block(glowB, 0.8, y0 + 2.62, 0.95, 1.1, y0 + 2.86, 1.25, 0xfff1d0);
+      if (k < FL) block(glowB, 2.7, y0 + F / 2 + 2.5, 5.0, 3.0, y0 + F / 2 + 2.74, 5.3, 0xfff1d0);
+      if (k > 0 && k < FL) {
+        // a neighbour's door, shut, with a name plate, a letterbox and a doormat
+        const dc = [0x6b3f2a, 0x2f4a5a][k - 1], X = ST.x1;
+        cube(X - 0.01, y0, 0.58, X, y0 + 2.28, 1.62, 0xd8cfb8);
+        cube(X - 0.06, y0, 0.65, X - 0.01, y0 + 2.2, 1.55, dc);
+        cube(X - 0.08, y0 + 0.3, 0.75, X - 0.06, y0 + 0.95, 1.45, shade(dc, 1.2)); cube(X - 0.08, y0 + 1.15, 0.75, X - 0.06, y0 + 1.95, 1.45, shade(dc, 1.2));
+        cube(X - 0.09, y0 + 1.0, 0.7, X - 0.06, y0 + 1.06, 0.85, 0xc9a24a);
+        cube(X - 0.085, y0 + 1.45, 0.95, X - 0.06, y0 + 1.53, 1.25, 0xd9c9a0);
+        cube(X - 0.085, y0 + 0.9, 1.0, X - 0.06, y0 + 0.97, 1.3, 0x23262a);
+        cube(X - 0.8, y0, 0.75, X - 0.1, y0 + 0.02, 1.45, [0x7a3b2e, 0x3b4a5a][k - 1]);
+      }
+    }
+    // handrails up the outer wall of the first flights and the inner wall of the second
+    const rail = (x0, x1, za, ya, zb, yb) => inn.hexa([[x0, ya, za], [x1, ya, za], [x1, yb, zb], [x0, yb, zb], [x0, ya + 0.06, za], [x1, ya + 0.06, za], [x1, yb + 0.06, zb], [x0, yb + 0.06, zb]], OAK);
+    for (let k = 0; k < FL; k++) {
+      rail(ST.x0 + 0.02, ST.x0 + 0.08, ST.z1, k * F + 0.9, ST.z2, k * F + F / 2 + 0.9);
+      rail(ST.x1 - 0.08, ST.x1 - 0.02, ST.z2, k * F + F / 2 + 0.9, ST.z1, (k + 1) * F + 0.9);
+    }
+    // under the first flights: a board wall with a low door to the cellar; the list of who lives here, and the post boxes
+    cube(ST.b0, 0, ST.z1 - 0.06, ST.x1, F - 0.45, ST.z1, 0x6b4a30);
+    cube(4.3, 0, ST.z1 - 0.08, 4.95, 1.75, ST.z1 - 0.06, 0x5a3c26);
+    cube(4.8, 0.85, ST.z1 - 0.1, 4.85, 0.95, ST.z1 - 0.08, 0xc9a24a);
+    cube(ST.x0, 1.15, 0.75, ST.x0 + 0.04, 1.85, 1.45, 0x23262a);
+    for (let i = 0; i < 5; i++) cube(ST.x0 + 0.04, 1.65 - i * 0.1, 0.83, ST.x0 + 0.045, 1.69 - i * 0.1, 1.37, 0xe8e2d0);
+    for (let i = 0; i < 6; i++) { const zz = 2.0 + (i % 3) * 0.42, yy = 1.0 + Math.floor(i / 3) * 0.36; cube(ST.x0, yy, zz, ST.x0 + 0.12, yy + 0.32, zz + 0.38, 0x2f4a3a); cube(ST.x0 + 0.12, yy + 0.22, zz + 0.06, ST.x0 + 0.125, yy + 0.25, zz + 0.32, 0x15171a); }
+    // the railing at the top landing, over the drop down the stairwell
+    for (let x = ST.x0 + 0.06; x < ST.a1; x += 0.12) cube(x - 0.015, Y3, ST.z1 - 0.015, x + 0.015, Y3 + 1.0, ST.z1 + 0.015, 0x2d3236);
+    cube(ST.x0, Y3 + 1.0, ST.z1 - 0.04, ST.a1, Y3 + 1.06, ST.z1 + 0.04, OAK);
+    // the flat's door: frames on both sides, a brass name plate and a doormat outside
+    for (const x of [ST.x1 - 0.01, ST.x1 + 0.2]) { cube(x, Y3, 0.51, x + 0.01, Y3 + 2.2, 0.6, FRAME); cube(x, Y3, 1.6, x + 0.01, Y3 + 2.2, 1.69, FRAME); cube(x, Y3 + 2.1, 0.51, x + 0.01, Y3 + 2.2, 1.69, FRAME); }
+    cube(ST.x1 - 0.03, Y3 + 1.45, 0.25, ST.x1, Y3 + 1.55, 0.45, 0xd9c9a0);
+    cube(ST.x1 - 0.75, Y3, 0.7, ST.x1 - 0.05, Y3 + 0.02, 1.5, 0x3d5a46);
+    addDoor(leaf(0.95, 2.08, 0.05, 0x2f5a3f, 0x3b6b4c, 0.85), ST.x1 + 0.17, Y3, 1.6, Math.PI / 2, -1.6, ST.x1 + 0.1, 1.1);
+    // and the doorways from the lift landing into the flat on the floors above
+    for (const y of [Y4, Y5]) for (const x of [ST.x1 - 0.01, ST.x1 + 0.2]) { cube(x, y, 0.51, x + 0.01, y + 2.2, 0.6, FRAME); cube(x, y, 1.6, x + 0.01, y + 2.2, 1.69, FRAME); cube(x, y + 2.1, 0.51, x + 0.01, y + 2.2, 1.69, FRAME); }
+
+    /* the lift: an iron cage up the middle of the stairwell, a wooden cab, sliding doors on every floor */
+    const liftB = new Builder(), CH = 2.25;
+    {
+      const bar = (x0, z0, x1, z1, y0, y1) => block(liftB, x0, y0, z0, x1, y1, z1, IRON);
+      const posts = [[ST.s0, ST.z1], [ST.s1, ST.z1], [ST.s0, ST.z2], [ST.s1, ST.z2]];
+      for (const [x, z] of posts) bar(x - 0.035, z - 0.035, x + 0.035, z + 0.035, 0, ROOF);
+      for (let z = ST.z1 + 0.1; z < ST.z2 - 0.05; z += 0.1) for (const x of [ST.s0, ST.s1]) bar(x - 0.009, z - 0.009, x + 0.009, z + 0.009, 0, ROOF);
+      for (let x = ST.s0 + 0.1; x < ST.s1 - 0.05; x += 0.1) {
+        bar(x - 0.009, ST.z2 - 0.009, x + 0.009, ST.z2 + 0.009, 0, ROOF);
+        // the front: full height beside the doors, above them only from the top of each door to the next floor
+        if (x < CAB.d0 || x > CAB.d1) bar(x - 0.009, ST.z1 - 0.009, x + 0.009, ST.z1 + 0.009, 0, ROOF);
+        else for (let k = 0; k < FLOORS; k++) bar(x - 0.009, ST.z1 - 0.009, x + 0.009, ST.z1 + 0.009, k * F + 2.25, Math.min(ROOF, (k + 1) * F));
+      }
+      // bands round the cage at every floor, half way up and at the top of the doors
+      for (let k = 0; k < FLOORS; k++) for (const y of [k * F, k * F + 1.1, k * F + 2.25]) {
+        bar(ST.s0 - 0.02, ST.z1 - 0.025, ST.s1 + 0.02, ST.z1 + 0.025, y, y + 0.05);
+        bar(ST.s0 - 0.02, ST.z2 - 0.025, ST.s1 + 0.02, ST.z2 + 0.025, y, y + 0.05);
+        for (const x of [ST.s0, ST.s1]) bar(x - 0.025, ST.z1, x + 0.025, ST.z2, y, y + 0.05);
+      }
+      // at every landing a frame round the doors, a call button and a lamp that says the lift is here
+      for (let k = 0; k < FLOORS; k++) {
+        const y = k * F;
+        cube(CAB.d0 - 0.08, y, ST.z1 - 0.12, CAB.d0, y + 2.3, ST.z1 - 0.07, 0x3a2a1c); cube(CAB.d1, y, ST.z1 - 0.12, CAB.d1 + 0.08, y + 2.3, ST.z1 - 0.07, 0x3a2a1c);
+        cube(CAB.d0 - 0.08, y + 2.22, ST.z1 - 0.12, CAB.d1 + 0.08, y + 2.32, ST.z1 - 0.07, 0x3a2a1c);
+        cube(CAB.d1 + 0.14, y + 1.0, ST.z1 - 0.12, CAB.d1 + 0.26, y + 1.22, ST.z1 - 0.08, 0xc9a24a);
+        cube(CAB.d1 + 0.18, y + 1.08, ST.z1 - 0.14, CAB.d1 + 0.22, y + 1.14, ST.z1 - 0.12, 0x7a1414);
+        // the floor's number in brass over the door
+        block(glowB, 2.8, y + 2.36, ST.z1 - 0.06, 2.9, y + 2.46, ST.z1 - 0.04, 0xffd27a);
+      }
+      // the bottom of the pit
+      cube(ST.s0, 0, ST.z1, ST.s1, 0.02, ST.z2, 0x2b2a28);
+    }
+    // the cab: wood panels, a mirror at the back, glass at the sides, a lamp in the ceiling, the buttons on the right
+    const cabB = new Builder(), cabGlow = new Builder(), cabGlass = new Builder();
+    {
+      const MAH = 0x6b3a22, x0 = CAB.x0, x1 = CAB.x1, z0 = CAB.z0, z1 = CAB.z1;
+      block(cabB, x0, -0.12, z0, x1, 0.02, z1, (n) => (n[1] > 0 ? 0x7a5536 : MAH));
+      block(cabB, x0, CH, z0, x1, CH + 0.1, z1, (n) => (n[1] < 0 ? 0xf3efe6 : MAH));
+      block(cabB, x0, 0.02, z1 - 0.05, x1, CH, z1, MAH);
+      block(cabB, x0 + 0.25, 1.0, z1 - 0.06, x1 - 0.25, 2.05, z1 - 0.05, 0xb9c6cd);
+      block(cabB, x0 + 0.1, 0.9, z1 - 0.12, x1 - 0.1, 0.95, z1 - 0.06, 0xc9a24a);
+      for (const [xa, xb] of [[x0, x0 + 0.04], [x1 - 0.04, x1]]) {
+        block(cabB, xa, 0.02, z0, xb, 1.0, z1, MAH);
+        block(cabB, xa, 1.0, z0, xb, 1.06, z1, 0xc9a24a);
+        block(cabB, xa, 2.1, z0, xb, CH, z1, MAH);
+        cabGlass.quad([(xa + xb) / 2, 1.06, z0], [(xa + xb) / 2, 1.06, z1], [(xa + xb) / 2, 2.1, z1], [(xa + xb) / 2, 2.1, z0], 0xffffff, null, [1, 0, 0]);
+      }
+      block(cabB, x0, 0.02, z0, CAB.d0, CH, z0 + 0.04, MAH); block(cabB, CAB.d1, 0.02, z0, x1, CH, z0 + 0.04, MAH);
+      block(cabB, x1 - 0.3, 1.0, z0 + 0.05, x1 - 0.04, 1.6, z0 + 0.35, 0xc9a24a);
+      for (let i = 0; i < FLOORS; i++) block(cabB, x1 - 0.06, 1.08 + i * 0.08, z0 + 0.14, x1 - 0.045, 1.13 + i * 0.08, z0 + 0.22, 0xf3efe6);
+      block(cabGlow, (x0 + x1) / 2 - 0.3, CH - 0.03, (z0 + z1) / 2 - 0.3, (x0 + x1) / 2 + 0.3, CH, (z0 + z1) / 2 + 0.3, 0xfff3d8);
+    }
+    // the sliding doors: two leaves on every landing and two on the cab; each leaf a wooden frame round a glass pane
+    const slideLeaf = (B, G, w, h) => {
+      block(B, 0, 0, 0, w, 0.1, 0.04, 0x3a2a1c); block(B, 0, h - 0.1, 0, w, h, 0.04, 0x3a2a1c);
+      block(B, 0, 0.1, 0, 0.06, h - 0.1, 0.04, 0x3a2a1c); block(B, w - 0.06, 0.1, 0, w, h - 0.1, 0.04, 0x3a2a1c);
+      block(B, 0.06, 0.1, 0, w - 0.06, 1.0, 0.04, 0x5a3c26);
+      G.quad([0.06, 1.0, 0.02], [w - 0.06, 1.0, 0.02], [w - 0.06, h - 0.1, 0.02], [0.06, h - 0.1, 0.02], 0xffffff, null, [0, 0, 1]);
+    };
+    const lw = (CAB.d1 - CAB.d0) / 2, leafSolid = new Builder(), leafGlass = new Builder();
+    slideLeaf(leafSolid, leafGlass, lw, 2.2);
+    const leafGeo = leafSolid.build(), leafGlassGeo = leafGlass.build();
+    const inMat = std({ vertexColors: true, roughness: 0.82, envMapIntensity: 0.75 });
+    const glassMatH = std({ color: 0xcfe3ec, transparent: true, opacity: 0.16, roughness: 0.03, side: THREE.DoubleSide, depthWrite: false });
+    const glowMat = new THREE.MeshBasicMaterial({ vertexColors: true });
+    const makeLeaf = (parent, x, y, z) => {
+      const g = new THREE.Group(), m = new THREE.Mesh(leafGeo, doorMat), gm = new THREE.Mesh(leafGlassGeo, glassMatH);
+      m.castShadow = true; g.add(m, gm); g.position.set(x, y, z); parent.add(g);
+      return g;
+    };
+    const cab = new THREE.Group();
+    for (const [B, mat] of [[cabB, inMat], [cabGlow, glowMat], [cabGlass, glassMatH]]) { const m = new THREE.Mesh(B.build(), mat); m.castShadow = B === cabB; m.receiveShadow = B === cabB; cab.add(m); }
+    const cabLeaves = [makeLeaf(cab, CAB.d0, 0.02, CAB.z0 - 0.05), makeLeaf(cab, CAB.d0 + lw, 0.02, CAB.z0 - 0.05)];
+    root.add(cab);
+    const landLeaves = [];
+    for (let k = 0; k < FLOORS; k++) landLeaves.push([makeLeaf(root, CAB.d0, k * F, ST.z1 - 0.065), makeLeaf(root, CAB.d0 + lw, k * F, ST.z1 - 0.065)]);
+    // the counterweight goes down as the cab comes up, and the cables run from the cab up to the wheel at the top
+    const cw = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.1, 0.5), std({ color: 0x3a3d41, roughness: 0.6, metalness: 0.5 }));
+    const cable = new THREE.Mesh(new THREE.BoxGeometry(0.03, 1, 0.03), cw.material);
+    root.add(cw, cable);
+    {
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.12, 16), cw.material);
+      m.rotation.z = Math.PI / 2; m.position.set((ST.s0 + ST.s1) / 2, ROOF - 0.35, 3.5); root.add(m);
+    }
+    DRAKEN.liftParts = { cab, cabLeaves, landLeaves, cw, cable, lw };
+
+    /* the flat */
+    // floors: oak boards, tiles in the bathrooms and the sauna, everywhere but the holes for the lift and the stair
+    const floorQuad = (B, x0, z0, x1, z1, y, k) => B.quad([x0, y, z1], [x1, y, z1], [x1, y, z0], [x0, y, z0], 0xffffff, [[x0 / k, -z1 / k], [x1 / k, -z1 / k], [x1 / k, -z0 / k], [x0 / k, -z0 / k]], [0, 1, 0]);
+    // a rectangle cut up round the holes, as a list of rectangles
+    const cutOut = (x0, z0, x1, z1, holes) => {
+      const xs = [...new Set([x0, x1, ...holes.flatMap((h) => [h[0], h[2]]).filter((v) => v > x0 && v < x1)])].sort((a, b) => a - b);
+      const zs = [...new Set([z0, z1, ...holes.flatMap((h) => [h[1], h[3]]).filter((v) => v > z0 && v < z1)])].sort((a, b) => a - b), out = [];
+      for (let i = 0; i < xs.length - 1; i++) for (let j = 0; j < zs.length - 1; j++) {
+        const mx = (xs[i] + xs[i + 1]) / 2, mz = (zs[j] + zs[j + 1]) / 2;
+        if (!holes.some((h) => mx > h[0] && mx < h[2] && mz > h[1] && mz < h[3])) out.push([xs[i], zs[j], xs[i + 1], zs[j + 1]]);
+      }
+      return out;
+    };
+    const SHAFT = [ST.s0, ST.z1, ST.s1, ST.z2], STAIRHOLE = [FS.x0, FS.z1, FS.x1, FS.z3];
+    const tiled = { 3: [[0.4, 6.2, ST.x1, D - 0.4]], 4: [[FS.x0, FS.z3 + 0.15, 8.9, D - 0.4]], 5: [[9.05, 7.5, W - 0.4, D - 0.4]] };
+    const floorAt = (k, x0, z0, x1, z1, holes) => { for (const r of cutOut(x0, z0, x1, z1, holes.concat(tiled[k] || []))) floorQuad(woodB, ...r, k * F + 0.005, 2.4); };
+    for (const k in tiled) for (const t of tiled[k]) floorQuad(tileB, ...t, k * F + 0.008, 1.2);
+    floorAt(FL, FS.x0, 0.4, W - 0.4, D - 0.4, []);
+    floorAt(FL, 0.4, 6.2, ST.x1, D - 0.4, []);
+    for (const k of [4, 5]) floorAt(k, 0.4, 0.4, W - 0.4, D - 0.4, [SHAFT, STAIRHOLE]);
+    // ceilings, facing down, and the edges of the slabs round the stair
+    const ceilAt = (y, holes) => { for (const [x0, z0, x1, z1] of cutOut(0.4, 0.4, W - 0.4, D - 0.4, holes)) inn.quad([x0, y, z0], [x1, y, z0], [x1, y, z1], [x0, y, z1], CEIL, null, [0, -1, 0]); };
+    ceilAt(Y4 - 0.3, [SHAFT, STAIRHOLE]); ceilAt(Y5 - 0.3, [SHAFT, STAIRHOLE]); ceilAt(ROOF, []);
+    for (const y of [Y4, Y5]) {
+      cube(FS.x0, y - 0.3, FS.z1 - 0.02, FS.x1, y, FS.z1, CEIL);
+      cube(FS.x0, y - 0.3, FS.z3, FS.x1, y, FS.z3 + 0.02, CEIL);
+    }
+    // the beams under the roof
+    for (let z = 1.2; z < D - 0.5; z += 1.5) cube(0.4, ROOF - 0.2, z - 0.08, W - 0.4, ROOF, z + 0.08, BEAM);
+
+    // the flat's stair: oak treads on white risers, a wall up the middle, half landings at the back
+    const fsN = 9, fsT = (FS.z2 - FS.z1) / fsN, fsR = F / 2 / fsN;
+    const ftPaint = (n) => (n[1] > 0 ? OAK : n[1] < 0 ? CEIL : FLAT);
+    for (const k of [FL, FL + 1]) {
+      const y0 = k * F;
+      for (let i = 0; i < fsN; i++) {
+        const ya = y0 + (i + 0.5) * fsR, yb = y0 + F / 2 + (i + 0.5) * fsR;
+        block(inn, FS.x0, Math.max(y0, ya - 0.35), FS.z1 + i * fsT, FS.m - 0.05, ya, FS.z1 + (i + 1) * fsT, ftPaint);
+        block(inn, FS.m + 0.05, yb - 0.35, FS.z2 - (i + 1) * fsT, FS.x1, yb, FS.z2 - i * fsT, ftPaint);
+      }
+      block(inn, FS.x0, y0 + F / 2 - 0.25, FS.z2, FS.x1, y0 + F / 2, FS.z3, ftPaint);
+      // handrails on the walls either side
+      rail(FS.x0 + 0.02, FS.x0 + 0.07, FS.z1, y0 + 0.9, FS.z2, y0 + F / 2 + 0.9);
+      rail(FS.x1 - 0.07, FS.x1 - 0.02, FS.z2, y0 + F / 2 + 0.9, FS.z1, y0 + F + 0.9);
+    }
+    // the walls round it, from the third floor up under the roof
+    block(inn, FS.m - 0.05, Y3, FS.z1, FS.m + 0.05, ROOF, FS.z2, FLAT);
+    block(inn, FS.x1, Y3, FS.z1, FS.x1 + 0.15, ROOF, FS.z3 + 0.15, FLAT);
+    block(inn, FS.x0, Y3, FS.z3, FS.x1, ROOF, FS.z3 + 0.15, FLAT);
+    // under its first flight on the third floor a cupboard; at the top a glass railing with an oak rail
+    cube(FS.m + 0.05, Y3, FS.z1 - 0.03, FS.x1, Y3 + F / 2 + 0.6, FS.z1, 0xe9e4da);
+    cube(FS.m + 0.6, Y3 + 0.9, FS.z1 - 0.05, FS.m + 0.64, Y3 + 1.15, FS.z1 - 0.03, 0xc9a24a);
+    glassB.quad([FS.x0, Y5, FS.z1], [FS.m, Y5, FS.z1], [FS.m, Y5 + 1.0, FS.z1], [FS.x0, Y5 + 1.0, FS.z1], 0xffffff, null, [0, 0, -1]);
+    cube(FS.x0, Y5 + 1.0, FS.z1 - 0.04, FS.m, Y5 + 1.06, FS.z1 + 0.04, OAK);
+    for (const x of [FS.x0 + 0.05, FS.m - 0.08]) cube(x, Y5, FS.z1 - 0.03, x + 0.03, Y5 + 1.0, FS.z1 + 0.03, 0x9a9ea2);
+
+    // the walls between the rooms (the same as the walls you bump into)
+    const part = (k, along, a0, a1, t0, t1, doors, paint) => wallRun(inn, along, a0, a1, t0, t1, k * F, (k + 1) * F - 0.3, doors.map(([p, q]) => [p, q, k * F, k * F + 2.1]), paint);
+    const sides = (neg, pos) => (n) => (n[0] + n[2] < 0 ? neg : pos);
+    part(3, 'z', 0.4, FS.z1, 8.9, 9.05, [[1.2, 2.6]], sides(FLAT, FLAT));
+    part(4, 'z', 0.4, 7.35, 8.9, 9.05, [[1.0, 2.6], [4.8, 6.6]], sides(FLAT, FLAT)); part(4, 'z', 7.35, D - 0.4, 8.9, 9.05, [], sides(BATH, FLAT));
+    part(5, 'z', 0.4, 7.35, 8.9, 9.05, [[4.3, 5.2]], sides(FLAT, BED_WALL)); part(5, 'z', 7.35, D - 0.4, 8.9, 9.05, [], sides(KID2, BATH));
+    part(5, 'x', 9.05, W - 0.4, 7.35, 7.5, [[9.4, 10.3]], sides(BED_WALL, BATH));
+    for (let k = FL; k < FLOORS; k++) part(k, 'z', 6.2, D - 0.4, ST.x1, ST.x1 + 0.2, k === FL ? [[9.0, 9.9]] : [], sides(backIn(k, 1), k === 4 ? BATH : k === 5 ? KID2 : FLAT));
+    // skirting boards round the main rooms
+    for (const k of [FL, 4, 5]) {
+      const y = k * F;
+      for (const [x0, z0, x1, z1] of [[9.05, 0.4, W - 0.4, 0.42], [W - 0.42, 0.4, W - 0.4, D - 0.4], [FS.x0, 0.4, 8.9, 0.42]]) cube(x0, y, z0, x1, y + 0.08, z1, 0xfbf9f4);
+    }
+
+    /* furniture: each piece in a frame of its own, u across it, v from its front (v = 0) to its back, centred on
+       (cx, cz) at floor height y; rot turns it so its front faces 0: -z, 1: -x, 2: +z, 3: +x */
+    const frame = (cx, cz, y, rot, w, d) => {
+      const P = rot === 0 ? (u, v) => [cx - w / 2 + u, cz - d / 2 + v] : rot === 1 ? (u, v) => [cx - d / 2 + v, cz + w / 2 - u]
+        : rot === 2 ? (u, v) => [cx + w / 2 - u, cz + d / 2 - v] : (u, v) => [cx + d / 2 - v, cz - w / 2 + u];
+      const b = (u0, h0, v0, u1, h1, v1, c, B = inn) => {
+        const [ax, az] = P(u0, v0), [bx, bz] = P(u1, v1);
+        block(B, Math.min(ax, bx), y + h0, Math.min(az, bz), Math.max(ax, bx), y + h1, Math.max(az, bz), c);
+      };
+      b.solid = (h) => {
+        const ex = rot % 2 ? d / 2 : w / 2, ez = rot % 2 ? w / 2 : d / 2;
+        DRAKEN.wall(cx - ex, cz - ez, cx + ex, cz + ez, y, y + h);
+      };
+      return b;
+    };
+    const wood = (c) => shade(c, 0.8);
+    function sofa(cx, cz, y, rot, w, c) {
+      const d = 0.95, b = frame(cx, cz, y, rot, w, d);
+      b(0, 0.06, 0, w, 0.42, d, shade(c, 0.85)); b(0.18, 0.42, 0.02, w - 0.18, 0.55, d - 0.22, c);
+      b(0, 0.42, d - 0.25, w, 0.95, d, c); b(0, 0.42, 0, 0.18, 0.68, d - 0.25, c); b(w - 0.18, 0.42, 0, w, 0.68, d - 0.25, c);
+      for (const u of [0.1, w - 0.1]) b(u - 0.03, 0, 0.1, u + 0.03, 0.06, 0.16, 0x2d3236);
+      b(0.35, 0.55, d - 0.4, 0.8, 0.86, d - 0.26, 0xd9b44a); b(w - 0.8, 0.55, d - 0.4, w - 0.35, 0.86, d - 0.26, 0xc8643a);
+      b.solid(0.95);
+    }
+    function armchair(cx, cz, y, rot, c) {
+      const w = 0.85, d = 0.85, b = frame(cx, cz, y, rot, w, d);
+      b(0, 0.06, 0, w, 0.42, d, shade(c, 0.85)); b(0.14, 0.42, 0.02, w - 0.14, 0.52, d - 0.2, c);
+      b(0, 0.42, d - 0.2, w, 0.95, d, c); b(0, 0.42, 0, 0.14, 0.66, d - 0.2, c); b(w - 0.14, 0.42, 0, w, 0.66, d - 0.2, c);
+      b.solid(0.95);
+    }
+    function table(cx, cz, y, rot, w, d, h, c) {
+      const b = frame(cx, cz, y, rot, w, d);
+      b(0, h - 0.04, 0, w, h, d, c);
+      for (const [u, v] of [[0.05, 0.05], [w - 0.1, 0.05], [0.05, d - 0.1], [w - 0.1, d - 0.1]]) b(u, 0, v, u + 0.05, h - 0.04, v + 0.05, wood(c));
+      b.solid(h);
+    }
+    function chair(cx, cz, y, rot, c) {
+      const w = 0.44, d = 0.44, b = frame(cx, cz, y, rot, w, d);
+      b(0.02, 0.44, 0.02, w - 0.02, 0.48, d - 0.02, c);
+      for (const [u, v] of [[0.03, 0.03], [w - 0.06, 0.03], [0.03, d - 0.06], [w - 0.06, d - 0.06]]) b(u, 0, v, u + 0.03, 0.44, v + 0.03, c);
+      b(0.02, 0.48, d - 0.05, w - 0.02, 0.92, d - 0.02, c);
+    }
+    function bookshelf(cx, cz, y, rot, w, h) {
+      const d = 0.34, b = frame(cx, cz, y, rot, w, d), sh = shade(OAK, 0.85);
+      b(0, 0, d - 0.03, w, h, d, shade(OAK, 0.7)); b(0, 0, 0, 0.04, h, d, OAK); b(w - 0.04, 0, 0, w, h, d, OAK); b(0, h - 0.04, 0, w, h, d, OAK);
+      for (let yy = 0.05; yy < h - 0.3; yy += 0.42) {
+        b(0, yy, 0, w, yy + 0.03, d, sh);
+        let u = 0.06;
+        while (u < w - 0.1) { const t = rr(0.03, 0.07), bh = rr(0.22, 0.34); if (yy + 0.03 + bh < h - 0.05) b(u, yy + 0.03, 0.04, u + t, yy + 0.03 + bh, d - 0.05, pick([0x8c2f2a, 0x2f4f6e, 0x3f6b45, 0xd9b44a, 0xe8e2d0, 0x5a3d6e, 0x222428, 0xc8643a])); u += t + 0.006; }
+      }
+      b.solid(h);
+    }
+    function tvUnit(cx, cz, y, rot, w) {
+      const d = 0.45, b = frame(cx, cz, y, rot, w, d);
+      b(0, 0.12, 0, w, 0.5, d, 0x2d3236); b(0.05, 0, 0.05, 0.1, 0.12, 0.1, 0x1c1d20); b(w - 0.1, 0, 0.05, w - 0.05, 0.12, 0.1, 0x1c1d20);
+      b(w / 2 - 0.12, 0.5, 0.15, w / 2 + 0.12, 0.6, 0.3, 0x1c1d20);
+      b(w / 2 - 0.72, 0.6, 0.22, w / 2 + 0.72, 1.45, 0.27, 0x111214);
+      b(w / 2 - 0.69, 0.63, 0.21, w / 2 + 0.69, 1.42, 0.22, 0x1b2a3c, glowB);
+      b.solid(0.6);
+    }
+    function plant(cx, cz, y, s) {
+      cube(cx - 0.16 * s, y, cz - 0.16 * s, cx + 0.16 * s, y + 0.32 * s, cz + 0.16 * s, 0xb5603e);
+      cube(cx - 0.32 * s, y + 0.32 * s, cz - 0.32 * s, cx + 0.32 * s, y + 0.95 * s, cz + 0.32 * s, 0x3f6e36);
+      cube(cx - 0.2 * s, y + 0.95 * s, cz - 0.2 * s, cx + 0.2 * s, y + 1.3 * s, cz + 0.2 * s, 0x4f8040);
+      DRAKEN.wall(cx - 0.3 * s, cz - 0.3 * s, cx + 0.3 * s, cz + 0.3 * s, y, y + 1.2 * s);
+    }
+    const rug = (x0, z0, x1, z1, y, c1, c2) => { cube(x0, y, z0, x1, y + 0.012, z1, c1); cube(x0 + 0.25, y, z0 + 0.25, x1 - 0.25, y + 0.016, z1 - 0.25, c2); };
+    const floorLamp = (x, z, y) => { cube(x - 0.12, y, z - 0.12, x + 0.12, y + 0.03, z + 0.12, 0x2d3236); cube(x - 0.02, y, z - 0.02, x + 0.02, y + 1.5, z + 0.02, 0x2d3236); block(glowB, x - 0.2, y + 1.42, z - 0.2, x + 0.2, y + 1.72, z + 0.2, 0xfff0cc); };
+    const pendant = (x, z, y, c) => { cube(x - 0.015, y - 0.75, z - 0.015, x + 0.015, y, z + 0.015, 0x222428); block(inn, x - 0.22, y - 0.95, z - 0.22, x + 0.22, y - 0.75, z + 0.22, c); block(glowB, x - 0.17, y - 0.99, z - 0.17, x + 0.17, y - 0.95, z + 0.17, 0xfff0cc); };
+    const ceilingLamp = (x, z, y) => { cube(x - 0.02, y - 0.25, z - 0.02, x + 0.02, y, z + 0.02, 0x222428); block(glowB, x - 0.2, y - 0.42, z - 0.2, x + 0.2, y - 0.25, z + 0.2, 0xfff3d8); };
+    function bed(cx, cz, y, rot, w, len, duvet, head) {
+      const b = frame(cx, cz, y, rot, w, len + 0.08);
+      b(0, 0.12, 0, w, 0.35, len, shade(head, 0.9)); for (const [u, v] of [[0.03, 0.03], [w - 0.09, 0.03]]) b(u, 0, v, u + 0.06, 0.12, v + 0.06, 0x2d3236);
+      b(0.03, 0.35, 0.03, w - 0.03, 0.56, len - 0.03, 0xf6f4ef);
+      b(-0.01, 0.5, -0.01, w + 0.01, 0.62, len * 0.7, duvet); b(-0.02, 0.32, -0.02, w + 0.02, 0.62, 0.01, duvet);
+      const pw = w > 1.2 ? (w - 0.3) / 2 : w - 0.2;
+      for (let i = 0; i < (w > 1.2 ? 2 : 1); i++) b(0.1 + i * (pw + 0.1), 0.56, len - 0.5, 0.1 + i * (pw + 0.1) + pw, 0.72, len - 0.1, 0xffffff);
+      b(-0.05, 0, len, w + 0.05, 1.15, len + 0.08, head);
+      b.solid(0.62);
+    }
+    const bedside = (x, z, y) => { cube(x - 0.22, y, z - 0.2, x + 0.22, y + 0.5, z + 0.2, OAK); cube(x - 0.04, y + 0.5, z - 0.04, x + 0.04, y + 0.72, z + 0.04, 0x2d3236); block(glowB, x - 0.13, y + 0.72, z - 0.13, x + 0.13, y + 0.92, z + 0.13, 0xfff0cc); };
+    function wardrobe(cx, cz, y, rot, w, c) {
+      const d = 0.6, b = frame(cx, cz, y, rot, w, d), n = Math.max(2, Math.round(w / 0.5));
+      b(0, 0, 0, w, 2.15, d, c);
+      for (let i = 1; i < n; i++) b(i * w / n - 0.005, 0.05, -0.005, i * w / n + 0.005, 2.1, 0, shade(c, 0.8));
+      for (let i = 0; i < n; i++) b((i + 0.5) * w / n - 0.01, 0.95, -0.03, (i + 0.5) * w / n + 0.01, 1.25, 0, 0x9a9ea2);
+      b.solid(2.15);
+    }
+    function desk(cx, cz, y, rot, w, c) {
+      const d = 0.7, b = frame(cx, cz, y, rot, w, d);
+      b(0, 0.72, 0, w, 0.76, d, c); b(0.03, 0, 0.05, 0.08, 0.72, d - 0.05, wood(c)); b(w - 0.08, 0, 0.05, w - 0.03, 0.72, d - 0.05, wood(c));
+      b(w / 2 - 0.3, 0.76, d - 0.25, w / 2 + 0.3, 1.12, d - 0.22, 0x2d3236); b(w / 2 - 0.28, 0.79, d - 0.255, w / 2 + 0.28, 1.1, d - 0.25, 0x1b2a3c, glowB);
+      b(w / 2 - 0.25, 0.76, 0.12, w / 2 + 0.2, 0.78, 0.28, 0x2d3236);
+      b.solid(0.78);
+    }
+    function toilet(cx, cz, y, rot) {
+      const b = frame(cx, cz, y, rot, 0.4, 0.65);
+      b(0.05, 0, 0.05, 0.35, 0.42, 0.5, 0xfafafa); b(0, 0.42, 0.0, 0.4, 0.45, 0.48, 0xf0f0f0); b(0.02, 0.42, 0.45, 0.38, 0.85, 0.65, 0xfafafa);
+      b.solid(0.85);
+    }
+    function basin(cx, cz, y, rot, w) {
+      const b = frame(cx, cz, y, rot, w, 0.5);
+      b(0, 0.2, 0, w, 0.82, 0.5, 0x6f5b49); b(0, 0.82, 0, w, 0.9, 0.5, 0xfafafa);
+      b(w / 2 - 0.03, 0.9, 0.38, w / 2 + 0.03, 1.12, 0.44, 0xb8bcc0); b(0.1, 1.15, 0.47, w - 0.1, 1.95, 0.5, 0xb9c6cd);
+      b.solid(0.9);
+    }
+    function bathtub(cx, cz, y, rot) {
+      const w = 1.75, d = 0.8, b = frame(cx, cz, y, rot, w, d);
+      b(0, 0.12, 0, w, 0.58, d, 0xfafafa); b(0.08, 0.45, 0.08, w - 0.08, 0.585, d - 0.08, 0x9fc4d4);
+      for (const [u, v] of [[0.1, 0.1], [w - 0.18, 0.1], [0.1, d - 0.18], [w - 0.18, d - 0.18]]) b(u, 0, v, u + 0.08, 0.12, v + 0.08, 0xc9a24a);
+      b(w - 0.14, 0.58, d / 2 - 0.03, w - 0.08, 0.95, d / 2 + 0.03, 0xc9a24a);
+      b.solid(0.6);
+    }
+    // a walk-in shower in a corner: a raised tray, a glass screen along [ax, az]-[bx, bz] and a rain head
+    function shower(x0, z0, x1, z1, y, [ax, az, bx, bz]) {
+      cube(x0, y, z0, x1, y + 0.05, z1, 0xd9dcde);
+      glassB.quad([ax, y, az], [bx, y, bz], [bx, y + 2.0, bz], [ax, y + 2.0, az], 0xffffff, null, ax === bx ? [-1, 0, 0] : [0, 0, -1]);
+      cube(Math.min(ax, bx) - 0.02, y, Math.min(az, bz) - 0.02, Math.max(ax, bx) + 0.02, y + 0.06, Math.max(az, bz) + 0.02, 0xb8bcc0);
+      cube((x0 + x1) / 2 - 0.12, y + 2.0, (z0 + z1) / 2 - 0.12, (x0 + x1) / 2 + 0.12, y + 2.03, (z0 + z1) / 2 + 0.12, 0xb8bcc0);
+      DRAKEN.wall(Math.min(ax, bx) - 0.02, Math.min(az, bz) - 0.02, Math.max(ax, bx) + 0.02, Math.max(az, bz) + 0.02, y, y + 2.0);
+    }
+    function kakelugn(cx, cz, y) {
+      // the tiled stove of the old Stockholm flats: round, white, a cornice and a crown, brass doors
+      inn.prism(cx, cz, 0.42, y, y + 0.35, 14, 0xd8d3c8); inn.prism(cx, cz, 0.36, y + 0.35, y + 2.25, 14, 0xf2efe6, 0.36, false);
+      inn.prism(cx, cz, 0.44, y + 2.25, y + 2.4, 14, 0xe8e2d4); inn.prism(cx, cz, 0.3, y + 2.4, y + 2.7, 14, 0xf2efe6, 0.12);
+      cube(cx - 0.16, y + 0.6, cz - 0.37, cx + 0.16, y + 0.9, cz - 0.33, 0xc9a24a); cube(cx - 0.12, y + 1.25, cz - 0.37, cx + 0.12, y + 1.45, cz - 0.33, 0xc9a24a);
+      DRAKEN.wall(cx - 0.42, cz - 0.42, cx + 0.42, cz + 0.42, y, y + 2.7);
+    }
+    function piano(cx, cz, y, rot) {
+      const w = 1.5, d = 1.7, b = frame(cx, cz, y, rot, w, d), K = 0x111214;
+      b(0, 0.62, 0, w, 0.98, d * 0.55, K); b(0.15, 0.62, d * 0.55, w - 0.1, 0.98, d * 0.8, K); b(0.4, 0.62, d * 0.8, w - 0.15, 0.98, d, K);
+      b(0.05, 0.86, -0.12, w - 0.05, 0.9, 0.0, 0xf6f4ef); b(0.05, 0.9, -0.12, w - 0.05, 0.92, -0.08, K);
+      for (const [u, v] of [[0.1, 0.1], [w - 0.18, 0.1], [w / 2, d - 0.3]]) b(u, 0, v, u + 0.08, 0.62, v + 0.08, K);
+      b(0.1, 0.98, 0.3, 0.14, 1.75, 0.34, K);
+      b(0.08, 1.5, 0.3, w - 0.1, 1.53, d * 0.75, K);
+      b.solid(1.0);
+      const s = frame(cx, cz, y, rot, w, d);
+      s(w / 2 - 0.35, 0, -0.75, w / 2 + 0.35, 0.48, -0.42, K);
+    }
+    function poolTable(cx, cz, y, rot) {
+      const w = 1.45, d = 2.6, b = frame(cx, cz, y, rot, w, d);
+      b(0, 0.6, 0, w, 0.82, d, 0x4a2c1a); b(0.12, 0.82, 0.12, w - 0.12, 0.84, d - 0.12, 0x1f6b44);
+      b(0, 0.82, 0, w, 0.88, 0.12, 0x4a2c1a); b(0, 0.82, d - 0.12, w, 0.88, d, 0x4a2c1a); b(0, 0.82, 0, 0.12, 0.88, d, 0x4a2c1a); b(w - 0.12, 0.82, 0, w, 0.88, d, 0x4a2c1a);
+      for (const [u, v] of [[0.1, 0.1], [w - 0.1, 0.1], [0.1, d / 2], [w - 0.1, d / 2], [0.1, d - 0.1], [w - 0.1, d - 0.1]]) b(u - 0.05, 0.835, v - 0.05, u + 0.05, 0.845, v + 0.05, 0x111214);
+      for (const [u, v] of [[0.15, 0.15], [w - 0.3, 0.15], [0.15, d - 0.3], [w - 0.3, d - 0.3]]) b(u, 0, v, u + 0.15, 0.6, v + 0.15, 0x3a2216);
+      // the balls racked at one end and the white at the other
+      const balls = [0xf2c200, 0x1f4fae, 0xc8102e, 0x5a2a7a, 0xe46f2a, 0x1f6b44, 0x7a1414, 0x111214, 0xf2c200, 0x1f4fae];
+      let i = 0;
+      for (let r = 0; r < 4; r++) for (let c2 = 0; c2 <= r; c2++) { const u = w / 2 + (c2 - r / 2) * 0.06, v = d * 0.28 - r * 0.052; b(u - 0.028, 0.84, v - 0.028, u + 0.028, 0.896, v + 0.028, balls[i++ % balls.length]); }
+      b(w / 2 - 0.028, 0.84, d * 0.75 - 0.028, w / 2 + 0.028, 0.896, d * 0.75 + 0.028, 0xf6f4ef);
+      b.solid(0.88);
+    }
+
+    // the third floor: hall, living room with a grand piano, open kitchen and dining room, laundry behind the stairwell
+    {
+      const y = Y3;
+      rug(6.0, 0.7, 8.4, 1.9, y, 0x7a3b2e, 0xa8573f);
+      table(7.5, 0.62, y, 2, 1.2, 0.38, 0.68, OAK);
+      cube(8.86, y + 1.0, 2.75, 8.89, y + 2.0, 3.3, 0xb9c6cd);
+      // coats on a row of hooks by the door
+      cube(5.5, y + 1.62, 2.25, 5.53, y + 1.74, 3.2, OAK);
+      for (const [zz, c2] of [[2.45, 0x2f4a5a], [2.75, 0x8c3b2e], [3.0, 0xc9b48f]]) cube(5.53, y + 0.85, zz - 0.11, 5.72, y + 1.62, zz + 0.11, c2);
+      plant(8.55, 1.05, y, 1.0);
+      ceilingLamp(7.1, 1.6, Y4 - 0.3);
+      // living room
+      rug(10.0, 1.8, 13.4, 5.4, y, 0x2f4a5a, 0x46708a);
+      sofa(10.1, 3.6, y, 3, 2.6, 0x4a5d6e);
+      tvUnit(14.3, 3.6, y, 1, 2.0);
+      table(11.9, 3.6, y, 0, 0.9, 1.3, 0.42, OAK);
+      cube(11.6, y + 0.42, 3.3, 11.9, y + 0.45, 3.6, 0xe8e2d0); cube(12.1, y + 0.42, 3.8, 12.2, y + 0.55, 3.9, 0x3d6e8c);
+      armchair(11.9, 1.4, y, 2, 0xd4a23a); armchair(11.0, 5.75, y, 0, 0xd4a23a);
+      bookshelf(12.0, 0.6, y, 2, 1.3, 2.2);
+      piano(13.5, 6.5, y, 1);
+      floorLamp(9.6, 1.0, y); floorLamp(14.1, 1.0, y);
+      plant(9.5, 6.6, y, 1.2); plant(14.2, 5.0, y, 0.9);
+      for (const [x, z] of [[11.9, 2.4], [11.9, 5.2]]) ceilingLamp(x, z, Y4 - 0.3);
+      // kitchen along the back wall, an island with stools, the fridge at the end
+      cube(9.3, y, D - 1.0, W - 0.42, y + 0.86, D - 0.4, 0xf4f2ee);
+      for (let x = 9.3; x < W - 0.5; x += 0.6) cube(x + 0.02, y + 0.08, D - 1.015, Math.min(x + 0.58, W - 0.44), y + 0.84, D - 1.0, 0xe6e3dc);
+      cube(9.25, y + 0.86, D - 1.05, W - 0.42, y + 0.9, D - 0.4, 0x3a3836);
+      cube(10.2, y + 0.86, D - 0.8, 10.8, y + 0.88, D - 0.45, 0xb8bcc0); cube(10.45, y + 0.9, D - 0.5, 10.5, y + 1.2, D - 0.45, 0xb8bcc0);
+      cube(12.1, y + 0.9, D - 0.95, 12.75, y + 0.91, D - 0.45, 0x151618);
+      cube(11.3, y + 1.5, D - 0.75, 12.7, y + 2.25, D - 0.4, 0xf4f2ee);
+      cube(12.15, y + 1.9, D - 0.95, 12.7, y + 2.25, D - 0.4, 0x9a9ea2);
+      cube(W - 1.05, y, 9.6, W - 0.42, y + 2.1, D - 1.05, 0xdfe2e4); cube(W - 1.06, y + 1.15, 9.7, W - 1.05, y + 1.17, D - 1.15, 0x9a9ea2);
+      DRAKEN.wall(9.3, D - 1.0, W - 0.4, D - 0.4, y, y + 0.9); DRAKEN.wall(W - 1.05, 9.6, W - 0.4, D - 1.0, y, y + 2.1);
+      cube(10.2, y, 8.6, 13.2, y + 0.88, 9.5, 0xf4f2ee); cube(10.15, y + 0.88, 8.55, 13.25, y + 0.92, 9.55, 0x3a3836);
+      DRAKEN.wall(10.2, 8.6, 13.2, 9.5, y, y + 0.92);
+      for (const x of [10.7, 11.7, 12.7]) { cube(x - 0.18, y + 0.72, 8.1, x + 0.18, y + 0.76, 8.4, 0x2d3236); cube(x - 0.02, y, 8.23, x + 0.02, y + 0.72, 8.27, 0x2d3236); }
+      for (const x of [10.9, 12.5]) pendant(x, 9.05, Y4 - 0.3, 0x2f5a3f);
+      // dining room behind the stair
+      table(7.2, 9.3, y, 0, 2.4, 1.0, 0.75, OAK);
+      for (const x of [6.4, 7.2, 8.0]) { chair(x, 8.5, y, 2, 0x2d3236); chair(x, 10.1, y, 0, 0x2d3236); }
+      pendant(7.2, 9.3, Y4 - 0.3, 0xd9b44a);
+      cube(5.6, y, FS.z3 + 0.17, 7.5, y + 0.8, FS.z3 + 0.6, wood(OAK)); cube(5.6, y + 0.8, FS.z3 + 0.15, 7.5, y + 0.84, FS.z3 + 0.62, OAK);
+      cube(6.2, y + 0.84, FS.z3 + 0.3, 6.4, y + 1.1, FS.z3 + 0.5, 0xe8e2d0);
+      DRAKEN.wall(5.6, FS.z3 + 0.15, 7.5, FS.z3 + 0.62, y, y + 0.85);
+      // laundry and guest toilet
+      cube(0.45, y, 9.6, 1.1, y + 0.85, 10.2, 0xf4f4f2); block(inn, 0.44, y + 0.3, 9.75, 0.45, y + 0.62, 10.05, 0x7a8a96);
+      cube(0.45, y + 0.85, 9.6, 1.1, y + 1.7, 10.2, 0xf4f4f2); block(inn, 0.44, y + 1.1, 9.75, 0.45, y + 1.45, 10.05, 0x7a8a96);
+      DRAKEN.wall(0.4, 9.6, 1.1, 10.2, y, y + 1.7);
+      toilet(3.0, D - 0.75, y, 0); basin(0.7, 7.2, y, 3, 0.8);
+      cube(0.45, y + 1.4, 8.0, 0.75, y + 1.43, 9.4, 0xd8d3ca); cube(0.45, y + 1.9, 8.0, 0.75, y + 1.93, 9.4, 0xd8d3ca);
+      for (let z = 8.1; z < 9.2; z += 0.35) cube(0.48, y + 1.43, z, 0.72, y + 1.43 + rr(0.15, 0.4), z + 0.25, pick([0xe8e2d0, 0x6f9fb4, 0xf2efe8, 0xd9b44a]));
+      cube(2.3, y, 7.0, 2.9, y + 0.5, 7.5, 0xc9b48f);
+      ceilingLamp(2.8, 9.0, Y4 - 0.3);
+    }
+    // the fourth floor: the library round the lift, a study by the hall window, the family room with the billiard table,
+    // the office and the sauna
+    {
+      const y = Y4;
+      rug(0.8, 0.6, 4.9, 1.75, y, 0x5a2a2a, 0x8c3b2e);
+      bookshelf(0.58, 3.85, y, 3, 3.6, 2.7);
+      bookshelf(3.6, 5.82, y, 0, 2.9, 2.7);
+      armchair(4.65, 2.4, y, 1, 0x7a2a2a); armchair(4.65, 3.9, y, 1, 0x7a2a2a);
+      cube(4.45, y, 3.0, 4.85, y + 0.55, 3.3, OAK); floorLamp(5.0, 4.7, y);
+      ceilingLamp(1.0, 1.0, Y5 - 0.3); ceilingLamp(4.6, 3.2, Y5 - 0.3);
+      desk(7.5, 0.8, y, 2, 1.3, OAK); chair(7.5, 1.45, y, 0, 0x2d3236);
+      plant(5.9, 0.85, y, 1.0); ceilingLamp(7.1, 1.6, Y5 - 0.3);
+      // family room: a big corner sofa facing the television, the billiard table at the back, a dartboard
+      rug(9.6, 1.0, 13.8, 6.4, y, 0x3f4a3a, 0x5a6b4f);
+      sofa(10.1, 3.4, y, 3, 3.0, 0x6b6f75); sofa(11.6, 6.1, y, 0, 2.4, 0x6b6f75);
+      tvUnit(14.3, 3.4, y, 1, 2.2);
+      table(12.0, 3.4, y, 0, 1.0, 1.4, 0.4, 0x2d3236);
+      plant(14.2, 0.8, y, 1.1); floorLamp(9.5, 0.8, y);
+      poolTable(11.8, 9.3, y, 1);
+      for (const x of [11.2, 12.4]) pendant(x, 9.3, Y5 - 0.3, 0x1f6b44);
+      cube(W - 0.45, y + 0.9, 9.2, W - 0.4, y + 1.7, 10.0, 0x4a2c1a);
+      for (let i = 0; i < 4; i++) cube(W - 0.5, y + 0.2, 9.3 + i * 0.2, W - 0.46, y + 1.6, 9.33 + i * 0.2, 0xd9b48a);
+      block(inn, 9.06, y + 1.5, 9.1, 9.09, y + 1.95, 9.55, 0x1c1d20); block(inn, 9.09, y + 1.6, 9.2, 9.1, y + 1.85, 9.45, 0xc8102e);
+      for (const [x, z] of [[11.9, 2.4], [11.9, 5.0]]) ceilingLamp(x, z, Y5 - 0.3);
+      // office behind the library
+      desk(2.85, D - 1.0, y, 2, 1.6, 0xe8e2d0); chair(2.85, D - 1.75, y, 0, 0x2d3236);
+      bookshelf(0.58, 8.9, y, 3, 2.0, 2.0);
+      cube(4.4, y, 6.5, 5.2, y + 0.7, 7.0, 0x9a9ea2);
+      plant(4.9, D - 0.8, y, 0.9); ceilingLamp(2.9, 9.0, Y5 - 0.3);
+      // sauna: a cabin of spruce with benches, a glass door; a shower and a toilet beside it
+      {
+        const x0 = FS.x0 + 0.02, x1 = 7.6, z0 = 9.4, z1 = D - 0.42;
+        block(inn, x0, y, z0, x1, y + 2.15, z0 + 0.06, (n) => (n[2] < 0 ? SAUNA : shade(SAUNA, 1.08)));
+        block(inn, x1 - 0.06, y, z0, x1, y + 2.15, z1, SAUNA);
+        cube(x0, y + 2.15, z0, x1, y + 2.2, z1, shade(SAUNA, 0.9));
+        cube(x0, y, z0 + 1.0, x1 - 0.06, y + 0.45, z1, shade(SAUNA, 1.05)); cube(x0, y + 0.45, z1 - 0.7, x1 - 0.06, y + 0.95, z1, shade(SAUNA, 1.1));
+        cube(x1 - 0.55, y, z0 + 0.12, x1 - 0.1, y + 0.6, z0 + 0.55, 0x3a3d41); cube(x1 - 0.5, y + 0.6, z0 + 0.15, x1 - 0.15, y + 0.75, z0 + 0.5, 0x6a6f75);
+        block(glowB, x0 + 0.1, y + 2.0, z1 - 0.15, x0 + 0.6, y + 2.1, z1 - 0.05, 0xffc27a);
+        glassB.quad([6.1, y, z0 - 0.01], [6.9, y, z0 - 0.01], [6.9, y + 2.0, z0 - 0.01], [6.1, y + 2.0, z0 - 0.01], 0xffffff, null, [0, 0, -1]);
+        DRAKEN.wall(x0, z0, 6.1, z0 + 0.06, y, y + 2.2); DRAKEN.wall(6.9, z0, x1, z0 + 0.06, y, y + 2.2); DRAKEN.wall(x1 - 0.06, z0, x1, z1, y, y + 2.2);
+        DRAKEN.wall(x0, z0 + 1.0, x1, z1, y, y + 0.45);
+      }
+      shower(7.75, D - 1.5, 8.88, D - 0.42, y, [7.75, D - 1.5, 8.3, D - 1.5]);
+      toilet(8.55, 9.4, y, 1); basin(8.62, 10.1, y, 1, 0.6);
+      cube(6.0, y + 1.4, FS.z3 + 0.15, 7.2, y + 1.45, FS.z3 + 0.2, 0xb8bcc0); cube(6.1, y + 0.6, FS.z3 + 0.17, 7.1, y + 1.4, FS.z3 + 0.22, 0xe8d8a8);
+      ceilingLamp(8.3, 9.0, Y5 - 0.3);
+    }
+    // the top floor: the bedrooms under the beams. The big one at the front with a tiled stove, its bathroom at the back,
+    // a guest room behind the stair, a child's room behind the lift; a dressing room round the lift
+    {
+      const y = Y5;
+      wardrobe(0.72, 3.9, y, 3, 3.6, 0xf2efe8);
+      cube(3.1, y, 5.4, 4.6, y + 0.45, 5.85, 0x8c6a4a); DRAKEN.wall(3.1, 5.4, 4.6, 5.85, y, y + 0.45);
+      cube(5.25, y + 0.3, 2.2, 5.29, y + 2.0, 3.2, 0xb9c6cd);
+      rug(0.8, 0.6, 4.9, 1.75, y, 0x8c7a5a, 0xb59e78);
+      ceilingLamp(1.0, 1.0, ROOF - 0.2); ceilingLamp(4.6, 3.2, ROOF - 0.2);
+      table(7.5, 0.62, y, 2, 1.2, 0.38, 0.85, OAK); plant(5.95, 0.85, y, 1.0); ceilingLamp(7.1, 1.6, ROOF - 0.2);
+      // the master bedroom
+      rug(11.3, 2.1, 14.5, 5.7, y, 0xd8cfb8, 0xe9e2cf);
+      bed(13.45, 3.9, y, 1, 1.8, 2.1, 0x6f8fa8, 0x4a5d6e);
+      bedside(14.3, 2.55, y); bedside(14.3, 5.25, y);
+      kakelugn(9.6, 6.75, y);
+      armchair(10.2, 1.2, y, 2, 0xc8643a); floorLamp(9.5, 0.75, y);
+      wardrobe(11.9, 6.95, y, 0, 2.4, 0xf2efe8);
+      cube(12.4, y, 0.45, 14.2, y + 0.68, 0.9, OAK); DRAKEN.wall(12.4, 0.45, 14.2, 0.9, y, y + 0.68);
+      ceilingLamp(12.2, 3.9, ROOF - 0.2);
+      // its bathroom: a free-standing bath under the window, two basins, a walk-in shower
+      bathtub(13.5, D - 0.85, y, 2);
+      basin(10.95, 7.85, y, 2, 0.8); basin(11.95, 7.85, y, 2, 0.8);
+      shower(13.3, 7.55, W - 0.42, 9.0, y, [13.3, 7.55, 13.3, 9.0]);
+      toilet(9.45, D - 0.75, y, 0);
+      cube(9.1, y + 1.0, 9.0, 9.14, y + 1.04, 10.2, 0xb8bcc0); cube(9.12, y + 0.4, 9.1, 9.17, y + 1.0, 10.1, 0xf2efe8);
+      ceilingLamp(11.8, 9.6, ROOF - 0.2);
+      // the guest room
+      bed(6.56, 9.9, y, 3, 1.4, 2.0, 0xc8a2a2, 0x8c6a4a);
+      bedside(5.85, 8.75, y);
+      wardrobe(8.55, 10.4, y, 1, 1.6, 0xe8e2d0);
+      ceilingLamp(7.2, 9.5, ROOF - 0.2);
+      // the child's room: a bed with a striped cover, a desk under the window, a toy chest and a rug with a road on it
+      bed(0.9, 8.6, y, 0, 0.9, 2.0, 0x2f6fdb, 0xd9b44a);
+      desk(4.4, D - 0.8, y, 2, 1.2, 0xe8e2d0); chair(4.4, D - 1.4, y, 0, 0xc8102e);
+      cube(2.3, y, 6.45, 3.3, y + 0.5, 6.95, 0xc8102e); cube(2.3, y + 0.5, 6.45, 3.3, y + 0.55, 6.95, 0xf2c200);
+      DRAKEN.wall(2.3, 6.45, 3.3, 6.95, y, y + 0.55);
+      rug(2.0, 8.0, 4.2, 10.2, y, 0x3f6b45, 0x5a8a5a);
+      cube(2.3, y, 9.0, 3.9, y + 0.018, 9.2, 0x4a4f54);
+      for (const [x, z, c2] of [[2.6, 8.6, 0xc8102e], [3.4, 9.6, 0x1f4fae]]) cube(x, y, z, x + 0.2, y + 0.1, z + 0.12, c2);
+      cube(0.42, y + 1.3, 6.8, 0.44, y + 2.0, 7.6, 0x2f6fdb);
+      ceilingLamp(2.8, 9.0, ROOF - 0.2);
+    }
+
+    const woodTex = canvasTex(256, 256, (g, w, h) => {
+      const n = 8, ph = h / n;
+      for (let i = 0; i < n; i++) {
+        const t = rr(-16, 16);
+        g.fillStyle = `rgb(${Math.round(196 + t)},${Math.round(152 + t)},${Math.round(104 + t * 0.8)})`; g.fillRect(0, i * ph, w, ph);
+        for (let k = 0; k < 16; k++) { g.fillStyle = `rgba(110,70,38,${rr(0.04, 0.15).toFixed(3)})`; g.fillRect(0, i * ph + rand() * ph, w, rr(0.6, 1.8)); }
+        g.fillStyle = 'rgba(70,45,25,.5)'; g.fillRect(0, i * ph, w, 1.3); g.fillRect(rand() * w, i * ph, 1.3, ph);
+      }
+    }, true);
+    const tileTex = canvasTex(128, 128, (g, w) => {
+      g.fillStyle = '#a7a6a0'; g.fillRect(0, 0, w, w);
+      for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) { g.fillStyle = (x + y) % 2 ? '#ecebe6' : '#3d4146'; g.fillRect(x * 32 + 1, y * 32 + 1, 30, 30); }
+    }, true);
+    const liftMat = std({ vertexColors: true, roughness: 0.45, metalness: 0.6 });
+    for (const [B, mat, cast] of [[ext, facadeMat, true], [ext.solidB, solidMat, true], [inn, inMat, true], [liftB, liftMat, true], [woodB, std({ map: woodTex, roughness: 0.5, envMapIntensity: 0.75 }), false],
+      [tileB, std({ map: tileTex, roughness: 0.25, envMapIntensity: 0.75 }), false], [glowB, glowMat, false], [glassB, glassMatH, false]]) {
+      if (B.empty) continue;
+      const m = new THREE.Mesh(B.build(), mat);
+      m.castShadow = cast; m.receiveShadow = B !== glowB && B !== glassB;
+      root.add(m);
+    }
+  }
+  // doors swing open as you come up to them and shut behind you; the lift comes when called, takes you where you want and
+  // opens its doors; the first time you step into the flat, it says so
+  const LIFT_NAMES = ['Gatan', '1 tr', '2 tr', 'Lägenheten', 'Biblioteket', 'Sovrummen'];
+  function liftWhere() {
+    const L = DRAKEN.lift, { ST, CAB, F } = DRAKEN, [lx, lz] = DRAKEN.toLocal(player.x, player.z), free = !driving && !(stop && stop.locked);
+    const inCab = free && lx > CAB.x0 - 0.05 && lx < CAB.x1 + 0.05 && lz > CAB.z0 - 0.15 && lz < CAB.z1 + 0.05 && Math.abs(player.y - L.y) < 1;
+    const k = Math.round(player.y / F), onFloor = Math.abs(player.y - k * F) < 0.35;
+    const atDoor = free && !inCab && onFloor && k >= 0 && k < DRAKEN.FLOORS && lx > CAB.d0 - 0.8 && lx < CAB.d1 + 0.8 && lz > ST.z0 && lz < ST.z1 + 0.05;
+    const inDoorway = free && lx > CAB.d0 - 0.05 && lx < CAB.d1 + 0.05 && lz > ST.z1 - 0.4 && lz < CAB.z0 + 0.35 && Math.abs(player.y - L.y) < 1;
+    return { inCab, atDoor: atDoor ? k : -1, inDoorway };
+  }
+  const LIFT = {
+    where: null,
+    // send the lift to a floor (pressed in the cab or called from a landing)
+    go(k) {
+      const L = DRAKEN.lift;
+      if (k < 0 || k >= DRAKEN.FLOORS) return false;
+      if (L.phase === 'moving') { if (k !== L.want) toast('Hissen är på väg till ' + LIFT_NAMES[L.want].toLowerCase() + '.'); return true; }
+      L.want = k;
+      if (k === L.floor && (L.phase === 'idle' || L.phase === 'closing')) L.phase = 'opening';
+      if (k !== L.floor && L.phase === 'open') L.phase = 'closing';
+      return true;
+    },
+    // E: in the cab up to the flat (or down to the street from it); on a landing, call it
+    use() {
+      const w = LIFT.where;
+      if (!w) return false;
+      const L = DRAKEN.lift;
+      if (w.inCab) { LIFT.go(L.floor < DRAKEN.FL ? DRAKEN.FL : 0); return true; }
+      if (w.atDoor >= 0 && !(L.floor === w.atDoor && L.phase !== 'moving' && L.doors > 0.5)) { LIFT.go(w.atDoor); toast(L.floor === w.atDoor ? 'Hissen öppnar.' : 'Hissen är på väg.'); return true; }
+      return false;
+    },
+    digit(n) { if (!LIFT.where || !LIFT.where.inCab) return false; return LIFT.go(n); },
+    prompt() {
+      const w = LIFT.where, L = DRAKEN.lift;
+      if (!w) return null;
+      if (w.inCab) return L.phase === 'moving' ? null : 'Hissen: ' + (L.floor < DRAKEN.FL ? 'upp till lägenheten' : 'ner till gatan') + ' (0–5 väljer våning)';
+      if (w.atDoor >= 0 && !(L.floor === w.atDoor && L.phase !== 'moving' && L.doors > 0.5)) return L.phase === 'moving' || L.want === w.atDoor ? null : 'Ring på hissen';
+      return null;
+    }
+  };
+  function updateLift(dt) {
+    const L = DRAKEN.lift, { F, FLOORS, liftParts: P, liftDoors } = DRAKEN, w = LIFT.where = liftWhere();
+    switch (L.phase) {
+      case 'idle':
+        if (L.want !== null && L.want !== L.floor) { L.phase = 'moving'; liftSound('start'); }
+        else if (L.want === L.floor || w.atDoor === L.floor || w.inCab) { L.want = null; L.phase = 'opening'; }
+        break;
+      case 'opening':
+        L.doors = Math.min(1, L.doors + dt * 1.3);
+        if (L.doors >= 1) { L.phase = 'open'; L.t = 0; }
+        break;
+      case 'open':
+        L.t += dt;
+        if (w.inDoorway) L.t = 0;
+        if ((L.want !== null && L.want !== L.floor && !w.inDoorway) || (L.t > 5 && w.atDoor !== L.floor && !w.inCab)) L.phase = 'closing';
+        break;
+      case 'closing':
+        if (w.inDoorway) { L.phase = 'opening'; break; }
+        L.doors = Math.max(0, L.doors - dt * 1.1);
+        if (L.doors <= 0) L.phase = 'idle';
+        break;
+      case 'moving': {
+        const target = L.want * F, d = target - L.y;
+        L.v = Math.sign(d) * Math.min(Math.abs(L.v) + dt * 1.2, 1.9, Math.sqrt(2 * 1.0 * Math.abs(d)) + 0.05);
+        if (Math.abs(d) <= Math.abs(L.v) * dt + 1e-3) { L.y = target; L.v = 0; L.floor = L.want; L.want = null; L.phase = 'opening'; liftSound('ding'); }
+        else L.y += L.v * dt;
+        break;
+      }
+    }
+    for (let k = 0; k < FLOORS; k++) liftDoors[k].off = L.phase !== 'moving' && k === L.floor && L.doors > 0.8;
+    // the parts that move
+    const o = L.doors * (P.lw - 0.04);
+    P.cab.position.y = L.y;
+    P.cabLeaves[0].position.x = DRAKEN.CAB.d0 - o; P.cabLeaves[1].position.x = DRAKEN.CAB.d0 + P.lw + o;
+    P.landLeaves.forEach((pair, k) => { const ok = k === L.floor && L.phase !== 'moving' ? o : 0; pair[0].position.x = DRAKEN.CAB.d0 - ok; pair[1].position.x = DRAKEN.CAB.d0 + P.lw + ok; });
+    const cx = (DRAKEN.ST.s0 + DRAKEN.ST.s1) / 2, top = 6 * F - 0.65, cwY = top - 1.2 - L.y * 0.92;
+    P.cw.position.set(cx, cwY, 4.0);
+    P.cable.position.set(cx, (L.y + 2.35 + top) / 2, 2.7); P.cable.scale.y = Math.max(0.1, top - L.y - 2.35);
+  }
+  function liftSound(kind) {
+    if (!audio || muted) return;
+    const s = placeSound(...DRAKEN.toWorld((DRAKEN.ST.s0 + DRAKEN.ST.s1) / 2, 2.7), 30), t = audio.ctx.currentTime;
+    if (s.level < 0.02) return;
+    if (kind === 'ding') { tone(t, 'sine', 1318, 1318, 0.9, 0.07 * s.level, s.pan); tone(t + 0.32, 'sine', 1047, 1047, 1.2, 0.07 * s.level, s.pan); }
+    else noiseBurst(t, 0.25, 0.08 * s.level, 'lowpass', 260, 1, s.pan);
+  }
+  function updateDraken(dt) {
+    const near = !driving, [lx, lz] = DRAKEN.toLocal(player.x, player.z);
+    for (const d of DRAKEN.doors) {
+      const want = near && Math.hypot(lx - d.cx, lz - d.cz) < 2.2 && Math.abs(player.y - d.y) < 1.6 ? 1 : 0;
+      d.open += clamp(want - d.open, -dt * 1.6, dt * 2.2);
+      d.pivot.rotation.y = d.rot0 + d.swing * (1 - (1 - d.open) * (1 - d.open));
+    }
+    updateLift(dt);
+    const { F, FL, ST, W, D } = DRAKEN;
+    const inFlat = near && !(LIFT.where && LIFT.where.inCab) && lx > 0 && lx < W && lz > 0 && lz < D && player.y > FL * F - 0.3 && (player.y > 4 * F - 0.3 || lx > ST.x1 + 0.1 || lz > ST.z3 + 0.1);
+    if (inFlat && !DRAKEN.home) {
+      DRAKEN.home = true;
+      toast('Din takvåning i tre plan högst upp i det gula huset på Drakens gränd. Sovrummen ligger högst upp.');
+    }
+    // the lift's buttons on the screen while you ride it
+    const show = !!(LIFT.where && LIFT.where.inCab);
+    if (show !== !el.liftPanel.hidden) el.liftPanel.hidden = !show;
+    if (show) {
+      const L = DRAKEN.lift, at = Math.round(L.y / F), key = at + ':' + L.want;
+      if (key !== el.liftPanel.dataset.k) {
+        el.liftPanel.dataset.k = key;
+        for (const b of el.liftPanel.querySelectorAll('button')) { const k = Number(b.dataset.floor); b.classList.toggle('at', k === at); b.classList.toggle('want', k === L.want); }
+      }
+    }
+  }
+  function groundMesh(B, mat, offset) {
+    if (B.empty) return null;
+    // a constant depth nudge (no slope term), so the ground layers never fight and the depth stays true enough for the
+    // ambient occlusion, which a slope-scaled offset would bend at a distance
+    if (offset) Object.assign(mat, { polygonOffset: true, polygonOffsetFactor: 0, polygonOffsetUnits: offset * 6 });
+    const m = new THREE.Mesh(B.build(), mat);
+    m.receiveShadow = true;
+    scene.add(m);
+    return m;
+  }
+  const nscale = (k) => new THREE.Vector2(k, k);
+  groundMesh(paveB, std({ map: pave2, normalMap: NRM.pave, normalScale: nscale(0.8), color: 0xe6e2da, roughness: 0.92 }));
+  groundMesh(grassB, std({ map: grassTex, roughness: 0.95 }), -1);
+  groundMesh(railB, std({ map: railTex, roughness: 0.95 }), -1);
+  groundMesh(roadB, std({ map: road2, normalMap: NRM.road, normalScale: nscale(0.4), roughness: 0.86 }), -2);
+  groundMesh(avenueB, std({ map: avenue2, normalMap: NRM.avenue, normalScale: nscale(0.4), roughness: 0.86 }), -2);
+  groundMesh(medianB, std({ map: median2, normalMap: NRM.median, normalScale: nscale(0.4), roughness: 0.88 }), -2);
+  groundMesh(junctionB, std({ map: junction2, normalMap: NRM.junction, normalScale: nscale(0.4), roughness: 0.86 }), -2);
+  groundMesh(cobbleB, std({ map: cobble2, normalMap: NRM.cobble, normalScale: nscale(1.1), roughness: 0.72 }), -2);
+  groundMesh(slabB, std({ map: slab2, normalMap: NRM.slab, normalScale: nscale(0.8), roughness: 0.8 }), -2);
+  groundMesh(plazaB, std({ map: plazaTex, roughness: 0.5 }), -3);
+  groundMesh(zebraB, std({ color: 0xe8e8e4, roughness: 0.7 }), -4);
+  scene.add(new THREE.Mesh(signB.build(), std({ map: signTex, roughness: 0.45, emissive: 0x2a2a2a, emissiveMap: signTex })));
+  scene.add(new THREE.Mesh(tB.build(), std({ map: tTex, roughness: 0.45, transparent: true, alphaTest: 0.5, emissive: 0x2a2a2a, emissiveMap: tTex })));
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(9000, 9000), std({ color: 0x143644, roughness: 0.07, normalMap: waterNormal, normalScale: new THREE.Vector2(0.32, 0.32) }));
+  water.rotation.x = -Math.PI / 2; water.position.y = WATER_Y; water.receiveShadow = true;
+  waterNormal.repeat.set(700, 700);
+  scene.add(water);
+  if (obeliskPos) {
+    const ob = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 2.1, 37, 8), new THREE.MeshStandardMaterial({ color: 0xc4e6f2, metalness: 0.3, roughness: 0.1, transparent: true, opacity: 0.6, emissive: 0x3d7c96, emissiveIntensity: 0.35 }));
+    ob.position.set(obeliskPos.x, 0.6 + 18.5, obeliskPos.z);
+    scene.add(ob);
+    const core = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 37, 6), std({ color: 0x5d666d }));
+    core.position.copy(ob.position);
+    scene.add(core);
+  }
+
+  /* ---------- trees and street lamps, instanced per area so groups out of view are skipped ---------- */
+  // trees far away: a trunk and a crown of lumpy leaf clusters, darker underneath where the sun doesn't reach
+  const leafMat = std({ vertexColors: true, flatShading: true, roughness: 0.85 });
+  const lumpy = (p) => Math.sin(p.x * 3.1 + p.y * 1.7) * Math.cos(p.z * 2.3 - p.y * 2.9) * 0.5 + Math.sin(p.x * 7.3 - p.z * 5.1) * 0.25;
+  function treeGeo(crown, crownR, trunkH, crownY, far) {
+    const m = new Merger();
+    m.add(new THREE.CylinderGeometry(0.12, 0.26, trunkH + 0.8, far ? 5 : 7), 0x4d3c2f, 0, (trunkH + 0.8) / 2, 0);
+    if (!far) {
+      m.add(new THREE.CylinderGeometry(0.05, 0.1, 1.6, 5), 0x4d3c2f, 0.35, trunkH + 0.4, 0, 0, 0, -0.7);
+      m.add(new THREE.CylinderGeometry(0.05, 0.1, 1.5, 5), 0x4d3c2f, -0.3, trunkH + 0.5, 0.15, 0.3, 0, 0.7);
+    }
+    const start = m.p.length / 3, v = new THREE.Vector3();
+    const blobs = far ? [[0, 0.05, 0, 0.95], [0.45, -0.2, 0.2, 0.62], [-0.4, -0.15, -0.3, 0.62]]
+      : [[0, 0.1, 0, 0.82], [0.5, -0.2, 0.3, 0.66], [-0.52, -0.12, -0.3, 0.68], [0.12, 0.5, -0.25, 0.6], [-0.3, -0.32, 0.5, 0.58]];
+    for (const [bx, by, bz, s] of blobs) {
+      const ico = new THREE.IcosahedronGeometry(crownR * s, far ? 0 : 1), pos = ico.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        v.fromBufferAttribute(pos, i);
+        v.multiplyScalar(1 + lumpy(v.clone().multiplyScalar(1.3 / crownR)) * 0.22);
+        pos.setXYZ(i, v.x, v.y * 1.1, v.z);
+      }
+      ico.computeVertexNormals();
+      m.add(ico, crown, bx * crownR, crownY + by * crownR, bz * crownR);
+    }
+    for (let i = start; i < m.p.length / 3; i++) {
+      const k = 0.55 + 0.45 * clamp((m.p[i * 3 + 1] - (crownY - crownR)) / (crownR * 2), 0, 1);
+      m.c[i * 3] *= k; m.c[i * 3 + 1] *= k; m.c[i * 3 + 2] *= k;
+    }
+    return m.build();
+  }
+  function shareGeometry(src, items, lift) {
+    const g = new THREE.BufferGeometry();
+    for (const k in src.attributes) g.setAttribute(k, src.attributes[k]);
+    if (src.index) g.setIndex(src.index);
+    let cx = 0, cz = 0, r = 0;
+    for (const it of items) { cx += it.x; cz += it.z; }
+    cx /= items.length; cz /= items.length;
+    for (const it of items) r = Math.max(r, Math.hypot(it.x - cx, it.z - cz));
+    g.boundingSphere = new THREE.Sphere(new THREE.Vector3(cx, lift, cz), r + src.boundingSphere.radius + 2);
+    return g;
+  }
+  function instancedByArea(geo, mat, list, place, shadow = true) {
+    const groups = new Map(), out = [];
+    for (const it of list) { const k = chunkKey(it.x, it.z); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(it); }
+    for (const items of groups.values()) {
+      const m = instanced(shareGeometry(geo, items, 4), mat, items, place, shadow);
+      m.frustumCulled = true;
+      out.push(m);
+    }
+    return out;
+  }
+  const placeTree = (o, t) => { o.position.set(t.x, 0, t.z); o.rotation.y = t.r; o.scale.setScalar(t.s); return t.v < 0.33 ? 0xffffff : t.v < 0.66 ? 0xd6e3c8 : 0xeef2d0; };
+  // Trees near by: a trunk with branches up into a crown of leaf cards, small squares that each carry a painted cluster
+  // of leaves with gaps you see through, scattered through the crown at every angle. Their normals point out from the
+  // middle of the crown so it is lit as one soft mass, and they are darker underneath and inside, where light is scarce.
+  const mulberry = (a) => () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const leafTex = (pink) => canvasTex(256, 256, (g, w) => {
+    const r = mulberry(pink ? 7 : 3);
+    for (let i = 0; i < (pink ? 620 : 520); i++) {
+      const a = r() * TAU, d = Math.sqrt(r()) * w * 0.47, x = w / 2 + Math.cos(a) * d, y = w / 2 + Math.sin(a) * d, k = 0.62 + r() * 0.55;
+      const leaf = !pink || r() < 0.18, L = leaf ? 7 + r() * 7 : 4 + r() * 3.5;
+      g.fillStyle = leaf ? `rgb(${Math.round((48 + r() * 50) * k)},${Math.round((92 + r() * 58) * k)},${Math.round((28 + r() * 30) * k)})`
+        : `rgb(${Math.round(240 * k + 15)},${Math.round((176 + r() * 40) * k + 10)},${Math.round((190 + r() * 40) * k + 10)})`;
+      g.save(); g.translate(x, y); g.rotate(r() * TAU);
+      g.beginPath(); g.ellipse(0, 0, L, L * (leaf ? 0.46 : 0.9), 0, 0, TAU); g.fill();
+      if (leaf) { g.fillStyle = 'rgba(20,40,10,.35)'; g.fillRect(-L, -0.5, L * 2, 1); }
+      g.restore();
+    }
+  });
+  function crownCards(R, cy, n, size, seed) {
+    const r = mulberry(seed), P = [], N = [], U = [], C = [], I = [], ax = new THREE.Vector3(), ay = new THREE.Vector3(), nr = new THREE.Vector3();
+    for (let i = 0; i < n; i++) {
+      let x, y, z;
+      do { x = r() * 2 - 1; y = r() * 2 - 1; z = r() * 2 - 1; } while (x * x + y * y + z * z > 1);
+      const out = 0.45 + 0.55 * Math.cbrt(x * x + y * y + z * z) / Math.max(1e-3, Math.hypot(x, y, z));
+      const cx = x * R * out, cyy = cy + y * R * 1.1 * out, cz = z * R * out;
+      ax.set(r() - 0.5, r() - 0.5, r() - 0.5).normalize();
+      ay.set(r() - 0.5, r() - 0.5, r() - 0.5); ay.addScaledVector(ax, -ay.dot(ax)).normalize();
+      const s = size * (0.75 + r() * 0.5) / 2, base = P.length / 3;
+      for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+        const px = cx + (ax.x * a + ay.x * b) * s, py = cyy + (ax.y * a + ay.y * b) * s, pz = cz + (ax.z * a + ay.z * b) * s;
+        P.push(px, py, pz); U.push((a + 1) / 2, (b + 1) / 2);
+        nr.set(px, (py - cy) * 0.8 + R * 0.25, pz).normalize(); N.push(nr.x, nr.y, nr.z);
+        const k = (0.5 + 0.5 * clamp((py - (cy - R)) / (2 * R), 0, 1)) * (0.72 + 0.28 * Math.min(1, Math.hypot(px, py - cy, pz) / R));
+        C.push(k, k, k);
+      }
+      I.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
+    g.setIndex(I); g.computeBoundingSphere();
+    return g;
+  }
+  function trunkGeo(trunkH, cy, R) {
+    const m = new Merger();
+    m.add(new THREE.CylinderGeometry(0.11, 0.25, trunkH + 0.9, 8), 0x4a3a2d, 0, (trunkH + 0.9) / 2, 0);
+    for (const [a, tilt, len] of [[0, 0.75, 1.9], [2.2, 0.65, 1.8], [4.1, 0.8, 1.7], [1.1, 0.35, 1.6]]) {
+      const ox = Math.cos(a) * Math.sin(tilt) * len / 2, oz = Math.sin(a) * Math.sin(tilt) * len / 2, oy = trunkH + 0.4 + Math.cos(tilt) * len / 2;
+      m.add(new THREE.CylinderGeometry(0.035, 0.09, len, 5), 0x4a3a2d, ox, oy, oz, Math.sin(a) * tilt, 0, -Math.cos(a) * tilt);
+    }
+    return m.build();
+  }
+  // leaves are cut out of the cards, double-sided, and keep the crown's normals on both sides of a card
+  function cardMaterial(tex) {
+    const m = std({ map: tex, alphaTest: 0.42, side: THREE.DoubleSide, vertexColors: true, roughness: 0.78 });
+    m.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', THREE.ShaderChunk.normal_fragment_begin.replace('normal = normal * faceDirection;', '')); };
+    return m;
+  }
+  // swapped for the cheap version beyond TREE_NEAR metres
+  const TREE_NEAR = 230, treeLods = [], barkMat = std({ vertexColors: true, roughness: 0.95 });
+  for (const [list, crown, R, trunk, cy, pink] of [[lindens, 0x4a7d33, 2.3, 3.0, 4.6, false], [cherries, 0xf3b9c8, 2.0, 2.4, 3.8, true]]) {
+    const tex = leafTex(pink), mat = cardMaterial(tex);
+    const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: tex, alphaTest: 0.42, side: THREE.DoubleSide });
+    const trunks = instancedByArea(trunkGeo(trunk, cy, R), barkMat, list, placeTree);
+    const crowns = instancedByArea(crownCards(R, cy, pink ? 52 : 58, R * 0.85, pink ? 11 : 5), mat, list, placeTree);
+    for (const m of crowns) m.customDepthMaterial = depth;
+    const far = instancedByArea(treeGeo(crown, R, trunk, cy, true), leafMat, list, placeTree, false);
+    far.forEach((m, i) => { m.visible = false; treeLods.push({ near: [trunks[i], crowns[i]], far: m, c: m.geometry.boundingSphere.center }); });
+  }
+  function updateTreeLods() {
+    for (const t of treeLods) {
+      const d = Math.hypot(t.c.x - camera.position.x, t.c.z - camera.position.z), close = d < TREE_NEAR;
+      t.near[0].visible = t.near[1].visible = close; t.far.visible = !close && d < FAR_CULL;
+    }
+  }
+  {
+    const m = new Merger();
+    m.add(new THREE.CylinderGeometry(0.07, 0.11, 6.0, 8), 0x55595e, 0, 3.0, 0);
+    m.add(new THREE.CylinderGeometry(0.14, 0.14, 0.5, 8), 0x55595e, 0, 0.25, 0);
+    m.box(0.07, 0.07, 1.5, 0x55595e, 0, 5.95, 0.7);
+    m.box(0.34, 0.12, 0.55, 0x3a3d41, 0, 5.88, 1.4);
+    m.box(0.28, 0.03, 0.46, 0xfff6e0, 0, 5.81, 1.4);
+    for (const lm of instancedByArea(m.build(), std({ vertexColors: true, roughness: 0.5, metalness: 0.6 }), lamps, (o, l) => { o.position.set(l.x, 0, l.z); o.rotation.y = l.rot; })) {
+      const c = lm.geometry.boundingSphere.center;
+      culled.push({ m: lm, x: c.x, z: c.z });
+    }
+  }
+
+  // whatever stands on a bridge deck out over the water (lamps, signs) stands on the deck, so a boat passes beneath it
+  for (const cell of grid) if (cell) for (const o of cell) {
+    if (o.y0 !== undefined) continue;
+    const [cx, cz] = o.t === 1 ? [o.x, o.z] : o.t === 2 ? [o.cx, o.cz] : [(o.x0 + o.x1) / 2, (o.z0 + o.z1) / 2];
+    if (groundAt(cx, cz) === 2) o.y0 = 0;
+  }
+  const loadMs = performance.now() - loadStart;
+
+  /* ================= people ================= */
+  const personMat = std({ vertexColors: true, roughness: 0.8 });
+  const SKINS = [0xf0c08a, 0xe0ac7e, 0xc68b5e, 0x8d5a3b, 0xf5d0a9];
+  const SHIRTS = [0xc8102e, 0x2f6fdb, 0x2e8b57, 0xf2b705, 0x6a3d9a, 0xe8e8e8, 0x222428, 0xe46f2a, 0x1f9aa8, 0xb03a74, 0x7a8b99];
+  const PANTS = [0x27324a, 0x1c1d21, 0x5a4a3a, 0x3b5b8c, 0x6b6f75];
+  const HAIRS = [0xe8d08a, 0x6b4a2b, 0x2b1d14, 0x9a9a9a, 0xc4733a];
+  // People are about 1.8 m tall, with rounded heads (a face, ears and hair or a hat), a neck and shoulders, arms with
+  // hands and legs with knees and shoes. A person is a body and four limbs that swing from the hips and shoulders.
+  const cyl = (rt, rb, h, n = 10) => new THREE.CylinderGeometry(rt, rb, h, n);
+  const ball = (r, w = 12, hs = 8, tl = Math.PI) => new THREE.SphereGeometry(r, w, hs, 0, TAU, 0, tl);
+  const squash = (g, x, y, z) => { g.scale(x, y, z); return g; };
+  // a head centred at (0, cy, 0), s times the usual size
+  function head(m, id, cy, s) {
+    const r = 0.115 * s;
+    m.add(squash(ball(r, 14, 10), 0.92, 1.08, 1), id.skin, 0, cy, 0);
+    for (const sx of [1, -1]) {
+      m.add(squash(ball(r * 0.22, 6, 5), 0.5, 1, 0.8), id.skin, sx * r * 0.9, cy, -r * 0.05);
+      m.add(ball(r * 0.1, 6, 5), 0x15181c, sx * r * 0.36, cy + r * 0.16, r * 0.88);
+      m.box(r * 0.3, r * 0.06, r * 0.05, shade(id.hair, 0.8), sx * r * 0.36, cy + r * 0.38, r * 0.86);
+    }
+    m.add(squash(cyl(r * 0.05, r * 0.15, r * 0.34, 6), 1, 1, 0.9), id.skin, 0, cy - r * 0.04, r * 0.98, -0.3, 0, 0);
+    m.box(r * 0.36, r * 0.05, r * 0.05, shade(id.skin, 0.7), 0, cy - r * 0.44, r * 0.86);
+    const cap = (rr, tl, col, tilt = 0) => m.add(ball(rr, 14, 6, tl), col, 0, cy + r * 0.04, -r * 0.04, tilt, 0, 0);
+    if (id.hat === 'cap') {
+      cap(r * 1.08, Math.PI * 0.5, id.hatColor);
+      m.add(squash(cyl(r * 0.9, r * 0.9, r * 0.08, 14), 1, 1, 0.75), id.hatColor, 0, cy + r * 0.12, r * 0.85, 0.12, 0, 0);
+    } else if (id.hat === 'beanie') {
+      cap(r * 1.1, Math.PI * 0.58, id.hatColor);
+      m.add(ball(r * 0.22, 6, 5), id.hatColor, 0, cy + r * 1.12, 0);
+    } else if (id.hat === 'combat') {
+      // the army's combat helmet under its camouflage cover
+      cap(r * 1.2, Math.PI * 0.56, 0x4a5638);
+      m.add(squash(cyl(r * 1.16, r * 1.22, r * 0.1, 14), 1, 1, 1.08), 0x3d4730, 0, cy - r * 0.08, -r * 0.02);
+      for (const [a, b] of [[0.6, 0.3], [-0.7, 0.5], [0.1, -0.6]]) m.add(ball(r * 0.32, 6, 4), 0x2a3221, Math.sin(a) * r * 0.95, cy + r * 0.55 + b * r * 0.2, Math.cos(a) * r * 0.6 * Math.sign(b));
+    } else if (id.hat === 'helmet') {
+      // Högvakten's spiked helmet (pickelhuva): black leather with a brass spike and plate
+      cap(r * 1.14, Math.PI * 0.55, 0x15171a);
+      m.add(squash(cyl(r * 1.05, r * 1.1, r * 0.08, 14), 1, 1, 1.1), 0x15171a, 0, cy - r * 0.02, r * 0.1);
+      m.add(new THREE.ConeGeometry(r * 0.16, r * 0.8, 8), 0xd4a53a, 0, cy + r * 1.45, 0);
+      m.box(r * 0.7, r * 0.6, r * 0.05, 0xd4a53a, 0, cy + r * 0.55, r * 1.04);
+    } else cap(r * 1.05, Math.PI * 0.56, id.hair, -0.35); // hair, over the top and down the back
+  }
+  function makeIdentity(o = {}) {
+    const id = {
+      skin: o.skin ?? rpick(SKINS), shirt: o.shirt ?? rpick(SHIRTS), pants: o.pants ?? rpick(PANTS), hair: o.hair ?? rpick(HAIRS),
+      hat: o.hat !== undefined ? o.hat : Math.random() < 0.25 ? 'cap' : Math.random() < 0.35 ? 'beanie' : null,
+      hatColor: o.hatColor ?? rpick(SHIRTS), sleeves: o.sleeves ?? Math.random() < 0.7
+    };
+    const b = new Merger();
+    b.add(squash(cyl(0.15, 0.155, 0.18, 12), 1.15, 1, 0.78), id.pants, 0, 0.99, 0);
+    b.add(squash(cyl(0.175, 0.15, 0.4, 12), 1.2, 1, 0.75), id.shirt, 0, 1.27, 0);
+    b.add(squash(ball(0.175, 12, 8), 1.22, 0.42, 0.76), id.shirt, 0, 1.46, 0);
+    b.add(cyl(0.048, 0.055, 0.12, 8), id.skin, 0, 1.55, 0.005);
+    head(b, id, 1.67, 1);
+    if (o.belts) {
+      // Högvakten: white belt with a brass buckle and white bandoliers crossed over the chest
+      b.add(squash(cyl(0.157, 0.157, 0.05, 12), 1.17, 1, 0.8), 0xf2f2ee, 0, 1.08, 0);
+      b.box(0.05, 0.05, 0.02, 0xd4a53a, 0, 1.08, 0.128);
+      for (const s of [1, -1]) b.add(new THREE.BoxGeometry(0.045, 0.48, 0.02), 0xf2f2ee, s * 0.05, 1.29, 0.122, 0, 0, s * 0.45);
+    }
+    if (o.soldier) {
+      // M90 camouflage: splinters of dark green and black over the green, and a vest of webbing over the chest
+      for (const [x, y, z, sx, sy] of [[0.1, 1.2, 0.12, 0.09, 0.06], [-0.12, 1.33, 0.11, 0.07, 0.08], [0.15, 1.36, -0.1, 0.08, 0.05], [-0.08, 1.1, -0.12, 0.09, 0.05], [0.0, 1.0, 0.13, 0.06, 0.04], [-0.16, 1.18, -0.06, 0.06, 0.07]]) {
+        b.add(new THREE.BoxGeometry(sx * 2, sy * 2, 0.02), Math.abs(x + y) % 0.3 < 0.15 ? 0x2c3623 : 0x1c1f17, x, y, z, 0, Math.atan2(x, z), 0.5);
+      }
+      b.add(squash(cyl(0.185, 0.17, 0.3, 12), 1.2, 1, 0.8), 0x3f4a33, 0, 1.25, 0);
+      for (const sx of [1, -1]) b.box(0.07, 0.09, 0.05, 0x323b28, sx * 0.1, 1.18, 0.15);
+    }
+    if (o.police) {
+      // the police: reflective yellow-green band round the chest and a POLIS-blue collar
+      b.add(squash(cyl(0.172, 0.168, 0.06, 12), 1.21, 1, 0.76), 0xc9d82a, 0, 1.33, 0);
+      b.add(squash(cyl(0.07, 0.075, 0.05, 10), 1.3, 1, 1.1), 0x0f2350, 0, 1.51, 0);
+    }
+    id.bodyGeo = b.build();
+    const l = new Merger();
+    l.add(cyl(0.082, 0.066, 0.47, 10), id.pants, 0, -0.235, 0);
+    l.add(ball(0.066, 8, 6), id.pants, 0, -0.47, 0.005);
+    l.add(cyl(0.064, 0.05, 0.41, 10), id.pants, 0, -0.68, 0);
+    l.add(squash(ball(0.062, 10, 6), 0.95, 0.62, 1.95), 0x1c1c1c, 0, -0.9, 0.055);
+    l.box(0.11, 0.025, 0.24, 0x2c2c2c, 0, -0.925, 0.05);
+    id.legGeo = l.build();
+    const a = new Merger(), sl = id.sleeves ? id.shirt : id.skin;
+    a.add(ball(0.06, 8, 6), id.shirt, 0, -0.01, 0);
+    a.add(cyl(0.055, 0.047, 0.29, 8), id.shirt, 0, -0.15, 0);
+    a.add(cyl(0.046, 0.038, 0.26, 8), sl, 0, -0.42, 0);
+    a.add(squash(ball(0.045, 8, 6), 0.75, 1.25, 0.55), id.skin, 0, -0.6, 0);
+    id.armGeo = a.build();
+    // sitting at the wheel: upper body, head and arms out to the wheel, inside the room the seats were fitted for
+    const d = new Merger();
+    d.add(squash(cyl(0.18, 0.16, 0.42, 12), 1.15, 1, 0.75), id.shirt, 0, 0.23, 0);
+    d.add(squash(ball(0.18, 12, 8), 1.17, 0.42, 0.76), id.shirt, 0, 0.44, 0);
+    d.add(cyl(0.048, 0.055, 0.1, 8), id.skin, 0, 0.51, 0.005);
+    head(d, id, 0.64, 1.05);
+    for (const s of [1, -1]) {
+      d.add(cyl(0.05, 0.045, 0.28, 8), id.shirt, s * 0.21, 0.32, 0.08, 0.55, 0, 0);
+      d.add(cyl(0.043, 0.038, 0.27, 8), sl, s * 0.17, 0.24, 0.3, 1.35, 0, -s * 0.2);
+      d.add(ball(0.045, 8, 6), id.skin, s * 0.15, 0.27, 0.43);
+    }
+    id.driverGeo = d.build();
+    return id;
+  }
+  function makePersonModel(id) {
+    const group = new THREE.Group(), inner = new THREE.Group();
+    group.add(inner);
+    const body = new THREE.Mesh(id.bodyGeo, personMat); body.castShadow = true; inner.add(body);
+    const limb = (geo, x, y) => { const p = new THREE.Group(); p.position.set(x, y, 0); const m = new THREE.Mesh(geo, personMat); m.castShadow = true; p.add(m); inner.add(p); return p; };
+    const legL = limb(id.legGeo, 0.09, 0.93), legR = limb(id.legGeo, -0.09, 0.93);
+    const armL = limb(id.armGeo, 0.24, 1.43), armR = limb(id.armGeo, -0.24, 1.43);
+    scene.add(group);
+    return { group, inner, legL, legR, armL, armR };
+  }
+  const persons = [];
+  function makePerson(id, x, z, ai) {
+    const p = { id, model: makePersonModel(id), x, y: 0, z, vx: 0, vy: 0, vz: 0, rot: 0, grounded: true, walkPhase: Math.random() * 6, ai, asleep: false, blocked: false, knockT: 0, intent: null };
+    p.model.group.position.set(x, 0, z);
+    persons.push(p);
+    return p;
+  }
+  function removePerson(p) {
+    scene.remove(p.model.group);
+    const i = persons.indexOf(p);
+    if (i >= 0) persons.splice(i, 1);
+  }
+  const playerId = makeIdentity({ skin: 0xf0c08a, shirt: 0x2f6fdb, pants: 0x27324a, hat: 'cap', hatColor: 0xf7c600 });
+  // you start in the car park on the quay at Skeppsbron, in the aisle between the bays, looking along it towards the palace
+  const SPAWN = (() => {
+    const [x, z] = LOT.at(58, LOT.aisle);
+    return { x, z, s: 58, rot: Math.atan2(-LOT.f.ux, -LOT.f.uz) };
+  })();
+  const player = makePerson(playerId, SPAWN.x, SPAWN.z, null);
+  player.rot = SPAWN.rot;
+
+  /* ================= vehicles ================= */
+  // Each model is a real car: size, wheelbase and the body lines come from it. gears: number of forward gears;
+  // idle/red: engine speed range in rpm; eng: which engine sound it has.
+  // shape (metres, z forwards from the middle of the car, +x the driver's side):
+  //   sill/belt/roof: the bottom edge, the bonnet-waist-boot line and the roof line, as [z, y] points
+  //   cab: [rear window foot, roof rear, roof front, windscreen foot]; rc/p: how far and how squarely the ends round off
+  //   shoulder/tumble: how far the glasshouse steps in from the body side and leans in towards the roof
+  //   crown: [boot, bonnet, roof] camber; glass: where the side windows run; pillars: [z, width] of the B/C pillars
+  //   head/tail/grille/intake: lamp and opening bands; y < 0 means below the waist line, y > 0 is height above the road
+  const MODELS = [
+    { id: 'halvkombi', name: 'VW Golf', kind: 'Halvkombi', def: 'Golfen', W: 1.79, L: 4.28, R: 0.32, wb: 2.63, max: 41, zero: [100, 8.5], brake: 24, rev: 9, mass: 1.0, grip: 1.0,
+      colors: [0xc8102e, 0x1f4f8f, 0xeeeeea, 0x5b6066, 0x111316], gears: 5, idle: 850, red: 6300, eng: 'i4', rim: 'alloy',
+      shape: {
+        sill: [[-2.14, 0.44], [-1.92, 0.33], [-1.6, 0.29], [1.6, 0.29], [1.9, 0.31], [2.14, 0.4]],
+        belt: [[-2.14, 0.84], [-2.06, 0.98], [-1.85, 1.0], [-0.4, 0.97], [0.9, 0.94], [1.55, 0.86], [1.95, 0.78], [2.14, 0.66]],
+        roof: [[-1.72, 1.41], [-0.9, 1.46], [0.3, 1.45]], cab: [-2.04, -1.72, 0.3, 1.18], rc: [0.26, 0.42], p: [3, 2.6],
+        shoulder: 0.1, tumble: 0.17, crown: [0.03, 0.035, 0.03], glass: [-1.42, 1.12], pillars: [[-0.08, 0.1]], trim: 'gloss',
+        doors: [1.12, -0.12, -1.25], head: { y: [-0.15, -0.05], x: 0.32, d: 0.32 }, grille: { y: [-0.13, -0.07], x: 0.32, d: 0.2 },
+        intake: { y: [0.36, 0.5], x: 0.55, d: 0.15 }, tail: { y: [-0.14, -0.02], x: 0.45, d: 0.28, rev: [0.45, 0.53] }, plate: [0.47, 0.6]
+      } },
+    { id: 'sedan', name: 'Tesla Model 3', kind: 'Elbil', def: 'Teslan', ev: true, W: 1.85, L: 4.69, R: 0.34, wb: 2.875, max: 47, zero: [100, 6.1], brake: 26, rev: 9, mass: 1.3, grip: 1.0,
+      colors: [0xf2f2f0, 0x0e0f11, 0x4a4f55, 0x1c3f7a, 0xa3121c], gears: 1, idle: 0, red: 16000, eng: 'ev', rim: 'aero',
+      shape: {
+        sill: [[-2.345, 0.46], [-2.1, 0.33], [-1.8, 0.28], [1.8, 0.28], [2.1, 0.3], [2.345, 0.38]],
+        belt: [[-2.345, 0.86], [-2.25, 0.99], [-2.0, 1.02], [-1.0, 0.98], [0.6, 0.92], [1.45, 0.82], [2.0, 0.71], [2.345, 0.56]],
+        roof: [[-0.95, 1.36], [-0.4, 1.43], [0.15, 1.42]], cab: [-1.95, -0.95, 0.15, 1.32], rc: [0.3, 0.45], p: [2.8, 2.4],
+        shoulder: 0.11, tumble: 0.19, crown: [0.03, 0.04, 0.03], glass: [-1.62, 1.26], pillars: [[-0.3, 0.1]], trim: 'gloss',
+        roofGlass: true, roofBars: [[-0.35, 0.08]], doors: [1.24, -0.3, -1.55], handles: 'paint',
+        head: { y: [-0.09, -0.035], x: 0.5, d: 0.3 }, intake: { y: [0.36, 0.45], x: 0.42, d: 0.12 },
+        tail: { y: [-0.12, -0.03], x: 0.38, d: 0.32, rev: [0.38, 0.46] }, plate: [0.45, 0.66]
+      } },
+    { id: 'kombi', name: 'Volvo V60', kind: 'Kombi', def: 'Volvon', W: 1.85, L: 4.76, R: 0.35, wb: 2.87, max: 44, zero: [100, 7.6], brake: 24, rev: 9, mass: 1.45, grip: 1.0,
+      colors: [0x3d5a80, 0xeeeeea, 0x111316, 0x5d6266, 0x8e1b22], gears: 5, idle: 800, red: 6100, eng: 'i5', rim: 'alloy',
+      shape: {
+        sill: [[-2.38, 0.46], [-2.15, 0.33], [-1.85, 0.3], [1.8, 0.3], [2.1, 0.32], [2.38, 0.4]],
+        belt: [[-2.38, 0.92], [-2.3, 1.0], [-2.0, 1.0], [0.0, 0.97], [1.0, 0.94], [1.6, 0.87], [2.1, 0.8], [2.38, 0.68]],
+        roof: [[-2.05, 1.37], [-1.0, 1.42], [0.25, 1.43]], cab: [-2.3, -2.05, 0.25, 1.25], rc: [0.2, 0.42], p: [3.5, 2.8],
+        shoulder: 0.1, tumble: 0.16, crown: [0.03, 0.035, 0.03], glass: [-2.02, 1.2], pillars: [[0.0, 0.1], [-1.2, 0.1]], trim: 'chrome',
+        doors: [1.18, -0.02, -1.22], head: { y: [-0.14, -0.06], x: 0.4, d: 0.27 }, grille: { y: [0.52, -0.06], x: 0.36, d: 0.15 },
+        intake: { y: [0.38, 0.47], x: 0.6, d: 0.15 }, tail: { y: [-0.2, -0.02], x: 0.55, d: 0.2, up: 0.3, rev: [0.55, 0.63] },
+        rails: true, iron: true, plate: [0.45, 0.66]
+      } },
+    { id: 'taxi', name: 'Taxi', kind: 'Toyota Prius', def: 'taxin', W: 1.76, L: 4.54, R: 0.33, wb: 2.7, max: 47, zero: [100, 10.6], brake: 26, rev: 9, mass: 1.35, grip: 1.0,
+      colors: [0x111316, 0xeeeeea, 0xb9bec4, 0x2f3338], gears: 6, idle: 750, red: 5800, eng: 'i4', rim: 'aero',
+      shape: {
+        sill: [[-2.27, 0.46], [-2.05, 0.33], [-1.75, 0.29], [1.7, 0.29], [2.0, 0.31], [2.27, 0.37]],
+        belt: [[-2.27, 0.9], [-2.18, 1.0], [-1.95, 1.03], [-0.5, 0.97], [0.8, 0.9], [1.5, 0.8], [2.0, 0.68], [2.27, 0.55]],
+        roof: [[-1.5, 1.33], [-0.6, 1.46], [0.05, 1.47]], cab: [-2.15, -1.5, 0.05, 1.32], rc: [0.24, 0.45], p: [3, 2.4],
+        shoulder: 0.1, tumble: 0.18, crown: [0.03, 0.04, 0.03], glass: [-1.8, 1.26], pillars: [[-0.38, 0.1], [-1.45, 0.08]], trim: 'gloss',
+        doors: [1.22, -0.35, -1.48], head: { y: [-0.1, -0.03], x: 0.45, d: 0.42 }, intake: { y: [0.34, 0.5], x: 0.5, d: 0.14 },
+        tail: { y: [-0.12, -0.02], x: 0.3, d: 0.3, rev: [0.3, 0.38] }, plate: [0.43, 0.62], taxi: true
+      } },
+    { id: 'suv', name: 'Volvo XC90', kind: 'SUV', def: 'XC90:n', W: 2.0, L: 4.95, R: 0.4, wb: 2.98, max: 45, zero: [100, 7.8], brake: 24, rev: 9, mass: 2.0, grip: 0.95,
+      colors: [0x111316, 0xeeeeea, 0x4d5a52, 0x3d5a80, 0xb7b8b4], gears: 6, idle: 750, red: 4600, eng: 'diesel', rim: 'alloy',
+      shape: {
+        sill: [[-2.475, 0.62], [-2.25, 0.47], [-1.95, 0.43], [1.9, 0.43], [2.2, 0.47], [2.475, 0.56]],
+        belt: [[-2.475, 1.12], [-2.4, 1.2], [-2.1, 1.22], [0.0, 1.2], [1.1, 1.16], [1.7, 1.1], [2.2, 1.04], [2.475, 0.92]],
+        roof: [[-2.12, 1.7], [-1.0, 1.75], [0.35, 1.76]], cab: [-2.38, -2.12, 0.35, 1.38], rc: [0.2, 0.4], p: [3.5, 3],
+        shoulder: 0.1, tumble: 0.16, crown: [0.03, 0.04, 0.03], glass: [-2.08, 1.33], pillars: [[0.1, 0.1], [-1.25, 0.1]], trim: 'chrome',
+        doors: [1.3, 0.08, -1.25], head: { y: [-0.16, -0.06], x: 0.48, d: 0.35 }, grille: { y: [0.64, -0.07], x: 0.42, d: 0.15 },
+        intake: { y: [0.5, 0.6], x: 0.65, d: 0.15 }, tail: { y: [-0.22, -0.02], x: 0.62, d: 0.2, up: 0.4, rev: [0.62, 0.7] },
+        cladding: 0.56, rails: true, iron: true, plate: [0.68, 0.8]
+      } },
+    { id: 'skapbil', name: 'Mercedes Sprinter', kind: 'Skåpbil', def: 'Sprintern', W: 2.02, L: 5.9, R: 0.38, wb: 3.66, max: 36, zero: [100, 13.5], brake: 20, rev: 7, mass: 2.3, grip: 0.9,
+      colors: [0xf1f1ef, 0xd9dde0, 0x2b4f86], gears: 6, idle: 750, red: 4200, eng: 'diesel', rim: 'steel',
+      shape: {
+        sill: [[-2.95, 0.55], [-2.8, 0.42], [-2.4, 0.4], [2.3, 0.4], [2.7, 0.43], [2.95, 0.5]],
+        belt: [[-2.95, 1.05], [-2.9, 1.12], [1.5, 1.14], [2.2, 1.06], [2.7, 0.98], [2.95, 0.82]],
+        roof: [[-2.95, 2.4], [1.45, 2.42]], cab: [-2.95, -2.95, 1.45, 2.22], rc: [0.08, 0.4], p: [4, 2.8], bulge: 0.02,
+        shoulder: 0.05, tumble: 0.07, crown: [0.02, 0.04, 0.03], glass: [0.62, 2.18], trim: 'gloss',
+        doors: [2.18, 0.62, -0.75], head: { y: [-0.14, -0.03], x: 0.5, d: 0.35 }, grille: { y: [0.62, -0.06], x: 0.45, d: 0.12 },
+        intake: { y: [0.44, 0.56], x: 1.0, d: 0.2 }, tail: { y: [0.62, -0.04], x: 0.8, d: 0.1, up: 0.32, rev: [0.8, 0.86] },
+        rearWin: { d: 0.1, y: [1.5, 2.05], x: [0.08, 0.86] }, glassLevels: [1.5, 2.05], cladding: 0.6, plate: [0.5, 0.62]
+      } },
+    { id: 'buss', name: 'SL-buss', kind: 'Stadsbuss', def: 'bussen', W: 2.55, L: 12, R: 0.5, wb: 6.2, max: 25, zero: [50, 12], brake: 14, rev: 5, mass: 6, grip: 0.85,
+      colors: [0xc8102e, 0x1f5fae], bus: true, gears: 4, idle: 600, red: 2300, eng: 'bus', rim: 'steel',
+      shape: {
+        sill: [[-6, 0.5], [-5.85, 0.36], [5.8, 0.33], [6, 0.42]], belt: [[-6, 1.1], [-5.9, 1.16], [5.6, 1.15], [5.95, 1.0], [6, 0.92]],
+        roof: [[-6, 3.0], [6, 3.0]], cab: [-6, -6, 6, 6], rc: [0.25, 0.35], p: [3, 2.6], bulge: 0.01,
+        shoulder: 0.04, tumble: 0.06, crown: [0.03, 0.03, 0.05], glass: [-5.3, 6.01], trim: 'gloss', pillarCol: 'gloss',
+        pillars: [[-4.6, 0.12], [-3.85, 0.12], [-2.55, 0.12], [-1.25, 0.12], [0.05, 0.12], [1.55, 0.12], [2.85, 0.12], [4.15, 0.12]],
+        busDoors: [[4.5, 5.55], [0.2, 1.4], [-3.75, -2.6]], sign: { y: 2.56, d: 0.4 }, rearWin: { d: 0.3, y: [2.0, 2.85], x: [0.1, 1.2] },
+        glassLevels: [2.0, 2.56], head: { y: [0.62, 0.8], x: 0.75, d: 0.25 }, tail: { y: [0.72, -0.04], x: 0.95, d: 0.2, up: 0.6, rev: [0.95, 1.05] },
+        plate: [0.55, 0.62], roofPack: true
+      } },
+    { id: 'sport', name: 'Porsche 911', kind: 'Sportbil', def: 'Porschen', sport: true, rearEngine: true, W: 1.85, L: 4.52, R: 0.35, wb: 2.45, max: 70, zero: [100, 4.2], brake: 32, rev: 10, mass: 1.25, grip: 1.15,
+      colors: [0xf2c80f, 0xd0121b, 0xb5b8bb, 0x1f3d8f, 0xf06a14], gears: 6, idle: 950, red: 8000, eng: 'flat6', rim: 'sport',
+      shape: {
+        sill: [[-2.26, 0.42], [-2.05, 0.28], [-1.65, 0.24], [1.55, 0.24], [1.95, 0.26], [2.26, 0.32]],
+        belt: [[-2.26, 0.8], [-2.12, 0.93], [-1.6, 0.97], [-0.6, 0.93], [0.4, 0.86], [1.3, 0.79], [1.85, 0.7], [2.26, 0.5]],
+        roof: [[-0.88, 1.18], [-0.45, 1.27], [0.05, 1.28]], cab: [-1.75, -0.88, 0.05, 0.95], rc: [0.32, 0.5], p: [2.6, 2.2],
+        shoulder: 0.13, tumble: 0.24, crown: [0.04, -0.05, 0.03], glass: [-1.25, 0.9], pillars: [[-0.5, 0.08]], trim: 'gloss',
+        doors: [0.9, -0.55], intake: { y: [0.28, 0.42], x: 0.85, d: 0.12 }, tail: { y: [-0.1, -0.045], x: 0, d: 0.36, rev: [0.22, 0.3] },
+        louvre: { z: [-2.0, -1.82], x: 0.42 }, diffuser: 0.4, lamps: [{ type: 'round', x: 0.6, z: 1.93, r: 0.115, tilt: 0.8 }], plate: [0.42, 0.55]
+      } },
+    { id: 'superbil', name: 'Lamborghini Huracán', kind: 'Superbil', def: 'Lamborghinin', sport: true, group: 'super', rearEngine: true, W: 1.93, L: 4.52, R: 0.35, wb: 2.62, max: 86, zero: [100, 3.2], brake: 36, rev: 10, mass: 1.3, grip: 1.25,
+      colors: [0x7bd23a, 0xe8e8e8, 0xf06a14, 0xf2c80f, 0x6b2bd2], gears: 7, idle: 1050, red: 8800, eng: 'v10', rim: 'black',
+      shape: {
+        sill: [[-2.26, 0.4], [-2.05, 0.25], [-1.7, 0.2], [1.7, 0.2], [2.0, 0.21], [2.26, 0.25]],
+        belt: [[-2.26, 0.86], [-2.05, 0.95], [-1.0, 0.95], [-0.25, 0.86], [0.6, 0.75], [1.4, 0.63], [2.0, 0.5], [2.26, 0.34]],
+        roof: [[-0.55, 1.1], [-0.3, 1.155], [-0.12, 1.16]], cab: [-1.6, -0.55, -0.12, 1.05], rc: [0.25, 0.5], p: [3, 2.2],
+        shoulder: 0.12, tumble: 0.26, crown: [0.02, -0.01, 0.02], glass: [-0.5, 1.0], trim: 'gloss', rearCol: 'under',
+        doors: [1.0, -0.45], head: { y: [-0.075, -0.025], x: 0.42, d: 0.38 }, intake: { y: [0.24, 0.4], x: 0.95, d: 0.2 },
+        sideIntake: { z: [-1.05, -0.5], y: [0.46, 0.78] }, tail: { y: [-0.12, -0.05], x: 0.3, d: 0.25, rev: [0.3, 0.38] },
+        diffuser: 0.5, wing: true, plate: [0.33, 0.55]
+      } },
+    { id: 'muskel', name: 'Ford Mustang', kind: 'Muskelbil', def: 'Mustangen', sport: true, W: 1.92, L: 4.79, R: 0.36, wb: 2.72, max: 66, zero: [100, 4.6], brake: 28, rev: 9, mass: 1.55, grip: 1.0,
+      colors: [0x1b3f8f, 0x111316, 0xa31919, 0xeeeeea, 0xf2c80f], gears: 6, idle: 700, red: 6600, eng: 'v8', rim: 'black',
+      shape: {
+        sill: [[-2.395, 0.46], [-2.15, 0.31], [-1.8, 0.28], [1.8, 0.28], [2.1, 0.31], [2.395, 0.37]],
+        belt: [[-2.395, 0.92], [-2.3, 0.99], [-1.7, 1.01], [-0.5, 0.98], [0.8, 0.95], [1.7, 0.91], [2.2, 0.85], [2.395, 0.74]],
+        roof: [[-0.78, 1.26], [-0.4, 1.35], [-0.05, 1.36]], cab: [-1.9, -0.78, -0.05, 0.88], rc: [0.22, 0.32], p: [3.5, 3.2],
+        shoulder: 0.12, tumble: 0.22, crown: [0.03, 0.05, 0.03], glass: [-1.1, 0.82], pillars: [[-0.62, 0.07]], trim: 'gloss',
+        doors: [0.82, -0.62], head: { y: [-0.12, -0.05], x: 0.5, d: 0.3 }, grille: { y: [0.48, -0.07], x: 0.52, d: 0.2 },
+        intake: { y: [0.33, 0.43], x: 0.62, d: 0.15 }, tail: { y: [-0.17, -0.02], x: 0.36, d: 0.12, col: 'gloss' },
+        lamps: [{ type: 'bars', xs: [0.48, 0.6, 0.72], w: 0.075, y: [-0.15, -0.04] }], stripes: [0.1, 0.25], plate: [0.42, 0.6]
+      } },
+    // the Swedish classics: the boxy Volvo 240 estate (1974–93) and the Saab 900 Turbo with its wrap-round windscreen
+    { id: 'v240', name: 'Volvo 240', kind: 'Klassisk kombi', def: 'Volvo 240:n', W: 1.71, L: 4.79, R: 0.31, wb: 2.64, max: 47, zero: [100, 13.5], brake: 21, rev: 8, mass: 1.35, grip: 0.92,
+      colors: [0x7a1f22, 0x2f4a6b, 0xd9d4c6, 0x1d1f22, 0x5f6a4e], gears: 4, idle: 800, red: 5800, eng: 'i4', rim: 'alloy', classic: true,
+      shape: {
+        sill: [[-2.395, 0.48], [-2.25, 0.34], [-1.95, 0.31], [1.95, 0.31], [2.25, 0.33], [2.395, 0.44]],
+        belt: [[-2.395, 0.95], [-2.33, 1.0], [-2.0, 1.01], [0.0, 1.0], [0.95, 0.97], [1.6, 0.93], [2.2, 0.9], [2.395, 0.84]],
+        roof: [[-2.3, 1.44], [-1.0, 1.46], [0.3, 1.46]], cab: [-2.36, -2.3, 0.3, 0.95], rc: [0.12, 0.16], p: [6, 6], bulge: 0.03,
+        shoulder: 0.07, tumble: 0.1, crown: [0.015, 0.02, 0.02], glass: [-2.26, 0.9], pillars: [[-0.28, 0.1], [-1.4, 0.13]], trim: 'chrome',
+        doors: [0.9, -0.3, -1.42], head: { y: [-0.17, -0.05], x: 0.42, d: 0.2 }, grille: { y: [0.6, -0.05], x: 0.4, d: 0.12 },
+        intake: { y: [0.33, 0.45], x: 0.8, d: 0.1 }, tail: { y: [-0.42, -0.03], x: 0.6, d: 0.12, up: 0.4, rev: [0.6, 0.625] },
+        cladding: 0.44, rails: true, iron: true, plate: [0.45, 0.62]
+      } },
+    { id: 'saab', name: 'Saab 900 Turbo', kind: 'Klassisk halvkombi', def: 'Saaben', W: 1.69, L: 4.74, R: 0.31, wb: 2.52, max: 55, zero: [100, 8.5], brake: 23, rev: 9, mass: 1.25, grip: 1.0,
+      colors: [0x9b1b1b, 0x141517, 0xa8adb2, 0xe9e6dc, 0x274a3a], gears: 5, idle: 850, red: 6000, eng: 'i4t', rim: 'aero', classic: true,
+      shape: {
+        sill: [[-2.37, 0.45], [-2.15, 0.33], [-1.85, 0.29], [1.8, 0.29], [2.1, 0.31], [2.37, 0.38]],
+        belt: [[-2.37, 0.86], [-2.25, 0.95], [-1.9, 0.98], [-0.5, 0.95], [0.6, 0.9], [1.4, 0.82], [2.0, 0.72], [2.37, 0.58]],
+        roof: [[-1.25, 1.33], [-0.6, 1.4], [0.2, 1.4]], cab: [-2.2, -1.25, 0.2, 1.05], rc: [0.3, 0.4], p: [2.8, 2.4],
+        shoulder: 0.1, tumble: 0.2, crown: [0.03, 0.04, 0.035], glass: [-1.75, 0.98], pillars: [[-0.32, 0.1], [-1.3, 0.12]], trim: 'gloss',
+        doors: [1.0, -0.35, -1.45], head: { y: [-0.13, -0.05], x: 0.36, d: 0.3 }, grille: { y: [-0.13, -0.06], x: 0.3, d: 0.2 },
+        intake: { y: [0.33, 0.45], x: 0.6, d: 0.15 }, tail: { y: [-0.16, -0.03], x: 0.4, d: 0.25, rev: [0.4, 0.48] }, plate: [0.42, 0.6]
+      } },
+    // Polestar 2, the electric fastback from Göteborg, with its light bar across the tail
+    { id: 'polestar', name: 'Polestar 2', kind: 'Elbil', def: 'Polestaren', ev: true, W: 1.86, L: 4.61, R: 0.35, wb: 2.735, max: 57, zero: [100, 4.7], brake: 28, rev: 9, mass: 1.6, grip: 1.05,
+      colors: [0xe9ecec, 0x5a5f63, 0x101113, 0x1c2a44, 0xb4b6b3], gears: 1, idle: 0, red: 16000, eng: 'ev', rim: 'aero',
+      shape: {
+        sill: [[-2.305, 0.5], [-2.05, 0.37], [-1.75, 0.33], [1.7, 0.33], [2.0, 0.35], [2.305, 0.44]],
+        belt: [[-2.305, 0.95], [-2.2, 1.04], [-1.9, 1.06], [-0.6, 1.02], [0.8, 0.97], [1.5, 0.9], [2.0, 0.82], [2.305, 0.68]],
+        roof: [[-1.2, 1.42], [-0.5, 1.48], [0.15, 1.48]], cab: [-2.05, -1.2, 0.15, 1.3], rc: [0.25, 0.45], p: [3, 2.6],
+        shoulder: 0.1, tumble: 0.18, crown: [0.03, 0.04, 0.03], glass: [-1.7, 1.24], pillars: [[-0.3, 0.1]], trim: 'gloss',
+        roofGlass: true, roofBars: [[-0.3, 0.08]], doors: [1.22, -0.3, -1.5], handles: 'paint',
+        head: { y: [-0.09, -0.04], x: 0.5, d: 0.3 }, intake: { y: [0.36, 0.48], x: 0.45, d: 0.12 },
+        tail: { y: [-0.1, -0.04], x: 0, d: 0.32, rev: [0.26, 0.33] }, cladding: 0.47, plate: [0.47, 0.68]
+      } },
+    // Koenigsegg Jesko, the hypercar from Ängelholm: the fastest car in town by far
+    { id: 'jesko', name: 'Koenigsegg Jesko', kind: 'Hyperbil', def: 'Koenigseggen', sport: true, group: 'super', rearEngine: true, W: 2.03, L: 4.61, R: 0.36, wb: 2.7, max: 105, zero: [100, 2.5], brake: 40, rev: 10, mass: 1.4, grip: 1.32,
+      colors: [0xf2f2f0, 0xff6a13, 0x1d4fd8, 0x111316, 0x8a1b1b], gears: 9, idle: 1000, red: 8500, eng: 'v8', rim: 'black',
+      shape: {
+        sill: [[-2.305, 0.38], [-2.1, 0.24], [-1.75, 0.19], [1.75, 0.19], [2.05, 0.2], [2.305, 0.24]],
+        belt: [[-2.305, 0.85], [-2.1, 0.95], [-1.1, 0.96], [-0.3, 0.88], [0.6, 0.76], [1.4, 0.64], [2.0, 0.5], [2.305, 0.34]],
+        roof: [[-0.6, 1.14], [-0.3, 1.21], [-0.05, 1.21]], cab: [-1.65, -0.6, -0.05, 1.05], rc: [0.25, 0.55], p: [3, 2.1],
+        shoulder: 0.14, tumble: 0.28, crown: [0.02, -0.01, 0.02], glass: [-0.55, 1.0], trim: 'gloss', rearCol: 'under',
+        doors: [1.0, -0.5], head: { y: [-0.07, -0.02], x: 0.45, d: 0.4 }, intake: { y: [0.22, 0.4], x: 1.0, d: 0.2 },
+        sideIntake: { z: [-1.2, -0.55], y: [0.42, 0.78] }, tail: { y: [-0.1, -0.04], x: 0.25, d: 0.25, rev: [0.25, 0.32] },
+        diffuser: 0.55, wing: true, plate: [0.32, 0.55]
+      } },
+    // more cars from the streets of Stockholm, each to the real one's size, wheelbase, wheels, colours and lines.
+    // BMW X5 (G05, 2023): the big kidney grille with chrome surrounds, slim lamps above it, the kink in the last window
+    { id: 'x5', name: 'BMW X5', kind: 'SUV', def: 'BMW:n', W: 2.0, L: 4.92, R: 0.378, wb: 2.975, max: 52, zero: [100, 5.5], brake: 28, rev: 9, mass: 2.2, grip: 0.98,
+      colors: [0xe8e8e4, 0x0e1013, 0x2d4a6e, 0x8d9196, 0x1a2230, 0x4c5a48], gears: 8, idle: 650, red: 6500, eng: 'i6', rim: 'alloy',
+      shape: {
+        sill: [[-2.46, 0.6], [-2.25, 0.47], [-1.95, 0.42], [1.9, 0.42], [2.2, 0.47], [2.46, 0.56]],
+        belt: [[-2.46, 1.06], [-2.39, 1.17], [-2.1, 1.22], [-1.2, 1.22], [0.0, 1.2], [1.1, 1.18], [1.7, 1.14], [2.2, 1.08], [2.46, 0.99]],
+        roof: [[-2.15, 1.67], [-1.0, 1.705], [0.35, 1.705]], cab: [-2.38, -2.15, 0.35, 1.36], rc: [0.22, 0.4], p: [3.4, 3],
+        shoulder: 0.1, tumble: 0.17, crown: [0.03, 0.045, 0.04], glass: [-2.1, 1.31], pillars: [[0.05, 0.1], [-1.28, 0.12]], trim: 'chrome',
+        doors: [1.31, 0.05, -1.26], handles: 'paint', head: { y: [-0.13, -0.05], x: 0.5, d: 0.3 }, kidney: { x0: 0.035, x1: 0.34, y0: 0.62, y1: 0.95 },
+        intake: { y: [0.4, 0.52], x: 0.72, d: 0.15 }, tail: { y: [-0.19, -0.06], x: 0.42, d: 0.22, rev: [0.42, 0.5] }, rails: true, plate: [0.47, 0.92]
+      } },
+    // MG5 Electric (2021): the electric estate from MG, a closed nose with the octagon badge over a honeycomb mouth
+    { id: 'mg5', name: 'MG5 Electric', kind: 'Elkombi', def: 'MG:n', ev: true, W: 1.82, L: 4.6, R: 0.323, wb: 2.665, max: 50, zero: [100, 7.7], brake: 25, rev: 9, mass: 1.55, grip: 0.98,
+      colors: [0xf0f0ec, 0x1f4f9e, 0x15161a, 0xb3121b, 0xb7babd], gears: 1, idle: 0, red: 16000, eng: 'ev', rim: 'alloy',
+      shape: {
+        sill: [[-2.3, 0.48], [-2.07, 0.35], [-1.77, 0.31], [1.72, 0.31], [2.02, 0.33], [2.3, 0.42]],
+        belt: [[-2.3, 0.94], [-2.22, 1.0], [-1.92, 1.02], [0.0, 0.99], [0.9, 0.96], [1.5, 0.89], [2.02, 0.81], [2.3, 0.69]],
+        roof: [[-2.02, 1.47], [-1.0, 1.5], [0.25, 1.5]], cab: [-2.22, -2.02, 0.25, 1.22], rc: [0.22, 0.44], p: [3.2, 2.6],
+        shoulder: 0.1, tumble: 0.16, crown: [0.03, 0.035, 0.03], glass: [-1.97, 1.17], pillars: [[-0.05, 0.1], [-1.25, 0.1]], trim: 'chrome',
+        doors: [1.17, -0.05, -1.22], head: { y: [-0.14, -0.06], x: 0.44, d: 0.3 }, grille: { y: [0.42, 0.56], x: 0.36, d: 0.15 },
+        intake: { y: [0.34, 0.42], x: 0.6, d: 0.14 }, tail: { y: [-0.17, -0.04], x: 0.46, d: 0.22, up: 0.18, rev: [0.46, 0.53] },
+        rails: true, badge: { kind: 'mg', y: 0.62 }, plate: [0.48, 0.7]
+      } },
+    // Tesla Model Y: the Model 3's taller crossover sister with a glass roof, Sweden's best-selling car
+    { id: 'modely', name: 'Tesla Model Y', kind: 'Elbil', def: 'Model Y:n', ev: true, W: 1.92, L: 4.75, R: 0.356, wb: 2.89, max: 54, zero: [100, 5.0], brake: 27, rev: 9, mass: 1.95, grip: 1.0,
+      colors: [0xf2f2f0, 0x0e0f11, 0x4a4f55, 0x1c3f7a, 0xa3121c], gears: 1, idle: 0, red: 16000, eng: 'ev', rim: 'aero',
+      shape: {
+        sill: [[-2.375, 0.5], [-2.12, 0.38], [-1.82, 0.34], [1.82, 0.34], [2.12, 0.37], [2.375, 0.45]],
+        belt: [[-2.375, 0.94], [-2.28, 1.06], [-2.0, 1.1], [-1.0, 1.07], [0.6, 1.01], [1.45, 0.91], [2.0, 0.79], [2.375, 0.64]],
+        roof: [[-1.25, 1.53], [-0.5, 1.595], [0.15, 1.595]], cab: [-2.12, -1.25, 0.15, 1.36], rc: [0.3, 0.46], p: [2.8, 2.4],
+        shoulder: 0.11, tumble: 0.19, crown: [0.03, 0.04, 0.03], glass: [-1.75, 1.3], pillars: [[-0.28, 0.1], [-1.44, 0.07]], trim: 'gloss',
+        roofGlass: true, roofBars: [[-0.3, 0.08]], doors: [1.3, -0.28, -1.6], handles: 'paint',
+        head: { y: [-0.1, -0.04], x: 0.52, d: 0.32 }, intake: { y: [0.38, 0.47], x: 0.42, d: 0.12 },
+        tail: { y: [-0.12, -0.03], x: 0.36, d: 0.34, rev: [0.36, 0.44] }, plate: [0.47, 0.66]
+      } },
+    // Volvo XC60 (2017): Thor's hammer in the lamps, the iron mark in the grille, tail lamps up the pillars
+    { id: 'xc60', name: 'Volvo XC60', kind: 'SUV', def: 'XC60:n', W: 1.9, L: 4.69, R: 0.37, wb: 2.865, max: 50, zero: [100, 7.1], brake: 26, rev: 9, mass: 1.9, grip: 0.97,
+      colors: [0xeeeeea, 0x111316, 0x3d5a80, 0x5d6266, 0xb5b8b6], gears: 8, idle: 750, red: 6200, eng: 'i4t', rim: 'alloy',
+      shape: {
+        sill: [[-2.345, 0.6], [-2.13, 0.46], [-1.85, 0.42], [1.8, 0.42], [2.1, 0.46], [2.345, 0.54]],
+        belt: [[-2.345, 1.06], [-2.28, 1.14], [-2.0, 1.16], [0.0, 1.13], [1.0, 1.1], [1.6, 1.04], [2.1, 0.97], [2.345, 0.86]],
+        roof: [[-2.0, 1.6], [-0.95, 1.63], [0.3, 1.635]], cab: [-2.25, -2.0, 0.3, 1.3], rc: [0.2, 0.4], p: [3.4, 3],
+        shoulder: 0.1, tumble: 0.16, crown: [0.03, 0.04, 0.03], glass: [-1.95, 1.25], pillars: [[0.05, 0.1], [-1.2, 0.1]], trim: 'chrome',
+        doors: [1.25, 0.05, -1.2], head: { y: [-0.15, -0.06], x: 0.46, d: 0.33 }, grille: { y: [0.6, -0.07], x: 0.4, d: 0.15 },
+        intake: { y: [0.46, 0.56], x: 0.62, d: 0.15 }, tail: { y: [-0.22, -0.02], x: 0.6, d: 0.2, up: 0.38, rev: [0.6, 0.68] },
+        cladding: 0.52, rails: true, iron: true, plate: [0.62, 0.8]
+      } },
+    // Volvo XC40 Recharge: the small electric Volvo, its grille closed in the body colour, the roof black
+    { id: 'xc40', name: 'Volvo XC40 Recharge', kind: 'Elbil', def: 'XC40:n', ev: true, W: 1.86, L: 4.43, R: 0.36, wb: 2.702, max: 50, zero: [100, 4.9], brake: 27, rev: 9, mass: 2.0, grip: 1.0,
+      colors: [0xa31919, 0x4d5a52, 0xeeeeea, 0x8ea3b0, 0x5d6266], gears: 1, idle: 0, red: 16000, eng: 'ev', rim: 'alloy',
+      shape: {
+        sill: [[-2.215, 0.6], [-2.0, 0.46], [-1.75, 0.42], [1.7, 0.42], [1.98, 0.46], [2.215, 0.54]],
+        belt: [[-2.215, 1.08], [-2.15, 1.16], [-1.95, 1.2], [-1.42, 1.2], [-1.2, 1.13], [0.0, 1.11], [0.9, 1.08], [1.5, 1.02], [1.95, 0.96], [2.215, 0.86]],
+        roof: [[-1.95, 1.6], [-0.9, 1.62], [0.25, 1.62]], cab: [-2.12, -1.95, 0.25, 1.22], rc: [0.18, 0.4], p: [3.6, 3],
+        shoulder: 0.1, tumble: 0.16, crown: [0.03, 0.04, 0.03], glass: [-1.9, 1.17], pillars: [[0.0, 0.1], [-1.22, 0.14]], trim: 'gloss',
+        roofTone: 0x111316, doors: [1.17, 0.0, -1.2], head: { y: [-0.15, -0.06], x: 0.44, d: 0.3 }, grille: { y: [0.62, -0.07], x: 0.38, d: 0.15, tone: 'body' },
+        intake: { y: [0.44, 0.54], x: 0.6, d: 0.15 }, tail: { y: [-0.24, -0.02], x: 0.55, d: 0.2, up: 0.4, rev: [0.55, 0.63] },
+        cladding: 0.55, rails: true, iron: true, plate: [0.6, 0.78]
+      } },
+    // Volkswagen ID.4: the electric family car, a light strip right across the nose and the tail
+    { id: 'id4', name: 'Volkswagen ID.4', kind: 'Elbil', def: 'ID.4:an', ev: true, W: 1.85, L: 4.58, R: 0.365, wb: 2.766, max: 44, zero: [100, 8.5], brake: 25, rev: 9, mass: 2.1, grip: 0.96,
+      colors: [0xeeeeea, 0x9e1a1e, 0x7d8186, 0x2a3f66, 0x111316], gears: 1, idle: 0, red: 16000, eng: 'ev', rim: 'aero',
+      shape: {
+        sill: [[-2.29, 0.56], [-2.08, 0.43], [-1.8, 0.39], [1.78, 0.39], [2.06, 0.42], [2.29, 0.52]],
+        belt: [[-2.29, 1.0], [-2.2, 1.08], [-1.95, 1.11], [-0.8, 1.08], [0.6, 1.04], [1.4, 0.96], [1.95, 0.86], [2.29, 0.72]],
+        roof: [[-1.85, 1.57], [-0.8, 1.6], [0.2, 1.6]], cab: [-2.12, -1.85, 0.2, 1.3], rc: [0.24, 0.46], p: [3, 2.6],
+        shoulder: 0.1, tumble: 0.17, crown: [0.03, 0.04, 0.03], glass: [-1.82, 1.25], pillars: [[-0.15, 0.1], [-1.3, 0.16]], trim: 'gloss',
+        doors: [1.25, -0.15, -1.38], handles: 'paint', head: { y: [-0.12, -0.06], x: 0.0, d: 0.3 }, badge: { kind: 'vw', y: 0.76 },
+        intake: { y: [0.37, 0.5], x: 0.55, d: 0.15 }, tail: { y: [-0.13, -0.05], x: 0.0, d: 0.3, rev: [0.3, 0.36] },
+        cladding: 0.5, rails: true, plate: [0.5, 0.7]
+      } },
+    // Toyota RAV4 hybrid (2019): square arches in black plastic and a big trapezoid grille
+    { id: 'rav4', name: 'Toyota RAV4', kind: 'SUV', def: 'RAV4:an', W: 1.86, L: 4.6, R: 0.363, wb: 2.69, max: 50, zero: [100, 8.1], brake: 25, rev: 9, mass: 1.7, grip: 0.96,
+      colors: [0xf2f2ef, 0x111316, 0xb9bcbf, 0x6b6b55, 0xb8201c, 0x2a3e5e], gears: 6, idle: 900, red: 5800, eng: 'i4', rim: 'alloy',
+      shape: {
+        sill: [[-2.3, 0.62], [-2.08, 0.47], [-1.8, 0.43], [1.75, 0.43], [2.05, 0.47], [2.3, 0.58]],
+        belt: [[-2.3, 1.08], [-2.22, 1.16], [-1.95, 1.18], [0.0, 1.14], [0.95, 1.1], [1.5, 1.05], [2.0, 0.98], [2.3, 0.88]],
+        roof: [[-2.0, 1.63], [-0.9, 1.655], [0.25, 1.655]], cab: [-2.2, -2.0, 0.25, 1.22], rc: [0.2, 0.36], p: [3.6, 3.2],
+        shoulder: 0.1, tumble: 0.15, crown: [0.03, 0.04, 0.03], glass: [-1.95, 1.17], pillars: [[0.0, 0.1], [-1.25, 0.12]], trim: 'gloss',
+        doors: [1.17, 0.0, -1.22], head: { y: [-0.15, -0.05], x: 0.5, d: 0.3 }, grille: { y: [0.6, -0.08], x: 0.46, d: 0.15 },
+        intake: { y: [0.42, 0.56], x: 0.75, d: 0.15 }, tail: { y: [-0.2, -0.04], x: 0.5, d: 0.22, rev: [0.5, 0.58] },
+        cladding: 0.62, rails: true, badge: { kind: 'disc', y: 0.82 }, plate: [0.56, 0.8]
+      } },
+    // Volkswagen Passat Sportscombi (B8): the estate half the company cars in Sweden are
+    { id: 'passat', name: 'VW Passat Sportscombi', kind: 'Kombi', def: 'Passaten', W: 1.83, L: 4.77, R: 0.334, wb: 2.791, max: 52, zero: [100, 8.9], brake: 25, rev: 9, mass: 1.55, grip: 0.99,
+      colors: [0xeeeeea, 0x111316, 0xb9bcbf, 0x2a3e5e, 0x5a5e63], gears: 7, idle: 800, red: 4800, eng: 'diesel', rim: 'alloy',
+      shape: {
+        sill: [[-2.385, 0.47], [-2.15, 0.34], [-1.85, 0.3], [1.8, 0.3], [2.1, 0.32], [2.385, 0.41]],
+        belt: [[-2.385, 0.9], [-2.3, 0.98], [-2.0, 0.99], [0.0, 0.96], [1.0, 0.93], [1.6, 0.86], [2.1, 0.77], [2.385, 0.66]],
+        roof: [[-2.05, 1.42], [-1.0, 1.45], [0.25, 1.45]], cab: [-2.3, -2.05, 0.25, 1.22], rc: [0.2, 0.42], p: [3.5, 2.8],
+        shoulder: 0.1, tumble: 0.16, crown: [0.03, 0.035, 0.03], glass: [-2.0, 1.17], pillars: [[0.0, 0.1], [-1.2, 0.1]], trim: 'chrome',
+        doors: [1.17, 0.0, -1.22], head: { y: [-0.12, -0.05], x: 0.44, d: 0.27 }, grille: { y: [0.54, -0.05], x: 0.44, d: 0.15 }, badge: { kind: 'vw', y: 0.62 },
+        intake: { y: [0.34, 0.44], x: 0.6, d: 0.15 }, tail: { y: [-0.18, -0.04], x: 0.5, d: 0.22, rev: [0.5, 0.58] }, rails: true, plate: [0.45, 0.66]
+      } },
+    // Hyundai Ioniq 5: square lamps made of pixels front and back, a very long wheelbase, a sharp crease down the doors
+    { id: 'ioniq5', name: 'Hyundai Ioniq 5', kind: 'Elbil', def: 'Ioniqen', ev: true, W: 1.89, L: 4.635, R: 0.369, wb: 3.0, max: 51, zero: [100, 7.4], brake: 26, rev: 9, mass: 2.0, grip: 0.98,
+      colors: [0xb5a684, 0x2f5d63, 0x7e9fc0, 0xeeeeea, 0x111316, 0x5c6066], gears: 1, idle: 0, red: 16000, eng: 'ev', rim: 'aero',
+      shape: {
+        sill: [[-2.3175, 0.52], [-2.15, 0.4], [-1.85, 0.36], [1.85, 0.36], [2.15, 0.39], [2.3175, 0.47]],
+        belt: [[-2.3175, 1.0], [-2.28, 1.07], [-2.05, 1.08], [-0.5, 1.05], [0.8, 1.02], [1.6, 0.95], [2.1, 0.86], [2.3175, 0.74]],
+        roof: [[-2.1, 1.55], [-1.0, 1.58], [0.3, 1.58]], cab: [-2.28, -2.1, 0.3, 1.45], rc: [0.12, 0.3], p: [5, 3.6],
+        shoulder: 0.1, tumble: 0.15, crown: [0.025, 0.035, 0.025], glass: [-2.05, 1.4], pillars: [[-0.1, 0.1], [-1.55, 0.18]], trim: 'gloss',
+        doors: [1.4, -0.1, -1.6], handles: 'paint', head: { y: [-0.14, -0.04], x: 0.5, d: 0.25 }, intake: { y: [0.36, 0.47], x: 0.6, d: 0.14 },
+        tail: { y: [-0.16, -0.04], x: 0.0, d: 0.3, col: 'gloss' }, cladding: 0.47,
+        lamps: [{ type: 'pixel', front: { x: [0.56, 0.82], y: [0.68, 0.76] }, rear: { x: [0.5, 0.86], y: [0.88, 0.96] } }], plate: [0.5, 0.7]
+      } },
+    // Fiat 500 (2007): round as a pebble, round headlamps, a chrome moustache under the bonnet
+    { id: 'fiat500', name: 'Fiat 500', kind: 'Småbil', def: 'Fiaten', W: 1.63, L: 3.57, R: 0.292, wb: 2.3, max: 44, zero: [100, 12.9], brake: 23, rev: 8, mass: 0.9, grip: 0.95,
+      colors: [0xf0ece0, 0xc0181e, 0x6fa8c8, 0x15161a, 0xa8d5b5], gears: 5, idle: 850, red: 6400, eng: 'i4', rim: 'alloy',
+      shape: {
+        sill: [[-1.785, 0.42], [-1.6, 0.32], [-1.35, 0.29], [1.35, 0.29], [1.6, 0.31], [1.785, 0.4]],
+        belt: [[-1.785, 0.86], [-1.72, 0.95], [-1.5, 0.98], [-0.5, 0.97], [0.5, 0.94], [1.1, 0.86], [1.5, 0.77], [1.785, 0.63]],
+        roof: [[-1.4, 1.43], [-0.7, 1.46], [0.25, 1.46]], cab: [-1.72, -1.4, 0.25, 1.04], rc: [0.36, 0.55], p: [2.4, 2.2], bulge: 0.08,
+        shoulder: 0.1, tumble: 0.18, crown: [0.03, 0.04, 0.03], glass: [-1.33, 0.99], pillars: [[-0.42, 0.08]], trim: 'chrome',
+        doors: [0.99, -0.42], head: { y: [-0.09, -0.04], x: 0.5, d: 0.25 }, intake: { y: [0.36, 0.46], x: 0.45, d: 0.12 },
+        lamps: [{ type: 'face', x: 0.56, y: 0.64, r: 0.1, ring: 'paint' }], badge: { kind: 'bar', y: 0.72, w: 0.46 },
+        tail: { y: [-0.2, -0.04], x: 0.5, d: 0.2, rev: [0.5, 0.56] }, plate: [0.44, 0.7]
+      } },
+    // Mini Cooper S (F56): round lamps, a hexagonal grille, black pillars under a roof in a contrasting colour
+    { id: 'mini', name: 'Mini Cooper S', kind: 'Småbil', def: 'Minin', W: 1.73, L: 3.85, R: 0.308, wb: 2.495, max: 56, zero: [100, 6.8], brake: 27, rev: 9, mass: 1.0, grip: 1.06,
+      colors: [0xb5121b, 0x1f3d2c, 0xe8e6dc, 0x15171a, 0x2a5fb0], gears: 7, idle: 800, red: 6500, eng: 'i4t', rim: 'alloy',
+      shape: {
+        sill: [[-1.925, 0.42], [-1.72, 0.31], [-1.45, 0.27], [1.45, 0.27], [1.7, 0.3], [1.925, 0.38]],
+        belt: [[-1.925, 0.86], [-1.85, 0.96], [-1.6, 0.99], [-0.5, 0.98], [0.6, 0.96], [1.2, 0.9], [1.6, 0.8], [1.925, 0.66]],
+        roof: [[-1.76, 1.37], [-0.8, 1.39], [0.35, 1.39]], cab: [-1.84, -1.76, 0.35, 1.0], rc: [0.2, 0.42], p: [3.4, 2.6],
+        shoulder: 0.09, tumble: 0.12, crown: [0.02, 0.04, 0.02], glass: [-1.72, 0.95], pillars: [[-0.38, 0.1], [-1.42, 0.16]], trim: 'gloss',
+        roofTone: 'contrast', doors: [0.95, -0.38], grille: { y: [0.42, -0.08], x: 0.38, d: 0.14 },
+        lamps: [{ type: 'face', x: 0.56, y: 0.73, r: 0.125, ring: 'gloss', ind: true }], badge: { kind: 'disc', y: 0.62 },
+        intake: { y: [0.3, 0.4], x: 0.6, d: 0.12 }, tail: { y: [-0.2, -0.05], x: 0.45, d: 0.2, rev: [0.45, 0.5] }, plate: [0.36, 0.66]
+      } },
+    // Volvo V70 (2000–2007): the estate of the 2000s, its tail lamps all the way up the back
+    { id: 'v70', name: 'Volvo V70', kind: 'Kombi', def: 'V70:n', W: 1.8, L: 4.71, R: 0.316, wb: 2.755, max: 54, zero: [100, 7.8], brake: 24, rev: 9, mass: 1.5, grip: 0.97,
+      colors: [0xb3b6b8, 0x111316, 0x2a3d58, 0x7a1f22, 0x5a6146], gears: 5, idle: 800, red: 6200, eng: 'i5', rim: 'alloy', classic: true,
+      shape: {
+        sill: [[-2.355, 0.46], [-2.15, 0.34], [-1.85, 0.3], [1.8, 0.3], [2.1, 0.32], [2.355, 0.4]],
+        belt: [[-2.355, 0.93], [-2.29, 1.0], [-2.0, 1.01], [0.0, 0.98], [1.0, 0.95], [1.6, 0.89], [2.1, 0.82], [2.355, 0.7]],
+        roof: [[-2.1, 1.43], [-1.0, 1.46], [0.25, 1.46]], cab: [-2.3, -2.1, 0.25, 1.2], rc: [0.18, 0.38], p: [3.8, 3],
+        shoulder: 0.09, tumble: 0.14, crown: [0.025, 0.03, 0.03], glass: [-2.05, 1.15], pillars: [[0.0, 0.1], [-1.22, 0.12]], trim: 'chrome',
+        doors: [1.15, 0.0, -1.24], head: { y: [-0.16, -0.06], x: 0.45, d: 0.26 }, grille: { y: [0.56, -0.06], x: 0.36, d: 0.15 },
+        intake: { y: [0.36, 0.46], x: 0.6, d: 0.15 }, tail: { y: [-0.3, -0.02], x: 0.55, d: 0.2, up: 0.42, rev: [0.55, 0.62] },
+        cladding: 0.42, rails: true, iron: true, plate: [0.45, 0.66]
+      } },
+    // Saab 9-5 SportCombi (2006): the estate from Trollhättan, the three-hole nose
+    { id: 'saab95', name: 'Saab 9-5 SportCombi', kind: 'Kombi', def: 'Saab 9-5:an', W: 1.79, L: 4.84, R: 0.321, wb: 2.703, max: 55, zero: [100, 8.9], brake: 24, rev: 9, mass: 1.55, grip: 0.98,
+      colors: [0x5c6166, 0xb3b6b8, 0x111316, 0xa01a1a, 0x1e2c4c], gears: 5, idle: 850, red: 6200, eng: 'i4t', rim: 'alloy', classic: true,
+      shape: {
+        sill: [[-2.42, 0.46], [-2.2, 0.34], [-1.85, 0.3], [1.8, 0.3], [2.1, 0.32], [2.42, 0.4]],
+        belt: [[-2.42, 0.92], [-2.35, 1.0], [-2.05, 1.01], [0.0, 0.97], [1.0, 0.94], [1.65, 0.87], [2.15, 0.79], [2.42, 0.66]],
+        roof: [[-2.15, 1.43], [-1.0, 1.46], [0.2, 1.46]], cab: [-2.35, -2.15, 0.2, 1.18], rc: [0.22, 0.42], p: [3.4, 2.7],
+        shoulder: 0.1, tumble: 0.16, crown: [0.03, 0.035, 0.03], glass: [-2.1, 1.12], pillars: [[-0.02, 0.1], [-1.25, 0.12]], trim: 'chrome',
+        doors: [1.12, -0.02, -1.26], head: { y: [-0.14, -0.05], x: 0.42, d: 0.3 }, grille: { y: [0.56, -0.05], x: 0.3, d: 0.15 }, badge: { kind: 'disc', y: 0.64 },
+        intake: { y: [0.34, 0.45], x: 0.6, d: 0.15 }, tail: { y: [-0.16, -0.03], x: 0.5, d: 0.22, rev: [0.5, 0.56] }, rails: true, plate: [0.45, 0.66]
+      } },
+    // Mercedes-AMG G 63 (2018): the square G-Class, round lamps, upright grille bars, indicators on top of the wings,
+    // the spare wheel on the back door and the pipes out of the sides
+    { id: 'g63', name: 'Mercedes-AMG G 63', kind: 'Terrängbil', def: 'G-klassen', sport: true, W: 1.98, L: 4.66, R: 0.39, wb: 2.89, max: 61, zero: [100, 4.5], brake: 30, rev: 9, mass: 2.55, grip: 0.95,
+      colors: [0x0e0f11, 0xf2f2ef, 0x5a5e62, 0x7d8186, 0x4a4f3c], gears: 9, idle: 650, red: 6500, eng: 'v8', rim: 'black',
+      shape: {
+        sill: [[-2.33, 0.56], [-2.2, 0.5], [-1.85, 0.46], [1.85, 0.46], [2.2, 0.5], [2.33, 0.6]],
+        belt: [[-2.33, 1.22], [-2.27, 1.26], [-1.9, 1.27], [0.0, 1.27], [1.3, 1.26], [1.95, 1.25], [2.33, 1.18]],
+        roof: [[-2.22, 1.925], [-1.0, 1.935], [0.62, 1.935]], cab: [-2.28, -2.22, 0.62, 0.86], rc: [0.08, 0.1], p: [8, 8], bulge: 0,
+        shoulder: 0.05, tumble: 0.05, crown: [0.01, 0.01, 0.02], glass: [-2.18, 0.82], pillars: [[-0.35, 0.12], [-1.42, 0.12]], trim: 'chrome',
+        doors: [0.82, -0.35, -1.42], grille: { y: [0.66, -0.05], x: 0.46, d: 0.1 }, grilleBars: { n: 14, x: 0.44, y: [0.7, 1.12] }, badge: { kind: 'star', y: 0.92 },
+        lamps: [{ type: 'face', x: 0.66, y: 0.98, r: 0.12, ring: 'gloss' }, { type: 'pod', x: 0.82, z: 2.1 }],
+        intake: { y: [0.46, 0.62], x: 0.78, d: 0.12 }, tail: { y: [0.72, 1.08], x: 0.8, d: 0.12, rev: [0.8, 0.86] },
+        spare: { y: 1.08, col: 'paint' }, sidePipes: true, plate: [0.52, 0.62]
+      } },
+    // Porsche Taycan Turbo S: the electric Porsche, low and wide, four points of light in each lamp, a bar across the tail
+    { id: 'taycan', name: 'Porsche Taycan', kind: 'Elsportbil', def: 'Taycanen', sport: true, ev: true, W: 1.97, L: 4.96, R: 0.36, wb: 2.9, max: 72, zero: [100, 2.8], brake: 36, rev: 10, mass: 2.3, grip: 1.2,
+      colors: [0xeceae4, 0x8fb6cf, 0x1f3c74, 0x2f4a3c, 0x6d6a65, 0x6b1422], gears: 1, idle: 0, red: 16000, eng: 'ev', rim: 'sport',
+      shape: {
+        sill: [[-2.48, 0.4], [-2.25, 0.28], [-1.9, 0.24], [1.9, 0.24], [2.2, 0.26], [2.48, 0.32]],
+        belt: [[-2.48, 0.84], [-2.35, 0.94], [-2.0, 0.97], [-0.6, 0.92], [0.5, 0.86], [1.4, 0.78], [2.0, 0.69], [2.48, 0.5]],
+        roof: [[-1.05, 1.31], [-0.45, 1.355], [0.1, 1.355]], cab: [-2.0, -1.05, 0.1, 1.15], rc: [0.32, 0.5], p: [2.6, 2.2],
+        shoulder: 0.13, tumble: 0.23, crown: [0.04, -0.04, 0.03], glass: [-1.7, 1.1], pillars: [[-0.35, 0.08]], trim: 'gloss',
+        roofGlass: true, doors: [1.1, -0.35, -1.5], handles: 'paint', head: { y: [-0.1, -0.035], x: 0.62, d: 0.3 },
+        lamps: [{ type: 'dots', x: 0.75, y: 0.6, s: 0.035 }], intake: { y: [0.28, 0.4], x: 0.85, d: 0.12 },
+        tail: { y: [-0.1, -0.04], x: 0, d: 0.34, rev: [0.25, 0.32] }, diffuser: 0.38, plate: [0.4, 0.55]
+      } },
+    // Ferrari F8 Tributo: the mid-engined V8 Ferrari, louvres over the engine and two round tail lamps a side
+    { id: 'f8', name: 'Ferrari F8 Tributo', kind: 'Superbil', def: 'Ferrarin', sport: true, group: 'super', rearEngine: true, W: 1.98, L: 4.61, R: 0.345, wb: 2.65, max: 94, zero: [100, 2.9], brake: 38, rev: 10, mass: 1.35, grip: 1.28,
+      colors: [0xd40000, 0xf6d000, 0xf2f2ee, 0x111214, 0x1d3c7c], gears: 7, idle: 1000, red: 8000, eng: 'v8flat', rim: 'sport',
+      shape: {
+        sill: [[-2.305, 0.38], [-2.1, 0.24], [-1.75, 0.18], [1.75, 0.18], [2.05, 0.2], [2.305, 0.25]],
+        belt: [[-2.305, 0.88], [-2.1, 0.97], [-1.2, 0.98], [-0.3, 0.88], [0.5, 0.74], [1.3, 0.62], [1.95, 0.5], [2.305, 0.34]],
+        roof: [[-0.6, 1.14], [-0.3, 1.2], [-0.1, 1.205]], cab: [-1.75, -0.6, -0.1, 1.0], rc: [0.26, 0.5], p: [3, 2.2],
+        shoulder: 0.13, tumble: 0.27, crown: [0.02, -0.02, 0.02], glass: [-0.55, 0.95], trim: 'gloss', rearCol: 'under',
+        doors: [0.95, -0.45], head: { y: [-0.07, -0.025], x: 0.5, d: 0.36 }, intake: { y: [0.24, 0.38], x: 0.9, d: 0.2 },
+        sideIntake: { z: [-0.95, -0.45], y: [0.45, 0.75] }, louvre: { z: [-2.0, -1.8], x: 0.5 },
+        lamps: [{ type: 'tailRound', xs: [0.6, 0.8], y: 0.8, r: 0.065 }], tail: { y: [-0.1, -0.05], x: 2, d: 0.2 }, diffuser: 0.45, plate: [0.3, 0.55]
+      } },
+    // Ferrari F40 (1987): the last Ferrari Enzo Ferrari saw built, a 2.9-litre twin-turbo V8 behind the seats in a body
+    // of kevlar and carbon, 1 100 kg, 324 km/h. Only ever in rosso corsa: a low flat nose with the lamps behind clear
+    // covers at its corners and two NACA ducts in the bonnet, a duct in the rear wing behind each door, the slotted Lexan
+    // engine cover, the full-width wing carried on the rear wings, four round lamps in the black mesh of the tail, three
+    // pipes in the middle of it and five-spoke Speedline wheels with a centre nut. Red cloth seats inside, five gears.
+    { id: 'f40', name: 'Ferrari F40', kind: 'Superbil', def: 'F40:n', sport: true, group: 'super', rearEngine: true, W: 1.97, L: 4.358, R: 0.325, wb: 2.45, max: 90, zero: [100, 4.1], brake: 34, rev: 10, mass: 1.1, grip: 1.18,
+      colors: [0xc8100c], gears: 5, idle: 1000, red: 7750, eng: 'f40', rim: 'f40', lag: true,
+      shape: {
+        sill: [[-2.179, 0.36], [-2.02, 0.24], [-1.65, 0.16], [1.6, 0.15], [1.98, 0.16], [2.179, 0.2]],
+        belt: [[-2.179, 0.93], [-2.06, 0.96], [-1.5, 0.98], [-1.0, 0.95], [-0.55, 0.88], [0.0, 0.83], [0.55, 0.79], [1.0, 0.745], [1.5, 0.685], [1.95, 0.6], [2.179, 0.5]],
+        roof: [[-0.78, 1.075], [-0.45, 1.118], [-0.1, 1.124]], cab: [-1.95, -0.78, -0.1, 0.55], rc: [0.14, 0.36], p: [4.5, 3], bulge: 0.04,
+        shoulder: 0.14, tumble: 0.25, crown: [0.015, -0.025, 0.02], glass: [-0.74, 0.52], pillars: [[-0.36, 0.06]], trim: 'gloss', rearCol: 'lexan',
+        doors: [0.84, -0.42], handles: 'paint', head: { y: [0.42, 0.51], x: 0.44, d: 0.32 }, intake: { y: [0.19, 0.35], x: 0.74, d: 0.22 },
+        sideIntake: { z: [-0.94, -0.62], y: [0.54, 0.72] }, tail: { y: [0.64, 0.9], x: 0, d: 0.14, col: 'under' }, cladding: 0.22, diffuser: 0.4,
+        f40: { tail: [[0.31, 'red'], [0.53, 'amber']], lampY: 0.77, lampR: 0.075, wingY: 1.13 }, seatCol: 0xa8141a, plate: [0.3, 0.79]
+      } },
+    // Audi RS 6 Avant (C8): the 600-horsepower estate, wide arches, a black grille with the four rings
+    { id: 'rs6', name: 'Audi RS 6 Avant', kind: 'Sportkombi', def: 'RS 6:an', sport: true, W: 1.95, L: 5.0, R: 0.365, wb: 2.928, max: 75, zero: [100, 3.6], brake: 34, rev: 9, mass: 2.1, grip: 1.12,
+      colors: [0x8b8c88, 0x101113, 0xeeeeea, 0x1c2a44, 0xb3121b], gears: 8, idle: 750, red: 6800, eng: 'v8', rim: 'black',
+      shape: {
+        sill: [[-2.5, 0.45], [-2.27, 0.32], [-1.95, 0.27], [1.9, 0.27], [2.2, 0.29], [2.5, 0.37]],
+        belt: [[-2.5, 0.92], [-2.42, 0.99], [-2.1, 1.0], [0.0, 0.97], [1.0, 0.94], [1.65, 0.87], [2.2, 0.78], [2.5, 0.64]],
+        roof: [[-2.15, 1.4], [-1.0, 1.43], [0.25, 1.435]], cab: [-2.35, -2.15, 0.25, 1.3], rc: [0.22, 0.42], p: [3.4, 2.8],
+        shoulder: 0.11, tumble: 0.17, crown: [0.03, 0.035, 0.025], glass: [-2.1, 1.25], pillars: [[0.02, 0.1], [-1.25, 0.12]], trim: 'gloss',
+        doors: [1.25, 0.02, -1.25], head: { y: [-0.12, -0.05], x: 0.5, d: 0.3 }, grille: { y: [0.42, -0.06], x: 0.46, d: 0.15 }, badge: { kind: 'rings', y: 0.66 },
+        intake: { y: [0.3, 0.42], x: 0.85, d: 0.15 }, tail: { y: [-0.14, -0.04], x: 0, d: 0.25, rev: [0.3, 0.36] }, diffuser: 0.4, rails: true, plate: [0.47, 0.62]
+      } },
+    // Twenty more sports cars, each to the real one's size, wheelbase, weight, power and lines. The supercars first:
+    // Ferrari LaFerrari (2013), the hybrid V12 hypercar from Maranello: 963 hp, its nose sharp and low, its tail a wide
+    // black diffuser under two round lamps a side
+    { id: 'laferrari', name: 'Ferrari LaFerrari', kind: 'Hyperbil', def: 'LaFerrarin', sport: true, group: 'super', rearEngine: true, W: 1.99, L: 4.702, R: 0.345, wb: 2.65, max: 97, zero: [100, 2.4], brake: 40, rev: 10, mass: 1.4, grip: 1.3,
+      colors: [0xc8100c, 0xf6d000, 0x111214, 0xf2f2ee], gears: 7, idle: 1000, red: 9250, eng: 'v12', rim: 'black',
+      shape: {
+        sill: [[-2.351, 0.36], [-2.15, 0.22], [-1.8, 0.17], [1.8, 0.17], [2.1, 0.19], [2.351, 0.24]],
+        belt: [[-2.351, 0.86], [-2.15, 0.95], [-1.25, 0.96], [-0.35, 0.86], [0.45, 0.72], [1.25, 0.6], [1.95, 0.47], [2.351, 0.3]],
+        roof: [[-0.62, 1.06], [-0.3, 1.1], [-0.08, 1.1]], cab: [-1.85, -0.62, -0.08, 1.02], rc: [0.25, 0.55], p: [3, 2.1],
+        shoulder: 0.14, tumble: 0.28, crown: [0.02, -0.01, 0.015], glass: [-0.6, 0.98], trim: 'gloss', rearCol: 'under',
+        doors: [0.98, -0.5], head: { y: [-0.07, -0.02], x: 0.5, d: 0.36 }, intake: { y: [0.22, 0.38], x: 1.0, d: 0.2 },
+        sideIntake: { z: [-1.1, -0.55], y: [0.4, 0.74] }, lamps: [{ type: 'tailRound', xs: [0.62, 0.82], y: 0.78, r: 0.07 }], tail: { y: [-0.1, -0.05], x: 2, d: 0.2 },
+        diffuser: 0.5, pipes: [[-0.1, 0.5], [0.1, 0.5]], plate: [0.3, 0.5]
+      } },
+    // Porsche 911 GT3 RS (992, 2023): the track 911 with 525 hp from a flat six that revs to 9 000, vents on the wings and
+    // a huge wing on swan necks
+    { id: 'gt3rs', name: 'Porsche 911 GT3 RS', kind: 'Banbil', def: 'GT3 RS:en', sport: true, group: 'super', rearEngine: true, W: 1.9, L: 4.572, R: 0.36, wb: 2.457, max: 82, zero: [100, 3.2], brake: 38, rev: 10, mass: 1.3, grip: 1.32,
+      colors: [0x9fcf3a, 0xf2f2ee, 0xd0121b, 0x1e6ec8, 0x111214], gears: 7, idle: 950, red: 9000, eng: 'flat6', rim: 'black',
+      shape: {
+        sill: [[-2.286, 0.4], [-2.07, 0.26], [-1.67, 0.22], [1.57, 0.22], [1.97, 0.24], [2.286, 0.3]],
+        belt: [[-2.286, 0.8], [-2.14, 0.93], [-1.62, 0.97], [-0.6, 0.93], [0.4, 0.86], [1.31, 0.79], [1.87, 0.7], [2.286, 0.5]],
+        roof: [[-0.88, 1.2], [-0.45, 1.29], [0.05, 1.3]], cab: [-1.75, -0.88, 0.05, 0.95], rc: [0.32, 0.5], p: [2.6, 2.2],
+        shoulder: 0.13, tumble: 0.24, crown: [0.04, -0.05, 0.03], glass: [-1.25, 0.9], pillars: [[-0.5, 0.08]], trim: 'gloss',
+        doors: [0.9, -0.55], intake: { y: [0.25, 0.42], x: 0.9, d: 0.12 }, tail: { y: [-0.1, -0.045], x: 0, d: 0.36, rev: [0.22, 0.3] },
+        louvre: { z: [1.15, 1.55], x: 0.55 }, diffuser: 0.42, wing: { h: 0.46, z: 0.34, chord: 0.42, posts: 0.3 },
+        lamps: [{ type: 'round', x: 0.6, z: 1.95, r: 0.115, tilt: 0.8 }], plate: [0.42, 0.55]
+      } },
+    // Lamborghini Aventador (LP 700-4): the V12 wedge, Y-shaped lamps, the big intakes in its flanks, a wing on the tail
+    { id: 'aventador', name: 'Lamborghini Aventador', kind: 'Superbil', def: 'Aventadoren', sport: true, group: 'super', rearEngine: true, W: 2.03, L: 4.78, R: 0.36, wb: 2.7, max: 97, zero: [100, 2.9], brake: 40, rev: 10, mass: 1.55, grip: 1.28,
+      colors: [0xf06a14, 0x7bd23a, 0xf2c80f, 0xe8e8e8, 0x111316], gears: 7, idle: 1000, red: 8500, eng: 'v12', rim: 'black',
+      shape: {
+        sill: [[-2.39, 0.38], [-2.18, 0.24], [-1.8, 0.19], [1.8, 0.19], [2.1, 0.2], [2.39, 0.24]],
+        belt: [[-2.39, 0.88], [-2.15, 0.96], [-1.05, 0.96], [-0.3, 0.86], [0.6, 0.72], [1.45, 0.6], [2.05, 0.47], [2.39, 0.3]],
+        roof: [[-0.6, 1.08], [-0.32, 1.12], [-0.12, 1.12]], cab: [-1.7, -0.6, -0.12, 1.1], rc: [0.25, 0.5], p: [3.2, 2.0],
+        shoulder: 0.12, tumble: 0.28, crown: [0.02, -0.01, 0.015], glass: [-0.55, 1.05], trim: 'gloss', rearCol: 'under',
+        doors: [1.05, -0.5], head: { y: [-0.08, -0.03], x: 0.45, d: 0.36 }, intake: { y: [0.22, 0.4], x: 1.0, d: 0.22 },
+        sideIntake: { z: [-1.2, -0.55], y: [0.42, 0.82] }, tail: { y: [-0.12, -0.05], x: 0.3, d: 0.25, rev: [0.3, 0.38] },
+        louvre: { z: [-1.9, -1.6], x: 0.55 }, diffuser: 0.5, wing: true, pipes: [[0, 0.62]], plate: [0.33, 0.55]
+      } },
+    // McLaren 720S: the twin-turbo V8 from Woking, the lamps set in deep sockets, a teardrop of glass over the cabin
+    { id: 'mclaren720', name: 'McLaren 720S', kind: 'Superbil', def: 'McLarenen', sport: true, group: 'super', rearEngine: true, W: 1.93, L: 4.543, R: 0.35, wb: 2.67, max: 95, zero: [100, 2.9], brake: 40, rev: 10, mass: 1.3, grip: 1.28,
+      colors: [0xf28b1c, 0xb5b8bb, 0x1f4fae, 0xf2f2ee, 0x111316], gears: 7, idle: 950, red: 8200, eng: 'v8flat', rim: 'sport',
+      shape: {
+        sill: [[-2.27, 0.38], [-2.06, 0.23], [-1.75, 0.18], [1.75, 0.18], [2.03, 0.2], [2.27, 0.25]],
+        belt: [[-2.27, 0.86], [-2.06, 0.95], [-1.2, 0.96], [-0.35, 0.86], [0.5, 0.73], [1.3, 0.61], [1.9, 0.49], [2.27, 0.33]],
+        roof: [[-0.75, 1.14], [-0.4, 1.18], [-0.1, 1.18]], cab: [-2.0, -0.75, -0.1, 1.05], rc: [0.28, 0.55], p: [2.8, 2.0],
+        shoulder: 0.16, tumble: 0.3, crown: [0.02, -0.01, 0.02], glass: [-1.2, 1.0], pillars: [[-0.6, 0.1]], trim: 'gloss', rearCol: 'gloss',
+        doors: [1.0, -0.4], head: { y: [-0.09, -0.02], x: 0.55, d: 0.32 }, intake: { y: [0.22, 0.36], x: 0.95, d: 0.2 },
+        sideIntake: { z: [-0.95, -0.5], y: [0.42, 0.7] }, tail: { y: [-0.09, -0.04], x: 0.25, d: 0.22, rev: [0.25, 0.32] }, diffuser: 0.5, plate: [0.3, 0.5]
+      } },
+    // Bugatti Chiron: the W16 with four turbos, 1 500 hp, 420 km/h, the fastest thing in town; the horseshoe grille
+    // in the middle of the nose and a light bar across the whole tail
+    { id: 'chiron', name: 'Bugatti Chiron', kind: 'Hyperbil', def: 'Chironen', sport: true, group: 'super', rearEngine: true, W: 2.04, L: 4.544, R: 0.37, wb: 2.711, max: 117, zero: [100, 2.4], brake: 42, rev: 10, mass: 2.0, grip: 1.3,
+      colors: [0x1d3c7c, 0x111214, 0xf2f2ee, 0x8a1b1b, 0xb5b8bb], gears: 7, idle: 900, red: 6800, eng: 'w16', rim: 'sport',
+      shape: {
+        sill: [[-2.272, 0.4], [-2.06, 0.25], [-1.75, 0.2], [1.75, 0.2], [2.04, 0.22], [2.272, 0.28]],
+        belt: [[-2.272, 0.92], [-2.08, 0.98], [-1.2, 0.99], [-0.4, 0.9], [0.5, 0.78], [1.3, 0.68], [1.9, 0.56], [2.272, 0.42]],
+        roof: [[-0.8, 1.15], [-0.45, 1.19], [-0.1, 1.19]], cab: [-1.65, -0.8, -0.1, 1.0], rc: [0.3, 0.5], p: [2.6, 2.2],
+        shoulder: 0.15, tumble: 0.27, crown: [0.02, 0.0, 0.02], glass: [-0.75, 0.95], trim: 'chrome', rearCol: 'under',
+        doors: [0.95, -0.55], head: { y: [-0.1, -0.03], x: 0.55, d: 0.3 }, grille: { y: [0.62, -0.06], x: 0.22, d: 0.12 },
+        intake: { y: [0.25, 0.45], x: 1.0, d: 0.18 }, sideIntake: { z: [-0.95, -0.5], y: [0.5, 0.85] }, tail: { y: [-0.1, -0.05], x: 0, d: 0.18, rev: [0.2, 0.28] },
+        badge: { kind: 'bar', y: 0.5, w: 0.0001 }, diffuser: 0.5, pipes: [[-0.12, 0.42], [0.12, 0.42], [-0.12, 0.54], [0.12, 0.54]], plate: [0.3, 0.6]
+      } },
+    // Aston Martin DBS Superleggera: the V12 grand tourer, a long bonnet, the wide grille, a short fastback
+    { id: 'dbs', name: 'Aston Martin DBS', kind: 'Sportcoupé', def: 'Aston Martin:en', sport: true, group: 'super', W: 1.97, L: 4.712, R: 0.37, wb: 2.805, max: 94, zero: [100, 3.4], brake: 38, rev: 10, mass: 1.85, grip: 1.18,
+      colors: [0x1f4a37, 0xb5b8bb, 0x111214, 0xf2f2ee, 0x8a1b1b], gears: 8, idle: 800, red: 7000, eng: 'v12t', rim: 'sport',
+      shape: {
+        sill: [[-2.356, 0.42], [-2.15, 0.28], [-1.85, 0.24], [1.8, 0.24], [2.1, 0.26], [2.356, 0.33]],
+        belt: [[-2.356, 0.86], [-2.25, 0.94], [-1.8, 0.97], [-0.8, 0.92], [0.3, 0.86], [1.2, 0.8], [1.9, 0.72], [2.356, 0.55]],
+        roof: [[-0.95, 1.22], [-0.5, 1.26], [-0.1, 1.27]], cab: [-1.75, -0.95, -0.1, 0.65], rc: [0.25, 0.45], p: [3, 2.6],
+        shoulder: 0.13, tumble: 0.24, crown: [0.03, 0.02, 0.02], glass: [-1.15, 0.6], pillars: [[-0.75, 0.06]], trim: 'chrome',
+        doors: [0.6, -0.55], head: { y: [-0.12, -0.05], x: 0.5, d: 0.3 }, grille: { y: [0.55, -0.08], x: 0.5, d: 0.16 },
+        intake: { y: [0.25, 0.4], x: 0.85, d: 0.12 }, tail: { y: [-0.12, -0.04], x: 0.25, d: 0.2, rev: [0.25, 0.32] }, diffuser: 0.4, plate: [0.4, 0.58]
+      } },
+    // Chevrolet Corvette Z06 (C8, 2023): the mid-engined Corvette, a flat-plane V8 of 670 hp, four pipes in the middle
+    { id: 'z06', name: 'Corvette Z06', kind: 'Superbil', def: 'Corvetten', sport: true, group: 'super', rearEngine: true, W: 2.03, L: 4.685, R: 0.36, wb: 2.722, max: 87, zero: [100, 2.6], brake: 38, rev: 10, mass: 1.6, grip: 1.25,
+      colors: [0xc8102e, 0xf2c80f, 0xeeeeea, 0x111316, 0x1f4fae], gears: 8, idle: 900, red: 8600, eng: 'v8flat', rim: 'black',
+      shape: {
+        sill: [[-2.34, 0.4], [-2.13, 0.25], [-1.8, 0.2], [1.8, 0.2], [2.1, 0.21], [2.34, 0.26]],
+        belt: [[-2.34, 0.9], [-2.15, 0.98], [-1.25, 0.98], [-0.35, 0.88], [0.5, 0.76], [1.3, 0.65], [1.95, 0.52], [2.34, 0.36]],
+        roof: [[-0.7, 1.17], [-0.35, 1.21], [-0.08, 1.21]], cab: [-1.7, -0.7, -0.08, 1.0], rc: [0.22, 0.5], p: [3.5, 2.3],
+        shoulder: 0.14, tumble: 0.27, crown: [0.02, -0.01, 0.02], glass: [-0.65, 0.95], trim: 'gloss', rearCol: 'gloss',
+        doors: [0.95, -0.45], head: { y: [-0.08, -0.03], x: 0.5, d: 0.35 }, intake: { y: [0.22, 0.4], x: 0.95, d: 0.2 },
+        sideIntake: { z: [-1.1, -0.5], y: [0.42, 0.78] }, tail: { y: [-0.11, -0.04], x: 0.3, d: 0.22, rev: [0.3, 0.38] }, diffuser: 0.45, wing: true,
+        pipes: [[-0.28, 0.42], [-0.16, 0.42], [0.16, 0.42], [0.28, 0.42]], plate: [0.3, 0.55]
+      } },
+    // Pagani Huayra, my first own pick: the hand-built hypercar with an AMG twin-turbo V12, gullwing doors, round curves, and four pipes in a
+    // cluster in the middle of the tail
+    { id: 'huayra', name: 'Pagani Huayra', kind: 'Hyperbil', def: 'Huayran', sport: true, group: 'super', rearEngine: true, W: 2.04, L: 4.605, R: 0.36, wb: 2.795, max: 106, zero: [100, 3.0], brake: 40, rev: 10, mass: 1.35, grip: 1.3,
+      colors: [0x2b2e33, 0x1d4fd8, 0xb5b8bb, 0xf2f2ee, 0x8a1b1b], gears: 7, idle: 900, red: 6500, eng: 'v12t', rim: 'sport',
+      shape: {
+        sill: [[-2.3, 0.38], [-2.1, 0.24], [-1.8, 0.19], [1.8, 0.19], [2.08, 0.21], [2.3, 0.26]],
+        belt: [[-2.3, 0.88], [-2.1, 0.96], [-1.2, 0.97], [-0.4, 0.88], [0.4, 0.76], [1.2, 0.64], [1.85, 0.52], [2.3, 0.36]],
+        roof: [[-0.75, 1.12], [-0.4, 1.15], [-0.1, 1.15]], cab: [-1.75, -0.75, -0.1, 1.0], rc: [0.3, 0.6], p: [2.6, 1.9], bulge: 0.08,
+        shoulder: 0.16, tumble: 0.3, crown: [0.02, -0.01, 0.02], glass: [-0.7, 0.95], trim: 'chrome', rearCol: 'gloss',
+        doors: [0.95, -0.45], head: { y: [-0.07, -0.02], x: 0.5, d: 0.4 }, intake: { y: [0.22, 0.38], x: 0.9, d: 0.2 },
+        sideIntake: { z: [-1.1, -0.6], y: [0.45, 0.75] }, lamps: [{ type: 'tailRound', xs: [0.75], y: 0.72, r: 0.06 }], tail: { y: [-0.1, -0.05], x: 2, d: 0.2 },
+        diffuser: 0.5, pipes: [[-0.07, 0.58], [0.07, 0.58], [-0.07, 0.7], [0.07, 0.7]], plate: [0.3, 0.45]
+      } },
+    // The classics. Lamborghini Countach (LP5000 QV): the wedge off every bedroom wall of the 1980s, its lamps hidden,
+    // the NACA ducts in its flanks, the slatted engine cover and the big wing
+    { id: 'countach', name: 'Lamborghini Countach', kind: 'Klassiker', def: 'Countachen', sport: true, classic: true, group: 'classic', rearEngine: true, W: 2.0, L: 4.14, R: 0.34, wb: 2.45, max: 82, zero: [100, 4.9], brake: 32, rev: 9, mass: 1.45, grip: 1.12,
+      colors: [0xc8102e, 0xf2f2ee, 0x111316, 0xf2c80f], gears: 5, idle: 950, red: 7600, eng: 'v12', rim: 'sport',
+      shape: {
+        sill: [[-2.07, 0.4], [-1.87, 0.25], [-1.55, 0.2], [1.55, 0.2], [1.85, 0.21], [2.07, 0.24]],
+        belt: [[-2.07, 0.86], [-1.9, 0.94], [-1.0, 0.94], [-0.4, 0.86], [0.4, 0.72], [1.2, 0.58], [1.8, 0.47], [2.07, 0.38]],
+        roof: [[-0.65, 1.03], [-0.35, 1.05], [-0.15, 1.05]], cab: [-1.2, -0.65, -0.15, 1.05], rc: [0.12, 0.22], p: [5, 4],
+        shoulder: 0.16, tumble: 0.32, crown: [0.01, 0.0, 0.01], glass: [-0.6, 1.0], trim: 'gloss', rearCol: 'under',
+        doors: [1.0, -0.4], head: { y: [-0.1, -0.06], x: 0.55, d: 0.15 }, intake: { y: [0.22, 0.32], x: 0.7, d: 0.12 },
+        sideIntake: { z: [-0.55, -0.1], y: [0.5, 0.84] }, tail: { y: [-0.22, -0.08], x: 0.3, d: 0.18, rev: [0.3, 0.4] },
+        louvre: { z: [-1.95, -1.3], x: 0.6 }, wing: { h: 0.3, z: 0.3, chord: 0.4 }, plate: [0.3, 0.45]
+      } },
+    // Porsche 911 Carrera RS 2.7 (1973): the lightweight 911 with the ducktail on its engine lid, upright round lamps on
+    // its wings, Carrera down its sides, five-spoke Fuchs wheels
+    { id: 'rs27', name: 'Porsche 911 Carrera RS 2.7', kind: 'Klassiker', def: 'Carrera RS:en', sport: true, classic: true, group: 'classic', rearEngine: true, W: 1.652, L: 4.147, R: 0.31, wb: 2.271, max: 68, zero: [100, 5.8], brake: 26, rev: 9, mass: 0.98, grip: 1.02,
+      colors: [0xf2f0e6, 0xf2c80f, 0xf06a14, 0xc8102e], gears: 5, idle: 900, red: 7300, eng: 'flat6', rim: 'f40',
+      shape: {
+        sill: [[-2.07, 0.4], [-1.85, 0.29], [-1.5, 0.26], [1.4, 0.26], [1.8, 0.28], [2.07, 0.34]],
+        belt: [[-2.07, 0.84], [-1.98, 0.95], [-1.86, 0.92], [-1.55, 0.96], [-0.6, 0.93], [0.4, 0.86], [1.2, 0.78], [1.7, 0.7], [2.07, 0.52]],
+        roof: [[-0.8, 1.27], [-0.4, 1.31], [0.0, 1.31]], cab: [-1.55, -0.8, 0.0, 0.88], rc: [0.32, 0.5], p: [2.4, 2.2],
+        shoulder: 0.12, tumble: 0.24, crown: [0.04, -0.05, 0.03], glass: [-1.15, 0.85], pillars: [[-0.45, 0.06]], trim: 'chrome',
+        doors: [0.85, -0.5], tail: { y: [-0.12, -0.04], x: 0.35, d: 0.15 }, sideStripe: { y: [0.3, 0.38], z: [-1.2, 0.95], col: 0xc8102e },
+        bumper: { y: [0.4, 0.42], col: 'gloss' }, lamps: [{ type: 'round', x: 0.55, z: 1.72, r: 0.09, tilt: 1.05 }], plate: [0.36, 0.45]
+      } },
+    // Jaguar E-Type (Series 1 coupé, 1961): the one Enzo Ferrari called the most beautiful car in the world; the endless
+    // bonnet, the lamps under glass covers, a little oval mouth, thin chrome bumpers and wire wheels
+    { id: 'etype', name: 'Jaguar E-Type', kind: 'Klassiker', def: 'E-Typen', sport: true, classic: true, group: 'classic', W: 1.657, L: 4.453, R: 0.33, wb: 2.438, max: 67, zero: [100, 7.1], brake: 24, rev: 8, mass: 1.25, grip: 0.98,
+      colors: [0x1f4a37, 0xa31919, 0x8fa3b5, 0xe8dfc6, 0x111316], gears: 4, idle: 750, red: 5500, eng: 'i6', rim: 'wire',
+      shape: {
+        sill: [[-2.2265, 0.36], [-2.0, 0.27], [-1.65, 0.24], [1.65, 0.24], [2.0, 0.26], [2.2265, 0.34]],
+        belt: [[-2.2265, 0.66], [-2.1, 0.74], [-1.8, 0.8], [-1.2, 0.84], [-0.6, 0.84], [0.2, 0.83], [1.0, 0.81], [1.7, 0.74], [2.1, 0.62], [2.2265, 0.52]],
+        roof: [[-1.0, 1.16], [-0.6, 1.21], [-0.3, 1.21]], cab: [-1.95, -1.0, -0.3, 0.18], rc: [0.4, 0.45], p: [2.0, 1.8], bulge: 0.08,
+        shoulder: 0.14, tumble: 0.25, crown: [0.04, 0.06, 0.03], glass: [-1.05, 0.15], trim: 'chrome',
+        doors: [0.15, -0.85], grille: { y: [0.36, 0.5], x: 0.3, d: 0.1 }, tail: { y: [-0.1, -0.04], x: 0.55, d: 0.12 },
+        bumper: { y: [0.4, 0.44], col: 'chrome', w: 0.7 }, lamps: [{ type: 'round', x: 0.5, z: 1.92, r: 0.09, tilt: 0.55 }], plate: [0.42, 0.48]
+      } },
+    // Shelby Cobra 427 (1965): a 7-litre Ford V8 in the little AC roadster from England, open, wide hips, side pipes, the
+    // round lamps either side of its oval mouth and stripes over the top
+    { id: 'cobra', name: 'Shelby Cobra 427', kind: 'Klassisk roadster', def: 'Cobran', sport: true, classic: true, group: 'classic', W: 1.73, L: 3.96, R: 0.34, wb: 2.286, max: 74, zero: [100, 4.2], brake: 26, rev: 8, mass: 1.05, grip: 1.0,
+      colors: [0x1f3d8f, 0x111316, 0xc8102e, 0xb5b8bb], gears: 4, idle: 800, red: 6500, eng: 'v8', rim: 'alloy',
+      shape: {
+        sill: [[-1.98, 0.32], [-1.75, 0.24], [-1.4, 0.22], [1.4, 0.22], [1.75, 0.24], [1.98, 0.3]],
+        belt: [[-1.98, 0.72], [-1.82, 0.82], [-1.5, 0.9], [-1.1, 0.92], [-0.7, 0.88], [0.0, 0.86], [0.7, 0.86], [1.25, 0.88], [1.7, 0.8], [1.98, 0.62]],
+        roof: [[-1.0, 0.95], [0.3, 0.95]], cab: [-1.15, -1.0, 0.25, 0.45], rc: [0.45, 0.5], p: [1.9, 1.8], bulge: 0.1, open: { z: [-1.15, 0.45], screen: 0.3 },
+        shoulder: 0.12, tumble: 0.2, crown: [0.04, 0.05, 0.03], glass: [-1.1, 0.4], trim: 'chrome',
+        doors: [0.4, -0.55], grille: { y: [0.28, 0.48], x: 0.36, d: 0.1 }, tail: { y: [-0.12, -0.05], x: 0.45, d: 0.12 },
+        lamps: [{ type: 'face', x: 0.55, y: 0.62, r: 0.085, ring: 'chrome', ind: true }], stripes: [0.09, 0.22], sidePipes: true,
+        bumper: { y: [0.3, 0.32], col: 'chrome', w: 0.6 }, plate: [0.32, 0.4]
+      } },
+    // Ford GT40 (1966): built to beat Ferrari at Le Mans, and it did; barely a metre tall, the doors cut into the roof
+    { id: 'gt40', name: 'Ford GT40', kind: 'Klassiker', def: 'GT40:n', sport: true, classic: true, group: 'classic', rearEngine: true, W: 1.78, L: 4.18, R: 0.34, wb: 2.42, max: 89, zero: [100, 4.2], brake: 30, rev: 9, mass: 1.0, grip: 1.1,
+      colors: [0x8fc3e6, 0x1f3d8f, 0xc8102e, 0x111316], gears: 5, idle: 900, red: 6500, eng: 'v8', rim: 'sport',
+      shape: {
+        sill: [[-2.09, 0.36], [-1.9, 0.24], [-1.55, 0.2], [1.5, 0.2], [1.85, 0.21], [2.09, 0.26]],
+        belt: [[-2.09, 0.78], [-1.9, 0.86], [-1.0, 0.86], [-0.35, 0.8], [0.4, 0.72], [1.1, 0.64], [1.7, 0.56], [2.09, 0.42]],
+        roof: [[-0.55, 0.98], [-0.25, 1.01], [0.0, 1.01]], cab: [-1.35, -0.55, 0.0, 0.95], rc: [0.2, 0.55], p: [3.5, 2.0],
+        shoulder: 0.18, tumble: 0.32, crown: [0.02, 0.01, 0.015], glass: [-0.4, 0.9], trim: 'gloss', rearCol: 'under',
+        doors: [0.9, -0.35], intake: { y: [0.25, 0.36], x: 0.6, d: 0.1 }, tail: { y: [-0.16, -0.06], x: 0.45, d: 0.12 },
+        lamps: [{ type: 'round', x: 0.62, z: 1.62, r: 0.085, tilt: 0.45 }], stripes: [0.12, 0.26], stripeCol: { [0x8fc3e6]: 0xf06a14 }, plate: [0.32, 0.42]
+      } },
+    // Volvo P1800 (1961), my second own pick: the Swedish sports coupé that The Saint drove, round lamps in chrome rings, the
+    // egg-crate grille with the iron mark, little fins at the back and chrome bumpers
+    { id: 'p1800', name: 'Volvo P1800', kind: 'Klassiker', def: 'P1800:an', sport: true, classic: true, group: 'classic', W: 1.7, L: 4.35, R: 0.31, wb: 2.45, max: 51, zero: [100, 10.5], brake: 22, rev: 8, mass: 1.12, grip: 0.95,
+      colors: [0xeeeeea, 0xa31919, 0x1c2a44, 0xe8dfc6, 0x111316], gears: 4, idle: 750, red: 6000, eng: 'i4', rim: 'alloy',
+      shape: {
+        sill: [[-2.175, 0.4], [-1.95, 0.3], [-1.6, 0.27], [1.6, 0.27], [1.95, 0.29], [2.175, 0.36]],
+        belt: [[-2.175, 0.8], [-2.05, 0.88], [-1.7, 0.92], [-1.2, 0.9], [-0.4, 0.86], [0.4, 0.85], [1.2, 0.84], [1.8, 0.79], [2.175, 0.68]],
+        roof: [[-0.85, 1.24], [-0.45, 1.27], [-0.05, 1.27]], cab: [-1.45, -0.85, -0.05, 0.6], rc: [0.3, 0.4], p: [2.4, 2.4],
+        shoulder: 0.12, tumble: 0.2, crown: [0.04, 0.05, 0.03], glass: [-1.0, 0.55], pillars: [[-0.55, 0.05]], trim: 'chrome',
+        doors: [0.55, -0.6], grille: { y: [0.42, 0.56], x: 0.45, d: 0.1 }, iron: true, tail: { y: [-0.12, -0.04], x: 0.45, d: 0.12 },
+        lamps: [{ type: 'face', x: 0.6, y: 0.62, r: 0.085, ring: 'chrome', ind: true }], bumper: { y: [0.38, 0.4], col: 'chrome' }, plate: [0.3, 0.45]
+      } },
+    // The compact sports cars. Mazda MX-5 (ND): the world's best-selling two-seater, here with the roof down
+    { id: 'mx5', name: 'Mazda MX-5', kind: 'Roadster', def: 'MX-5:an', sport: true, W: 1.735, L: 3.915, R: 0.32, wb: 2.31, max: 61, zero: [100, 6.5], brake: 28, rev: 9, mass: 1.05, grip: 1.08,
+      colors: [0xa1131d, 0xeeeeea, 0x5b6066, 0x1f4f8f, 0x111316], gears: 6, idle: 750, red: 7500, eng: 'i4', rim: 'sport',
+      shape: {
+        sill: [[-1.9575, 0.38], [-1.75, 0.28], [-1.4, 0.25], [1.35, 0.25], [1.7, 0.27], [1.9575, 0.33]],
+        belt: [[-1.9575, 0.78], [-1.82, 0.86], [-1.45, 0.88], [-1.0, 0.86], [-0.5, 0.84], [0.3, 0.82], [1.0, 0.78], [1.6, 0.7], [1.9575, 0.56]],
+        roof: [[-0.8, 0.9], [0.2, 0.9]], cab: [-0.85, -0.8, 0.15, 0.35], rc: [0.35, 0.45], p: [2.4, 2.0], open: { z: [-0.85, 0.35], screen: 0.32, hoop: true },
+        shoulder: 0.12, tumble: 0.2, crown: [0.03, 0.03, 0.02], glass: [-0.8, 0.3], trim: 'gloss',
+        doors: [0.3, -0.75], head: { y: [-0.09, -0.03], x: 0.5, d: 0.3 }, grille: { y: [0.32, 0.46], x: 0.42, d: 0.12 },
+        tail: { y: [-0.09, -0.04], x: 0.45, d: 0.2, rev: [0.45, 0.52] }, plate: [0.36, 0.42]
+      } },
+    // Toyota GR Supra (A90): the Japanese legend back, a BMW straight six, a ducktail and a double-bubble roof
+    { id: 'supra', name: 'Toyota GR Supra', kind: 'Sportcoupé', def: 'Supran', sport: true, W: 1.854, L: 4.379, R: 0.355, wb: 2.47, max: 70, zero: [100, 4.3], brake: 32, rev: 9, mass: 1.5, grip: 1.12,
+      colors: [0xc8102e, 0xeeeeea, 0xf2c80f, 0x111316, 0x5b6066], gears: 8, idle: 750, red: 6500, eng: 'i6', rim: 'black',
+      shape: {
+        sill: [[-2.19, 0.42], [-1.98, 0.28], [-1.65, 0.24], [1.6, 0.24], [1.95, 0.26], [2.19, 0.32]],
+        belt: [[-2.19, 0.86], [-2.08, 0.96], [-1.85, 0.98], [-1.3, 0.94], [-0.4, 0.9], [0.4, 0.84], [1.2, 0.76], [1.8, 0.66], [2.19, 0.5]],
+        roof: [[-0.75, 1.24], [-0.4, 1.28], [-0.05, 1.28]], cab: [-1.45, -0.75, -0.05, 0.75], rc: [0.3, 0.5], p: [2.8, 2.2],
+        shoulder: 0.15, tumble: 0.26, crown: [0.03, -0.02, 0.02], glass: [-1.0, 0.72], trim: 'gloss',
+        doors: [0.72, -0.5], head: { y: [-0.1, -0.03], x: 0.5, d: 0.32 }, intake: { y: [0.24, 0.42], x: 0.75, d: 0.18 },
+        tail: { y: [-0.1, -0.04], x: 0.45, d: 0.2, rev: [0.45, 0.52] }, diffuser: 0.42, plate: [0.32, 0.5]
+      } },
+    // Alpine A110 (2017): the light little Frenchman with its engine behind the seats, four round lamps in its nose
+    { id: 'a110', name: 'Alpine A110', kind: 'Sportbil', def: 'Alpinen', sport: true, rearEngine: true, W: 1.798, L: 4.18, R: 0.33, wb: 2.42, max: 70, zero: [100, 4.5], brake: 32, rev: 9, mass: 1.1, grip: 1.15,
+      colors: [0x1f5fb0, 0xeeeeea, 0x111316, 0xf06a14], gears: 7, idle: 800, red: 6800, eng: 'i4t', rim: 'sport',
+      shape: {
+        sill: [[-2.09, 0.4], [-1.88, 0.27], [-1.55, 0.24], [1.5, 0.24], [1.85, 0.26], [2.09, 0.33]],
+        belt: [[-2.09, 0.82], [-1.95, 0.9], [-1.5, 0.93], [-0.8, 0.9], [0.0, 0.84], [0.8, 0.78], [1.5, 0.7], [1.9, 0.6], [2.09, 0.5]],
+        roof: [[-0.6, 1.21], [-0.3, 1.25], [0.0, 1.25]], cab: [-1.4, -0.6, 0.0, 0.85], rc: [0.3, 0.55], p: [2.6, 2.0],
+        shoulder: 0.15, tumble: 0.27, crown: [0.03, 0.0, 0.02], glass: [-0.65, 0.82], trim: 'gloss',
+        doors: [0.82, -0.45], intake: { y: [0.25, 0.4], x: 0.6, d: 0.15 }, tail: { y: [-0.12, -0.04], x: 0.4, d: 0.2, rev: [0.4, 0.48] }, diffuser: 0.4,
+        lamps: [{ type: 'face', x: 0.6, y: 0.6, r: 0.085, ring: 'gloss', ind: true }, { type: 'face', x: 0.36, y: 0.5, r: 0.055, ring: 'gloss', noInd: true }], plate: [0.3, 0.5]
+      } },
+    // BMW M4 (G82): the 510-horsepower coupé, the tall kidney grille, a carbon roof
+    { id: 'm4', name: 'BMW M4', kind: 'Sportcoupé', def: 'M4:an', sport: true, W: 1.887, L: 4.794, R: 0.36, wb: 2.857, max: 81, zero: [100, 3.9], brake: 34, rev: 9, mass: 1.75, grip: 1.15,
+      colors: [0x1f6b44, 0xe8c700, 0xb3121b, 0xeeeeea, 0x111316], gears: 8, idle: 750, red: 7200, eng: 'i6', rim: 'black',
+      shape: {
+        sill: [[-2.397, 0.44], [-2.17, 0.31], [-1.85, 0.27], [1.85, 0.27], [2.15, 0.29], [2.397, 0.36]],
+        belt: [[-2.397, 0.9], [-2.3, 0.98], [-2.0, 1.0], [-0.5, 0.97], [0.6, 0.94], [1.5, 0.88], [2.05, 0.79], [2.397, 0.66]],
+        roof: [[-0.95, 1.34], [-0.4, 1.38], [0.15, 1.38]], cab: [-1.8, -0.95, 0.15, 0.95], rc: [0.22, 0.42], p: [3.4, 2.8],
+        shoulder: 0.12, tumble: 0.2, crown: [0.03, 0.03, 0.025], glass: [-1.4, 0.92], pillars: [[-0.15, 0.1]], trim: 'gloss', roofTone: 0x15171a,
+        doors: [0.92, -0.4], head: { y: [-0.12, -0.05], x: 0.5, d: 0.3 }, intake: { y: [0.28, 0.42], x: 0.85, d: 0.15 },
+        kidney: { x0: 0.04, x1: 0.3, y0: 0.4, y1: 0.78 }, tail: { y: [-0.13, -0.04], x: 0.35, d: 0.25, rev: [0.35, 0.42] }, diffuser: 0.42,
+        pipes: [[-0.62, 0.36], [-0.5, 0.36], [0.5, 0.36], [0.62, 0.36]], plate: [0.34, 0.55]
+      } },
+    // Nissan GT-R (R35), "Godzilla": the twin-turbo V6 and four-wheel drive that beat far dearer cars, four round tail
+    // lamps and a wing on the boot
+    { id: 'gtr', name: 'Nissan GT-R', kind: 'Sportcoupé', def: 'GT-R:en', sport: true, W: 1.895, L: 4.71, R: 0.36, wb: 2.78, max: 87, zero: [100, 2.8], brake: 36, rev: 9, mass: 1.75, grip: 1.25,
+      colors: [0xb5b8bb, 0xeeeeea, 0x111316, 0xf06a14, 0x1f4fae], gears: 6, idle: 800, red: 7100, eng: 'v6', rim: 'black',
+      shape: {
+        sill: [[-2.355, 0.44], [-2.13, 0.3], [-1.8, 0.27], [1.8, 0.27], [2.1, 0.29], [2.355, 0.35]],
+        belt: [[-2.355, 0.92], [-2.25, 1.0], [-1.95, 1.01], [-0.6, 0.98], [0.5, 0.93], [1.4, 0.86], [2.0, 0.76], [2.355, 0.6]],
+        roof: [[-0.95, 1.31], [-0.45, 1.36], [0.1, 1.36]], cab: [-1.7, -0.95, 0.1, 0.9], rc: [0.22, 0.42], p: [3.6, 2.6],
+        shoulder: 0.13, tumble: 0.2, crown: [0.03, 0.02, 0.025], glass: [-1.3, 0.88], pillars: [[-0.3, 0.12]], trim: 'gloss',
+        doors: [0.88, -0.45], head: { y: [-0.12, -0.04], x: 0.5, d: 0.32 }, grille: { y: [0.38, 0.6], x: 0.4, d: 0.15 },
+        intake: { y: [0.25, 0.38], x: 0.85, d: 0.15 }, lamps: [{ type: 'tailRound', xs: [0.5, 0.72], y: 0.86, r: 0.08 }], tail: { y: [-0.1, -0.04], x: 2, d: 0.2 },
+        diffuser: 0.42, wing: { h: 0.2, z: 0.3 }, plate: [0.36, 0.5]
+      } },
+    // Lotus Elise (S2): "simplify, then add lightness", 860 kg, the engine behind the seats, the roof off and a hoop
+    { id: 'elise', name: 'Lotus Elise', kind: 'Roadster', def: 'Elisen', sport: true, rearEngine: true, W: 1.719, L: 3.785, R: 0.31, wb: 2.3, max: 65, zero: [100, 4.6], brake: 32, rev: 9, mass: 0.9, grip: 1.18,
+      colors: [0xf2c80f, 0x1f6b44, 0xeeeeea, 0x111316, 0xf06a14], gears: 6, idle: 900, red: 7800, eng: 'i4', rim: 'sport',
+      shape: {
+        sill: [[-1.8925, 0.36], [-1.7, 0.24], [-1.4, 0.2], [1.35, 0.2], [1.68, 0.22], [1.8925, 0.28]],
+        belt: [[-1.8925, 0.76], [-1.75, 0.85], [-1.3, 0.86], [-0.85, 0.82], [-0.3, 0.78], [0.4, 0.74], [1.0, 0.68], [1.55, 0.6], [1.8925, 0.48]],
+        roof: [[-0.7, 0.8], [0.3, 0.8]], cab: [-0.75, -0.7, 0.25, 0.45], rc: [0.3, 0.55], p: [2.4, 1.9], open: { z: [-0.75, 0.45], screen: 0.3, hoop: true },
+        shoulder: 0.12, tumble: 0.22, crown: [0.02, 0.02, 0.02], glass: [-0.7, 0.4], trim: 'gloss',
+        doors: [0.4, -0.55], head: { y: [-0.08, -0.02], x: 0.45, d: 0.32 }, intake: { y: [0.22, 0.34], x: 0.55, d: 0.12 },
+        sideIntake: { z: [-0.95, -0.6], y: [0.36, 0.6] }, lamps: [{ type: 'tailRound', xs: [0.48, 0.65], y: 0.66, r: 0.06 }], tail: { y: [-0.1, -0.05], x: 2, d: 0.2 },
+        diffuser: 0.36, plate: [0.3, 0.45]
+      } },
+    // Gilera Stalker (2003): the naked 50 cc scooter in grey, its frame tube out in the open, twin headlamps under a
+    // little screen and the exhaust curling up on the right. A two-stroke with a variator, 45 km/h like every class I
+    // moped. (It has a shape of its own: see mopedGeometry)
+    { id: 'stalker', name: 'Gilera Stalker', kind: 'Moped 50 cc', def: 'Gileran', moped: true, cvt: true, W: 0.74, L: 1.78, R: 0.24, wb: 1.225, max: 12.5, zero: [30, 4.2], brake: 7.5, rev: 1.5, mass: 0.2, grip: 0.9,
+      colors: [0x9ea3a8], gears: 1, idle: 1800, red: 9500, eng: 'twostroke', rim: 'scooter', shape: {} },
+    { id: 'polis', name: 'Polisbil', kind: 'Volvo V90', def: 'polisbilen', police: true, W: 1.88, L: 4.94, R: 0.36, wb: 2.94, max: 64, zero: [100, 6.0], brake: 30, rev: 9, mass: 1.9, grip: 1.08,
+      colors: [0xf4f5f2], gears: 6, idle: 800, red: 6500, eng: 'i4t', rim: 'alloy',
+      shape: {
+        sill: [[-2.47, 0.46], [-2.22, 0.33], [-1.9, 0.3], [1.85, 0.3], [2.15, 0.32], [2.47, 0.4]],
+        belt: [[-2.47, 0.92], [-2.38, 1.0], [-2.05, 1.0], [0.0, 0.97], [1.05, 0.94], [1.65, 0.87], [2.15, 0.8], [2.47, 0.68]],
+        roof: [[-2.12, 1.4], [-1.0, 1.45], [0.3, 1.46]], cab: [-2.38, -2.12, 0.3, 1.32], rc: [0.2, 0.42], p: [3.5, 2.8],
+        shoulder: 0.1, tumble: 0.16, crown: [0.03, 0.035, 0.03], glass: [-2.1, 1.27], pillars: [[0.05, 0.1], [-1.25, 0.1]], trim: 'chrome',
+        doors: [1.25, 0.03, -1.27], head: { y: [-0.14, -0.06], x: 0.4, d: 0.27 }, grille: { y: [0.52, -0.06], x: 0.36, d: 0.15 },
+        intake: { y: [0.38, 0.47], x: 0.6, d: 0.15 }, tail: { y: [-0.2, -0.02], x: 0.55, d: 0.2, up: 0.3, rev: [0.55, 0.63] },
+        livery: { rows: [0.42, 0.6, 0.78], z: [-2.0, 1.98], block: 0.44 }, iron: true, police: true, plate: [0.45, 0.66]
+      } }
+  ];
+  // the piket: the police's Mercedes Sprinter with windows down the sides, in the blue and yellow checks, sent from four stars
+  {
+    const S = MODELS.find((m) => m.id === 'skapbil').shape;
+    MODELS.push({ id: 'piket', name: 'Piketbuss', kind: 'Mercedes Sprinter', def: 'piketen', police: true, W: 2.02, L: 5.93, R: 0.38, wb: 3.66, max: 44, zero: [100, 11], brake: 24, rev: 8, mass: 2.6, grip: 0.95,
+      colors: [0xf4f5f2], gears: 7, idle: 750, red: 4600, eng: 'diesel', rim: 'steel',
+      shape: Object.assign({}, S, { glass: [-2.75, 2.18], pillars: [[0.62, 0.12], [-0.62, 0.1], [-1.82, 0.1]], glassLevels: [1.45, 2.05], doors: [2.18, 0.62, -0.62],
+        livery: { rows: [0.62, 0.88, 1.12], z: [-2.85, 2.55], block: 0.5 }, police: true, rearWin: { d: 0.1, y: [1.45, 2.05], x: [0.08, 0.86] } }) });
+  }
+  const MODEL_JET_HULL = [[-1.63, 0.56, -0.2, 0.36], [-1.2, 0.62, -0.28, 0.4], [-0.3, 0.635, -0.32, 0.44], [0.5, 0.6, -0.3, 0.48], [1.1, 0.47, -0.2, 0.5], [1.45, 0.28, -0.05, 0.48], [1.63, 0.06, 0.12, 0.42]];
+  // On the water: the Sea-Doo RXP-X jet ski (supercharged three-cylinder, 300 hp, 108 km/h), an Anytec 622 SPD, the
+  // aluminium boat from Kristinehamn that half of Stockholm drives, with a 250 hp V8 outboard, and the Riva Aquarama,
+  // the varnished mahogany runabout with two V8s. They are driven like the cars, stay on the water and go under the
+  // bridges, and are boarded from a quay. (Their shapes are their own: see boatGeometry)
+  MODELS.push(
+    { id: 'jetski', name: 'Sea-Doo RXP-X', kind: 'Vattenskoter', def: 'vattenskotern', boat: 'jetski', engine: 'Kompressor, 300 hk', hull: MODEL_JET_HULL, W: 1.27, L: 3.27, R: 0.3, wb: 2, max: 30, zero: [50, 2.4], brake: 7, rev: 3, mass: 0.45, grip: 1,
+      colors: [0xf2c200, 0x1d1f22, 0xe8e8e4, 0xd8203a, 0x1f6bd8], gears: 1, idle: 1500, red: 8000, eng: 'jetski', shape: {} },
+    { id: 'anytec', name: 'Anytec 622 SPD', kind: 'Motorbåt', def: 'Anytec-båten', boat: 'console', engine: 'Utombordare, 250 hk', hull: [[-3.11, 1.1, -0.36, 0.7], [-2.2, 1.17, -0.42, 0.72], [-0.6, 1.175, -0.46, 0.76], [0.9, 1.12, -0.45, 0.82], [2.0, 0.86, -0.32, 0.9], [2.7, 0.5, -0.1, 0.96], [3.11, 0.06, 0.24, 0.98]], W: 2.35, L: 6.22, R: 0.3, wb: 4, max: 24, zero: [50, 4.6], brake: 4.5, rev: 3, mass: 1.6, grip: 1,
+      colors: [0x8d9297, 0x2a2d31, 0xe8e8e4], gears: 1, idle: 700, red: 6000, eng: 'outboard', shape: {} },
+    { id: 'riva', name: 'Riva Aquarama', kind: 'Motorbåt', def: 'Rivan', boat: 'riva', engine: 'Två V8, 2 × 350 hk', hull: [[-4.01, 1.15, -0.32, 0.6], [-3.0, 1.27, -0.4, 0.64], [-1.0, 1.3, -0.48, 0.7], [1.0, 1.22, -0.48, 0.76], [2.5, 0.92, -0.33, 0.82], [3.5, 0.5, -0.08, 0.84], [4.01, 0.06, 0.24, 0.8]], W: 2.6, L: 8.02, R: 0.3, wb: 5, max: 22, zero: [50, 5.8], brake: 3.5, rev: 2.5, mass: 2.4, grip: 1,
+      colors: [0x7a3b1c], gears: 1, idle: 650, red: 4800, eng: 'v8', shape: {} }
+  );
+  // The sjöpolis, out after you when you run from the police on the water: a white patrol boat with a wheelhouse, the blue
+  // and yellow checks down its sides and blue lights on the roof, and a Sea-Doo in the same colours. At five stars the
+  // navy sends Stridsbåt 90 (CB90), the 16-metre combat boat on two water jets with a heavy machine gun on its wheelhouse.
+  // Not in the car picker, and they can't be taken. (Their shapes are in boatGeometry)
+  MODELS.push(
+    { id: 'polisbat', name: 'Polisbåt', kind: 'Targa 31', def: 'polisbåten', boat: 'patrol', police: true, engine: 'Två dieslar, 2 × 370 hk', hull: [[-4.7, 1.45, -0.45, 0.95], [-3.4, 1.5, -0.55, 0.98], [-1.0, 1.5, -0.6, 1.03], [1.4, 1.44, -0.58, 1.1], [3.0, 1.12, -0.42, 1.2], [4.1, 0.66, -0.14, 1.28], [4.7, 0.08, 0.3, 1.3]], W: 3.0, L: 9.4, R: 0.3, wb: 6, max: 23, zero: [50, 6], brake: 4.5, rev: 3, mass: 5, grip: 1,
+      colors: [0xf4f5f2], gears: 1, idle: 650, red: 3800, eng: 'outboard', shape: {} },
+    { id: 'polisjet', name: 'Polisens vattenskoter', kind: 'Sea-Doo GTX', def: 'polisvattenskotern', boat: 'jetski', police: true, engine: 'Kompressor, 300 hk', hull: MODEL_JET_HULL, W: 1.27, L: 3.27, R: 0.3, wb: 2, max: 29, zero: [50, 2.6], brake: 7, rev: 3, mass: 0.5, grip: 1,
+      colors: [0xf4f5f2], gears: 1, idle: 1500, red: 8000, eng: 'jetski', shape: {} },
+    { id: 'strb90', name: 'Stridsbåt 90', kind: 'Stridsbåt 90 H', def: 'stridsbåten', boat: 'cb90', mil: 'boat', engine: 'Två dieslar med vattenjet, 2 × 625 hk', hull: [[-7.95, 1.85, -0.55, 1.25], [-6.0, 1.9, -0.65, 1.3], [-2.0, 1.9, -0.72, 1.33], [2.0, 1.88, -0.7, 1.36], [5.0, 1.62, -0.52, 1.42], [6.9, 1.2, -0.22, 1.5], [7.95, 0.72, 0.28, 1.55]], W: 3.8, L: 15.9, R: 0.3, wb: 10, max: 20.5, zero: [50, 9], brake: 5, rev: 3, mass: 20, grip: 1.1,
+      colors: [0x5b6b45], gears: 1, idle: 600, red: 2300, eng: 'bus', shape: {} }
+  );
+  // Försvarsmakten, called in at five stars: Stridsvagn 122 (the Swedish Leopard 2A5, 62 tonnes, 72 km/h, the arrowhead
+  // armour on the turret and the long 120 mm gun), Pansarterrängbil 360 (Patria AMV, eight wheels, a remote weapon
+  // station on the roof) and a six-wheeled Scania lastterrängbil with soldiers under the tarpaulin, all in the M90
+  // splinter camouflage. Not in the car picker, but they can be taken. (Their shapes are their own: see militaryGeometry)
+  MODELS.push(
+    { id: 'strv122', name: 'Stridsvagn 122', kind: 'Stridsvagn', def: 'stridsvagnen', mil: 'tank', W: 3.7, L: 7.7, R: 0.35, wb: 2.2, max: 20, zero: [50, 10], brake: 14, rev: 6, mass: 60, grip: 1.5,
+      axles: [2.85, 1.9, 0.95, 0, -0.95, -1.9, -2.85], steers: 0, colors: [0x5b6b45], gears: 4, idle: 650, red: 2600, eng: 'tank', rim: 'tank', shape: {} },
+    { id: 'patgb360', name: 'Pansarterrängbil 360', kind: 'Patria AMV', def: 'pansarbilen', mil: 'patria', W: 2.8, L: 7.7, R: 0.6, wb: 4.5, max: 28, zero: [50, 8], brake: 16, rev: 7, mass: 22, grip: 1.15,
+      axles: [2.5, 1.15, -0.6, -1.95], steers: 2, colors: [0x5b6b45], gears: 7, idle: 600, red: 2500, eng: 'bus', rim: 'mil', shape: {} },
+    { id: 'miltruck', name: 'Lastterrängbil', kind: 'Scania 6×6', def: 'lastbilen', mil: 'truck', W: 2.55, L: 8.5, R: 0.6, wb: 5.6, max: 25, zero: [50, 11], brake: 14, rev: 6, mass: 15, grip: 1.0,
+      axles: [3.0, -1.35, -2.75], steers: 1, colors: [0x5b6b45], gears: 8, idle: 600, red: 2400, eng: 'bus', rim: 'mil', shape: {} }
+  );
+  const MODEL = Object.fromEntries(MODELS.map((m) => [m.id, m]));
+  const PICKABLE = MODELS.filter((m) => !m.police && !m.mil);
+  // on the picker's secret page: everything the police and then the army drive, each with the boats last
+  const SECRET = MODELS.filter((m) => m.police || m.mil).sort((a, b) => (a.mil ? 2 : 0) + (a.boat ? 1 : 0) - (b.mil ? 2 : 0) - (b.boat ? 1 : 0));
+  const REGULARS = MODELS.filter((m) => !m.sport && !m.bus && !m.police && !m.moped && !m.boat && !m.mil), SPORTS = MODELS.filter((m) => m.sport);
+  const MILITARY = MODELS.filter((m) => m.mil);
+  const BOATS = MODELS.filter((m) => m.boat);
+
+  /* ---------- gearbox and engine ---------- */
+  // Each gear tops out on the rev limiter at gearTop[i]; the last gear reaches the model's top speed. The gears are
+  // spread like real ones, first gear good for 50–60 km/h in an ordinary car, so the engine takes its time climbing
+  // through the revs in each gear. Low gears multiply the engine's torque, so they pull harder but run out of revs sooner.
+  for (const M of MODELS) {
+    M.gearTop = [];
+    for (let i = 1; i <= M.gears; i++) M.gearTop.push(M.max * Math.pow(i / M.gears, 0.62));
+  }
+  // share of peak torque at a fraction of the rev range: soft off idle, strongest in the middle, fading towards the limiter
+  const torqueAt = (r) => 0.62 + 0.38 * Math.sin(Math.PI * clamp(r, 0, 1) * 0.92);
+  function driveAccel(M, v, gear, power) {
+    const top = M.gearTop[gear], r = v / top;
+    if (r >= 1) return -1.5; // fuel cut on the rev limiter
+    // an electric motor pulls with full torque from a standstill and then runs out of power, all in one gear
+    if (M.ev) return M.accel * 0.72 * Math.min(1, 0.4 / Math.max(r, 1e-3)) * (1 - 0.25 * v / M.max) * power;
+    // a scooter's variator keeps the engine at its best revs and changes the ratio instead
+    if (M.cvt) return M.accel * 0.72 * (1 - 0.55 * Math.pow(v / M.max, 2)) * power;
+    // a boat's propeller or jet pushes hardest from rest and the water holds it back more and more as it speeds up
+    if (M.boat) return M.accel * 0.72 * (1 - Math.pow(v / M.max, 2)) * power;
+    // first gear slips the clutch from a standstill; a gear that is too high makes the engine lug
+    let k = torqueAt(gear === 0 ? Math.max(r, 0.38) : r);
+    if (gear > 0 && r < 0.3) k *= 0.3 + (r / 0.3) * 0.7;
+    // turbo lag (the F40's): little below the boost, then it all comes in at once
+    if (M.lag) { const b = clamp((r - 0.35) / 0.25, 0, 1); k *= 0.7 + 0.45 * b * b * (3 - 2 * b); }
+    return M.accel * 0.72 * k * Math.pow(M.max / top, 0.3) * (1 - 0.25 * v / M.max) * power;
+  }
+  // the automatic changes up at these shares of the rev range: flat out, and when you drive gently
+  const SHIFT_TIME = 0.24, UP_HARD = 0.8, UP_SOFT = 0.5;
+  const sprintOf = (M, kmh) => {
+    let v = 0, t = 0, g = 0, sh = 0;
+    while (v < kmh / 3.6 && t < 60) {
+      if (sh > 0) sh -= 0.01;
+      else if (g < M.gears - 1 && v / M.gearTop[g] > UP_HARD) { g++; sh = SHIFT_TIME; }
+      else v += driveAccel(M, v, g, 1) * 0.01;
+      t += 0.01;
+    }
+    return t;
+  };
+  // Every model accelerates like the real car: its pull is set so that 0–100 km/h (0–50 for the bus, 0–30 for the
+  // moped) takes the real time, a touch quicker for the game (ZIP)
+  const ZIP = 0.85;
+  for (const M of MODELS) {
+    const [kmh, real] = M.zero;
+    let lo = 0.5, hi = 80;
+    for (let i = 0; i < 26; i++) { M.accel = (lo + hi) / 2; if (sprintOf(M, kmh) > real * ZIP) lo = M.accel; else hi = M.accel; }
+    const t = sprintOf(M, kmh), target = kmh / 3.6;
+    M.sprint = { kmh: Math.round(target * 3.6), t };
+  }
+
+  /* ---------- car materials ---------- */
+  // Each car has one PBR material. The vertex attribute "surf" says how rough, metallic and lacquered each part is,
+  // and which light it belongs to: 1 headlights, 2 tail/brake lights, 3 and 4 the blue lights left/right, 5 reversing lights.
+  // Below zero it marks the parts the shader adds detail to: -1 the paint (metal flakes under the clear coat), -2 the tyres.
+  // The paint is a base coat with a little metal in it under a full, glassy clear coat; chrome and the rims are bare
+  // polished metal, sharp enough to mirror the street; the tyres are matte rubber.
+  const SURF = {
+    paint: [0.34, 0.12, 1, -1], trim: [0.62, 0.1, 0, 0], gloss: [0.1, 0.2, 1, 0], chrome: [0.05, 1, 0, 0], plate: [0.4, 0, 0, 0], tyre: [0.86, 0, 0, -2],
+    alloy: [0.2, 1, 0.45, 0], under: [0.85, 0, 0, 0],
+    head: [0.08, 0, 1, 1], tail: [0.12, 0, 1, 2], blueL: [0.08, 0, 1, 3], blueR: [0.08, 0, 1, 4], rev: [0.08, 0, 1, 5],
+    indL: [0.1, 0, 1, 6], indR: [0.1, 0, 1, 7]
+  };
+  const COL = {
+    head: 0xfff4d0, tail: 0xb3121b, rev: 0xf6f6f6, blueL: 0x2a5cff, blueR: 0x2a5cfe, plate: 0xf4f4f4, euBlue: 0x1f4fae,
+    hub: 0x3a3d41, chrome: 0xc6cbd1, tyre: 0x17191c, busSign: 0xffa21a, doors: 0x2a3540, polBlue: 0x163d8c, polYellow: 0xd4e01c,
+    rim: 0xb9bec4, rimDark: 0x2b2e33, aero: 0x8d9399, disc: 0x8b8f94, caliper: 0xb3131c, caliperGrey: 0x55595e, amber: 0xe8901c, rimLight: 0xdcdfe2,
+    // the indicators, left (+x, the driver's side) and right: the same amber, told apart so that each side blinks on its own
+    indL: 0xff7400, indR: 0xff7401
+  };
+  // LEXAN: the F40's smoked engine cover
+  const CAR_GLASS = -2, UNDER = 0x0e0f11, CLAD = 0x26282b, GLOSS = 0x111215, CHROME = COL.chrome, STRIPE = 0xf2f2ef, LEXAN = 0x4c535a;
+  const TRIM = { gloss: GLOSS, chrome: CHROME, dark: 0x1f2226, under: UNDER, lexan: LEXAN };
+  function carSurf(paint) {
+    return (col) => (col === paint || col === COL.polBlue || col === COL.polYellow || col === STRIPE ? SURF.paint
+      : col === GLOSS || col === 0xf2c200 || col === COL.caliper || col === LEXAN || col === COL.amber ? SURF.gloss
+        : col === COL.rim || col === COL.rimDark || col === COL.aero || col === COL.disc || col === COL.rimLight ? SURF.alloy : col === UNDER || col === CLAD ? SURF.under
+      : col === COL.head || col === COL.busSign ? SURF.head : col === COL.tail ? SURF.tail : col === COL.rev ? SURF.rev
+        : col === COL.blueL ? SURF.blueL : col === COL.blueR ? SURF.blueR : col === COL.indL ? SURF.indL : col === COL.indR ? SURF.indR : col === COL.chrome ? SURF.chrome
+          : col === COL.plate || col === COL.euBlue ? SURF.plate : col === COL.tyre ? SURF.tyre : col === COL.doors ? SURF.gloss : SURF.trim);
+  }
+  // Reflections of the street: a small cube map caught round the camera (see POST) is mirrored in the cars near it,
+  // over the sky they reflect everywhere else. It holds the finished picture (tone mapped, sRGB), so it is turned back
+  // into light here, and a little of what the tone curve squeezed out of the bright sky and the sun is given back.
+  const CAR_PROBE = { tProbe: { value: null }, uProbeOn: { value: 0 }, uProbePos: { value: new THREE.Vector3() }, uProbeMip: { value: 8 } };
+  const PROBE_PARS = [
+    'uniform samplerCube tProbe;\nuniform float uProbeOn, uProbeMip;\nuniform vec3 uProbePos;\nvarying vec3 vCarW;',
+    '#ifdef USE_ENVMAP',
+    'vec3 probeRadiance( const in vec3 viewDir, const in vec3 n, const in float rough ) {',
+    '\tvec3 r = reflect( -viewDir, n );',
+    '\tr = inverseTransformDirection( normalize( mix( r, n, rough * rough ) ), viewMatrix );',
+    '\tfloat lod = clamp( uProbeMip + log2( PI * rough * rough / ( 1.0 + rough ) ), 0.0, uProbeMip );',
+    '\t#ifdef TEXTURE_LOD_EXT',
+    '\t\tvec3 c = textureCubeLodEXT( tProbe, r, lod ).rgb;',
+    '\t#else',
+    '\t\tvec3 c = textureCube( tProbe, r, lod ).rgb;',
+    '\t#endif',
+    '\tc = sRGBToLinear( vec4( c, 1.0 ) ).rgb;',
+    '\treturn c / max( vec3( 1.0 ) - c * 0.7, vec3( 0.3 ) ) * envMapIntensity;',
+    '}',
+    '#endif'
+  ].join('\n');
+  // (how much of the probe a point gets: all of it within 25 m of where it was caught, none beyond 60 m)
+  const PROBE_MIX = [
+    '#include <lights_fragment_maps>',
+    '#ifdef USE_ENVMAP',
+    '\tfloat probeK = uProbeOn * ( 1.0 - smoothstep( 25.0, 60.0, distance( vCarW, uProbePos ) ) );',
+    '\tif ( probeK > 0.0 ) {',
+    '\t\tradiance = mix( radiance, probeRadiance( geometry.viewDir, geometry.normal, material.specularRoughness ), probeK );',
+    '\t\t#ifdef CLEARCOAT',
+    '\t\t\tclearcoatRadiance = mix( clearcoatRadiance, probeRadiance( geometry.viewDir, geometry.clearcoatNormal, material.clearcoatRoughness ), probeK );',
+    '\t\t#endif',
+    '\t}',
+    '#endif'
+  ].join('\n');
+  function probeShader(shader) {
+    Object.assign(shader.uniforms, CAR_PROBE);
+    shader.vertexShader = 'varying vec3 vCarW;\n' + shader.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n\tvCarW = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <envmap_physical_pars_fragment>', '#include <envmap_physical_pars_fragment>\n' + PROBE_PARS)
+      .replace('#include <lights_fragment_maps>', PROBE_MIX);
+  }
+  // The detail the shader adds up close, and fades out with distance so it never shimmers: the paint's metal flakes
+  // (tiny mirrors tilted every which way under the clear coat, so the sun glints in the base coat) and the tyres' tread,
+  // grooves round the running surface and blocks across it, with the sidewall a shade smoother than the tread
+  // (only on the wheels, whose middle is their origin: not the spare wheel on a tailgate).
+  const CAR_DETAIL = [
+    '#include <normal_fragment_maps>',
+    '\tfloat carDist = length( vViewPosition );',
+    '\tif ( vSurf.w < -0.5 && vSurf.w > -1.5 && carDist < 7.0 ) {',
+    '\t\tvec3 fl = fract( floor( vCarO * 420.0 ) * vec3( 0.1031, 0.1030, 0.0973 ) );',
+    '\t\tfl += dot( fl, fl.yxz + 33.33 );',
+    '\t\tfl = fract( ( fl.xxy + fl.yxx ) * fl.zyx ) - 0.5;',
+    '\t\tnormal = normalize( normal + fl * 0.07 * ( 1.0 - smoothstep( 1.5, 7.0, carDist ) ) );',
+    '\t} else if ( vSurf.w < -1.5 && dot( vCarO.yz, vCarO.yz ) < 0.5 ) {',
+    '\t\tfloat side = smoothstep( 0.55, 0.85, abs( vCarN.x ) );',
+    '\t\troughnessFactor = mix( roughnessFactor, 0.72, side );',
+    '\t\tdiffuseColor.rgb *= mix( 1.0, 1.25, side );',
+    '\t\tif ( carDist < 22.0 && side < 0.5 ) {',
+    '\t\t\tfloat u = abs( vCarO.x ) * 9.0, a = atan( vCarO.z, vCarO.y ) * 9.549;',
+    '\t\t\tfloat groove = 1.0 - smoothstep( 0.05, 0.12, abs( fract( u ) - 0.5 ) );',
+    '\t\t\tgroove = max( groove, 1.0 - smoothstep( 0.04, 0.1, abs( fract( a + u * 0.35 ) - 0.5 ) ) );',
+    '\t\t\tgroove *= ( 1.0 - side * 2.0 ) * ( 1.0 - smoothstep( 8.0, 22.0, carDist ) );',
+    '\t\t\tdiffuseColor.rgb *= 1.0 - 0.45 * groove;',
+    '\t\t\troughnessFactor = min( 1.0, roughnessFactor + 0.1 * groove );',
+    '\t\t}',
+    '\t}'
+  ].join('\n');
+  function carShader(shader) {
+    shader.uniforms.uGlow = { value: this.userData.glow };
+    shader.uniforms.uRev = this.userData.rev;
+    shader.uniforms.uInd = { value: this.userData.ind };
+    shader.vertexShader = 'attribute vec4 surf;\nvarying vec4 vSurf;\nvarying vec3 vCarO, vCarN;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvSurf = surf;\n\tvCarO = position;\n\tvCarN = normal;');
+    shader.fragmentShader = 'varying vec4 vSurf;\nvarying vec3 vCarO, vCarN;\nuniform vec4 uGlow;\nuniform float uRev;\nuniform vec2 uInd;\n' + shader.fragmentShader
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n\troughnessFactor = vSurf.x;')
+      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\n\tmetalnessFactor = vSurf.y;')
+      .replace('#include <normal_fragment_maps>', CAR_DETAIL)
+      .replace('#include <lights_physical_fragment>', THREE.ShaderChunk.lights_physical_fragment.replace('material.clearcoat = clearcoat;', 'material.clearcoat = clearcoat * vSurf.z;'))
+      .replace('#include <emissivemap_fragment>', [
+        '#include <emissivemap_fragment>',
+        '\tfloat lightCh = vSurf.w;',
+        '\tfloat glow = lightCh < 0.5 ? 0.0 : lightCh < 1.5 ? uGlow.x : lightCh < 2.5 ? uGlow.y : lightCh < 3.5 ? uGlow.z : lightCh < 4.5 ? uGlow.w : lightCh < 5.5 ? uRev : lightCh < 6.5 ? uInd.x : uInd.y;',
+        '\ttotalEmissiveRadiance += diffuseColor.rgb * glow;'
+      ].join('\n'));
+    probeShader(shader);
+  }
+  const HEAD_GLOW = 0.6, TAIL_GLOW = 0.3, BRAKE_GLOW = 2.6, IND_GLOW = 2.6;
+  const IND = (s) => (s > 0 ? COL.indL : COL.indR);
+  function carMaterial() {
+    const m = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.3, clearcoat: 1, clearcoatRoughness: 0.025, envMapIntensity: 0.8 });
+    m.userData.glow = new THREE.Vector4(HEAD_GLOW, TAIL_GLOW, 0, 0);
+    m.userData.rev = { value: 0 };
+    m.userData.ind = new THREE.Vector2(0, 0);
+    m.onBeforeCompile = carShader;
+    return m;
+  }
+  const wheelMat = carMaterial();
+  // Car windows: tinted glass you see the seats and the driver through head on, turning into a mirror of the sky and the
+  // street at a glancing angle (Fresnel), and as solid as its reflection is bright, as real glass looks
+  const glassMat = new THREE.MeshPhysicalMaterial({ color: 0x15222a, roughness: 0.02, metalness: 0, transparent: true, opacity: 0.62, envMapIntensity: 1.1 });
+  glassMat.onBeforeCompile = (shader) => {
+    probeShader(shader);
+    shader.fragmentShader = shader.fragmentShader.replace('gl_FragColor = vec4( outgoingLight, diffuseColor.a );', [
+      'float glassF = pow( 1.0 - saturate( dot( normal, normalize( vViewPosition ) ) ), 4.0 );',
+      '\tfloat glassA = saturate( mix( diffuseColor.a, 1.0, glassF ) + linearToRelativeLuminance( reflectedLight.directSpecular + reflectedLight.indirectSpecular ) );',
+      '\tgl_FragColor = vec4( outgoingLight, glassA );'
+    ].join('\n'));
+  };
+  const crackedMat = new THREE.MeshStandardMaterial({ color: 0xa9b6bd, roughness: 0.6, metalness: 0.1, transparent: true, opacity: 0.92 });
+  const blobMat = new THREE.MeshBasicMaterial({ map: blobTex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 });
+  const blobGeo = new THREE.PlaneGeometry(1, 1); blobGeo.rotateX(-Math.PI / 2);
+  // POLIS in the top half, the yellow TAXI sign in the bottom half
+  const polisTex = canvasTex(256, 128, (g, w, h) => {
+    g.font = '900 52px Overpass, "Arial Black", Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillStyle = '#163d8c'; g.fillText('POLIS', w / 2, h / 4 + 3, w - 12);
+    g.fillStyle = '#f2c200'; g.fillRect(0, h / 2, w, h / 2);
+    g.fillStyle = '#15171a'; g.font = '900 50px Overpass, "Arial Black", Arial, sans-serif'; g.fillText('TAXI', w / 2, (h * 3) / 4 + 3, w - 30);
+  });
+  const decalMat = std({ map: polisTex, transparent: true, alphaTest: 0.35, roughness: 0.35, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+
+  // monotone cubic through [[x, y], ...] (it never overshoots between the points), flat beyond the ends
+  function curve(pts) {
+    const n = pts.length, xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]), d = [], m = new Array(n).fill(0);
+    for (let i = 0; i < n - 1; i++) d.push((ys[i + 1] - ys[i]) / Math.max(1e-6, xs[i + 1] - xs[i]));
+    for (let i = 1; i < n - 1; i++) m[i] = d[i - 1] * d[i] <= 0 ? 0 : (d[i - 1] + d[i]) / 2;
+    m[0] = d[0]; m[n - 1] = d[n - 2];
+    for (let i = 0; i < n - 1; i++) {
+      if (d[i] === 0) { m[i] = m[i + 1] = 0; continue; }
+      const a = m[i] / d[i], b = m[i + 1] / d[i], h = a * a + b * b;
+      if (h > 9) { const t = 3 / Math.sqrt(h); m[i] = t * a * d[i]; m[i + 1] = t * b * d[i]; }
+    }
+    return (x) => {
+      if (x <= xs[0]) return ys[0];
+      if (x >= xs[n - 1]) return ys[n - 1];
+      let i = 0;
+      while (x > xs[i + 1]) i++;
+      const h = xs[i + 1] - xs[i], t = (x - xs[i]) / h, t2 = t * t, t3 = t2 * t;
+      return (2 * t3 - 3 * t2 + 1) * ys[i] + (t3 - 2 * t2 + t) * h * m[i] + (-2 * t3 + 3 * t2) * ys[i + 1] + (t3 - t2) * h * m[i + 1];
+    };
+  }
+
+  // The body is lofted: a cross-section ("ring") at each station along the car, from the sill up the side, over the
+  // glasshouse and the roof to the middle, mirrored for the other side. Rings share their row count, so neighbouring
+  // rings join into quads; every quad gets a colour from where it sits (lamp, grille, window, pillar, livery ...).
+  function carShape(M) {
+    if (M._shape) return M._shape;
+    const S = M.shape, hl = M.L / 2, hw = M.W / 2;
+    const sill = curve(S.sill), beltRaw = curve(S.belt), roof = curve(S.roof);
+    const [r0, r1, r2, r3] = S.cab, [rcR, rcF] = S.rc, [pR, pF] = S.p || [3, 3], bulge = S.bulge ?? 0.06;
+    const halfW = (z) => {
+      let d, p;
+      if (z > hl - rcF) { d = (z - hl + rcF) / rcF; p = pF; } else if (z < -hl + rcR) { d = (-hl + rcR - z) / rcR; p = pR; } else return hw;
+      return hw * Math.pow(Math.max(0, 1 - Math.pow(Math.min(1, d), p)), 1 / p);
+    };
+    // where the rounded end is at lateral offset x (s = 1 front, -1 rear)
+    const endZ = (x, s) => {
+      const rc = s > 0 ? rcF : rcR, p = s > 0 ? pF : pR, a = Math.min(1, Math.abs(x) / hw);
+      return s * (hl - rc + rc * Math.pow(Math.max(0, 1 - Math.pow(a, p)), 1 / p));
+    };
+    const wz = M.wb / 2, rA = M.R + 0.1, cA = M.R * 0.85;
+    const archTop = cA + rA;
+    // The waist line has to clear the wheel arch with a few centimetres of metal to spare. Where the drawn line is too
+    // low for that (the low noses of the Lamborghini, the Ferraris and the Porsches) it is lifted across the whole
+    // bonnet: a broad, even rise over the wheel that fades out towards the nose and the windscreen, never a hump
+    const FADE = 0.8, fade = (d) => (d <= rA ? 1 : d >= rA + FADE ? 0 : 0.5 + 0.5 * Math.cos(((d - rA) / FADE) * Math.PI));
+    const lifts = [wz, -wz].map((az) => {
+      let L = 0;
+      for (let i = -12; i <= 12; i++) { const dz = (rA * i) / 12; L = Math.max(L, cA + Math.sqrt(Math.max(0, rA * rA - dz * dz)) + 0.08 - beltRaw(az + dz)); }
+      return L;
+    });
+    const belt = (z) => beltRaw(z) + lifts[0] * fade(Math.abs(z - wz)) + lifts[1] * fade(Math.abs(z + wz));
+    const sillAt = (z) => {
+      let y = sill(z);
+      for (const az of [wz, -wz]) { const dz = z - az; if (Math.abs(dz) < rA) y = Math.max(y, cA + Math.sqrt(rA * rA - dz * dz)); }
+      return Math.min(y, belt(z) - 0.075);
+    };
+    // (an open car, a roadster, has no glasshouse: the body runs at the waist line all along, open over the cockpit)
+    const topAt = (z) => {
+      if (S.open || z < r0 - 1e-6 || z > r3 + 1e-6) return belt(z);
+      let t;
+      if (z < r1) t = lerp(belt(r0), roof(r1), (z - r0) / (r1 - r0));
+      else if (z > r2) t = lerp(roof(r2), belt(r3), (z - r2) / (r3 - r2));
+      else t = roof(z);
+      return Math.max(t, belt(z));
+    };
+    const prof = (u) => (u < 0.5 ? 1 - bulge + bulge * Math.sin((Math.max(0, u) / 0.5) * Math.PI / 2) : 1 - bulge * 0.5 * Math.pow((Math.min(1, u) - 0.5) / 0.5, 2));
+    const lv = (o, yt) => (o < 0 ? yt + o : o);
+    const sideLv = [];
+    for (const k of ['head', 'tail', 'grille', 'intake']) if (S[k]) sideLv.push(...S[k].y);
+    if (S.sideIntake) sideLv.push(...S.sideIntake.y);
+    if (S.livery) sideLv.push(...S.livery.rows);
+    if (S.sideStripe) sideLv.push(...S.sideStripe.y);
+    if (S.cladding) sideLv.push(S.cladding);
+    if (S.diffuser) sideLv.push(S.diffuser);
+    const glassLv = S.glassLevels || [], topXs = S.stripes ? [S.stripes[1], S.stripes[0]] : [];
+
+    // stations: the rounded ends sampled by angle, the middle evenly, plus every edge a colour change needs
+    const zs = [], NR = 9;
+    for (let i = 0; i <= NR; i++) {
+      const t = (i / NR) * Math.PI / 2;
+      zs.push(-hl + rcR - rcR * Math.pow(Math.sin(t), 2 / pR), hl - rcF + rcF * Math.pow(Math.sin(t), 2 / pF));
+    }
+    const m0 = -hl + rcR, m1 = hl - rcF, nm = Math.max(1, Math.ceil((m1 - m0) / 0.22));
+    for (let i = 1; i < nm; i++) zs.push(m0 + ((m1 - m0) * i) / nm);
+    zs.push(r0, r1, r2, r3, ...S.glass);
+    for (const [pz, pw] of S.pillars || []) zs.push(pz - pw / 2, pz + pw / 2);
+    for (const az of [wz, -wz]) for (let i = 0; i <= 12; i++) zs.push(az + rA * Math.sin((i / 12 - 0.5) * Math.PI));
+    for (const z of S.doors || []) zs.push(z - 0.009, z + 0.009);
+    for (const k of ['head', 'grille', 'intake']) if (S[k]) zs.push(hl - S[k].d);
+    if (S.tail) zs.push(-hl + S.tail.d);
+    if (S.rearWin) zs.push(-hl + S.rearWin.d);
+    if (S.sign) zs.push(hl - S.sign.d);
+    if (S.sideIntake) zs.push(...S.sideIntake.z);
+    if (S.sideStripe) zs.push(...S.sideStripe.z);
+    if (S.open) zs.push(...S.open.z);
+    if (S.louvre) zs.push(...S.louvre.z);
+    for (const [bz, bw] of S.roofBars || []) zs.push(bz - bw / 2, bz + bw / 2);
+    for (const [a, b] of S.busDoors || []) zs.push(a, b, (a + b) / 2 - 0.02, (a + b) / 2 + 0.02);
+    if (S.livery) {
+      const [a, b] = S.livery.z, n = Math.max(1, Math.round((b - a) / S.livery.block));
+      for (let i = 0; i <= n; i++) zs.push(a + ((b - a) * i) / n);
+    }
+    const Z = [...new Set(zs.filter((z) => z >= -hl - 1e-6 && z <= hl + 1e-6).map((z) => Math.round(clamp(z, -hl, hl) * 1000) / 1000))].sort((a, b) => a - b);
+
+    function ring(z) {
+      const yb = sillAt(z), yt = Math.max(belt(z), yb + 0.15), w = halfW(z), top = Math.max(topAt(z), yt), h = top - yt;
+      const k = clamp(h / 0.25, 0, 1);
+      const gB = Math.max(0, w - S.shoulder), gT = Math.max(0, gB - S.tumble * clamp(h / 0.45, 0, 1));
+      const xs = (y) => w * prof((y - yb) / (yt - yb));
+      const pts = [[0, yb, 'under'], [Math.max(0, xs(yb) - 0.06), yb, 'rocker']];
+      const ys = [yb + 0.06, yt - 0.07];
+      for (const o of sideLv) ys.push(clamp(lv(o, yt), yb + 0.06, yt - 0.07));
+      ys.sort((a, b) => a - b);
+      for (const y of ys) pts.push([xs(y), y, 'side']);
+      pts.push([Math.max(gB, xs(yt) - 0.035), yt - 0.02, 'ledge']);
+      const edge = Math.min(0.07, h * 0.3), yg = yt + Math.max(0, h - edge);
+      pts.push([gB, yt, 'glass']);
+      for (const y of glassLv) { const yy = clamp(y, yt, yg); pts.push([lerp(gB, gT, (yy - yt) / Math.max(1e-6, yg - yt)), yy, 'glass']); }
+      pts.push([gT, yg, 'rail']);
+      const crown = lerp(z > 0 ? S.crown[1] : S.crown[0], S.crown[2], k);
+      const xe = Math.max(0, gT - 0.1 * k - gB * 0.18 * (1 - k));
+      const cy = (x) => top + crown * (1 - (xe > 0 ? (x / xe) * (x / xe) : 0));
+      // (the crown of the bonnet, roof and boot sampled across, so it is a smooth curve and not a ridge down the middle)
+      const tx = [xe, xe * 0.75, xe * 0.5, xe * 0.25, ...topXs.map((x) => Math.min(x, xe))].sort((a, b) => b - a);
+      for (const x of tx) pts.push([x, cy(x), 'roof']);
+      pts.push([0, top + crown, 'end']);
+      return { pts, yb, yt, top, h, w, gB, gT, crown, xe };
+    }
+    const sideX = (z, y) => { const r = ring(z); return r.w * prof((y - r.yb) / (r.yt - r.yb)); };
+    const surfY = (z, x) => { const r = ring(z); return r.top + r.crown * (1 - (r.xe > 0 ? Math.min(1, (x / r.xe) ** 2) : 1)); };
+    const zone = (z) => (z > r2 && z < r3 ? 'wind' : z > r0 && z < r1 ? 'back' : z >= r1 && z <= r2 ? 'roof' : 'hood');
+    // the underside of the shell at (x, z): the roof and glass inside the glasshouse, the waist line elsewhere
+    const shellY = (x, z) => {
+      const r = ring(z), ax = Math.abs(x);
+      if (z < r0 || z > r3 || r.h <= 0.02) return r.yt;
+      const yg = r.yt + Math.max(0, r.h - Math.min(0.07, r.h * 0.3));
+      if (ax <= r.xe) return r.top + r.crown * (1 - (r.xe > 0 ? (ax / r.xe) ** 2 : 0));
+      if (ax <= r.gT) return yg;
+      if (ax <= r.gB) return r.yt + ((yg - r.yt) * (r.gB - ax)) / Math.max(1e-3, r.gB - r.gT);
+      return r.yt;
+    };
+    M._shape = { S, hl, hw, Z, ring, sill, belt, roof, sillAt, topAt, halfW, endZ, sideX, surfY, shellY, zone, lv, rA, cA, archTop, r0, r1, r2, r3 };
+    return M._shape;
+  }
+
+  // the colour of one quad of the loft
+  function bodyColour(sh, q, paint) {
+    const S = sh.S, { tag, z, x, y, yt } = q, hl = sh.hl;
+    const inY = (r) => y > sh.lv(r[0], yt) && y < sh.lv(r[1], yt);
+    if (tag === 'under') return UNDER;
+    if (tag === 'side' || tag === 'ledge' || tag === 'rocker') {
+      if (tag !== 'rocker') {
+        if (S.head && z > hl - S.head.d && x > S.head.x && inY(S.head.y)) return COL.head;
+        if (S.tail && z < -hl + S.tail.d && x > S.tail.x && inY(S.tail.y)) {
+          if (S.tail.rev && x > S.tail.rev[0] && x < S.tail.rev[1]) return COL.rev;
+          return S.tail.col ? TRIM[S.tail.col] : COL.tail;
+        }
+        if (S.grille && z > hl - S.grille.d && x < S.grille.x && inY(S.grille.y)) return S.grille.tone === 'body' ? q.grilleBody : GLOSS;
+        if (S.intake && z > hl - S.intake.d && x < S.intake.x && inY(S.intake.y)) return UNDER;
+        if (S.sideIntake && z > S.sideIntake.z[0] && z < S.sideIntake.z[1] && inY(S.sideIntake.y)) return UNDER;
+      }
+      if (S.diffuser && z < -hl + 0.25 && y < S.diffuser) return UNDER;
+      if (S.busDoors && q.side < 0) for (const [a, b] of S.busDoors) if (z > a && z < b) return Math.abs(z - (a + b) / 2) < 0.02 ? GLOSS : COL.doors;
+      if (S.cladding && y < S.cladding) return CLAD;
+      if (tag === 'rocker') return paint;
+      if (S.livery && z > S.livery.z[0] && z < S.livery.z[1] && y > S.livery.rows[0] && y < S.livery.rows[2]) {
+        const [a, b] = S.livery.z, n = Math.max(1, Math.round((b - a) / S.livery.block)), i = Math.floor(((z - a) / (b - a)) * n);
+        return (i + (y > S.livery.rows[1] ? 1 : 0)) % 2 ? COL.polBlue : COL.polYellow;
+      }
+      for (const d of S.doors || []) if (Math.abs(z - d) < 0.009 && y > q.yb + 0.04 && y < yt - 0.03) return q.seam;
+      // a stripe down the side (the 911 RS's Carrera script)
+      if (S.sideStripe && z > S.sideStripe.z[0] && z < S.sideStripe.z[1] && y > S.sideStripe.y[0] && y < S.sideStripe.y[1]) return S.sideStripe.col;
+      if (tag === 'ledge' && z > S.glass[0] && z < S.glass[1] && q.h > 0.08) return TRIM[S.trim || 'gloss'];
+      return paint;
+    }
+    if (tag === 'glass') {
+      if (S.sign && z > hl - S.sign.d && y > S.sign.y) return COL.busSign;
+      if (S.rearWin && z < -hl + S.rearWin.d) return y > S.rearWin.y[0] && y < S.rearWin.y[1] && x > S.rearWin.x[0] && x < S.rearWin.x[1] ? CAR_GLASS : paint;
+      if (z > S.glass[0] && z < S.glass[1] && q.h > 0.06) {
+        for (const [pz, pw] of S.pillars || []) if (Math.abs(z - pz) < pw / 2) return TRIM[S.pillarCol || 'gloss'];
+        if (S.busDoors && q.side < 0) for (const [a, b] of S.busDoors) if (z > a && z < b && Math.abs(z - (a + b) / 2) < 0.02) return GLOSS;
+        return CAR_GLASS;
+      }
+      if (S.tail && S.tail.up && z < -hl + S.tail.d && x > S.tail.x && y < yt + S.tail.up) return COL.tail;
+      return paint;
+    }
+    if (tag === 'rail') return q.roofTone !== null && z > sh.r1 && z < sh.r2 ? q.roofTone : paint;
+    // the top: bonnet, windscreen, roof, rear window, boot (an open car has none of the glass; see its windscreen)
+    const zn = S.open ? 'hood' : sh.zone(z);
+    if (zn === 'wind') return CAR_GLASS;
+    if (zn === 'back') return S.rearCol ? TRIM[S.rearCol] : CAR_GLASS;
+    if (zn === 'roof' && q.roofTone !== null) return q.roofTone;
+    if (zn === 'roof' && S.roofGlass) {
+      for (const [bz, bw] of S.roofBars || []) if (Math.abs(z - bz) < bw / 2) return GLOSS;
+      return CAR_GLASS;
+    }
+    if (S.louvre && z > S.louvre.z[0] && z < S.louvre.z[1] && x < S.louvre.x) return UNDER;
+    if (S.stripes && x > S.stripes[0] && x < S.stripes[1]) return q.stripe;
+    return paint;
+  }
+  function loftBody(M, paint, mg, gl) {
+    const sh = carShape(M), Z = sh.Z, rings = Z.map(sh.ring), ns = Z.length, H = rings[0].pts.length, N = 2 * H - 2;
+    const P = new Float32Array(ns * N * 3), NN = new Float32Array(ns * N * 3);
+    for (let i = 0; i < ns; i++) {
+      const pts = rings[i].pts;
+      for (let q = 0; q < N; q++) {
+        const p = q < H ? pts[q] : pts[2 * H - 2 - q], o = (i * N + q) * 3;
+        P[o] = q < H ? p[0] : -p[0]; P[o + 1] = p[1]; P[o + 2] = Z[i];
+      }
+    }
+    const vi = (i, q) => (i * N + (q % N)) * 3;
+    // smooth normals: each quad's normal (cross of its diagonals, so weighted by area) goes to its four corners
+    for (let i = 0; i < ns - 1; i++) for (let s = 0; s < N; s++) {
+      const a0 = vi(i, s), b0 = vi(i, s + 1), b1 = vi(i + 1, s + 1), a1 = vi(i + 1, s);
+      const ux = P[b1] - P[a0], uy = P[b1 + 1] - P[a0 + 1], uz = P[b1 + 2] - P[a0 + 2];
+      const wx = P[a1] - P[b0], wy = P[a1 + 1] - P[b0 + 1], wz = P[a1 + 2] - P[b0 + 2];
+      const nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx;
+      for (const o of [a0, b0, b1, a1]) { NN[o] += nx; NN[o + 1] += ny; NN[o + 2] += nz; }
+    }
+    for (let o = 0; o < NN.length; o += 3) {
+      const l = Math.hypot(NN[o], NN[o + 1], NN[o + 2]);
+      if (l > 1e-9) { NN[o] /= l; NN[o + 1] /= l; NN[o + 2] /= l; } else NN[o + 1] = 1;
+    }
+    const tagOf = (s) => (s < H - 1 ? rings[0].pts[s][2] : rings[0].pts[2 * H - 3 - s][2]);
+    const light = (paint >> 16 & 255) + (paint >> 8 & 255) + (paint & 255) > 560;
+    // (a contrasting roof: white over a dark car, black over a light one, or always the colour given)
+    const roofTone = M.shape.roofTone === 'contrast' ? (light ? 0x15171a : 0xf2f2ef) : M.shape.roofTone ?? null;
+    // (the racing stripes: black on a light car, white on a dark one, or the colour the model gives for this paint)
+    const stripe = (M.shape.stripeCol && M.shape.stripeCol[paint]) ?? (light ? 0x15171a : STRIPE);
+    const q = { tag: '', z: 0, x: 0, y: 0, yt: 0, yb: 0, h: 0, side: 1, seam: shade(paint, 0.45), stripe, grilleBody: shade(paint, 0.78), roofTone };
+    const open = M.shape.open, cockpit = (tag, z) => open && z > open.z[0] && z < open.z[1] && (tag === 'rail' || tag === 'roof' || tag === 'end');
+    const pt = (o) => [P[o], P[o + 1], P[o + 2]], nm = (o) => [NN[o], NN[o + 1], NN[o + 2]];
+    const area2 = (a, b, c) => {
+      const ux = P[b] - P[a], uy = P[b + 1] - P[a + 1], uz = P[b + 2] - P[a + 2], wx = P[c] - P[a], wy = P[c + 1] - P[a + 1], wz = P[c + 2] - P[a + 2];
+      return Math.hypot(uy * wz - uz * wy, uz * wx - ux * wz, ux * wy - uy * wx);
+    };
+    for (let i = 0; i < ns - 1; i++) {
+      const A = rings[i], B = rings[i + 1];
+      q.z = (Z[i] + Z[i + 1]) / 2; q.yt = (A.yt + B.yt) / 2; q.yb = (A.yb + B.yb) / 2; q.h = (A.h + B.h) / 2;
+      for (let s = 0; s < N; s++) {
+        const a0 = vi(i, s), b0 = vi(i, s + 1), b1 = vi(i + 1, s + 1), a1 = vi(i + 1, s);
+        const mx = (P[a0] + P[b0] + P[b1] + P[a1]) / 4;
+        q.tag = tagOf(s); q.side = s < H - 1 ? 1 : -1; q.x = Math.abs(mx);
+        if (cockpit(q.tag, q.z)) continue;
+        q.y = (P[a0 + 1] + P[b0 + 1] + P[b1 + 1] + P[a1 + 1]) / 4;
+        const col = bodyColour(sh, q, paint), tgt = col === CAR_GLASS ? gl : mg, cc = col === CAR_GLASS ? 0xffffff : col;
+        if (area2(a0, b0, b1) > 1e-7) tgt.triN(pt(a0), pt(b0), pt(b1), nm(a0), nm(b0), nm(b1), cc);
+        if (area2(a0, b1, a1) > 1e-7) tgt.triN(pt(a0), pt(b1), pt(a1), nm(a0), nm(b1), nm(a1), cc);
+      }
+    }
+    return sh;
+  }
+
+  const wheelX = (M) => (M.moped ? 0 : M.W / 2 - (M.mil === 'tank' ? 0.33 : M.mil ? 0.3 : M.bus ? 0.24 : 0.17));
+  // a tube from point a to point b, radius r at a and r2 at b
+  function tubeTo(m, a, b, r, col, r2 = r, n = 10) {
+    const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), len = d.length();
+    if (len < 1e-5) return;
+    const g = new THREE.CylinderGeometry(r2, r, len, n);
+    g.applyMatrix4(_m4.makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize())));
+    m.add(g, col, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
+  }
+  // a chain of tubes through the points
+  const tubePath = (m, pts, r, col, r2 = r) => { for (let i = 0; i < pts.length - 1; i++) tubeTo(m, pts[i], pts[i + 1], lerp(r, r2, i / (pts.length - 1)), col, lerp(r, r2, (i + 1) / (pts.length - 1))); };
+  // a body loft through cross-sections [z, half width, bottom, top], each pair of sections a closed block
+  function sectionLoft(m, secs, col) {
+    for (let i = 0; i < secs.length - 1; i++) {
+      const [z0, w0, b0, t0] = secs[i], [z1, w1, b1, t1] = secs[i + 1];
+      m.hexa([[-w1, b1, z1], [w1, b1, z1], [w0, b0, z0], [-w0, b0, z0], [-w1, t1, z1], [w1, t1, z1], [w0, t0, z0], [-w0, t0, z0]], col);
+    }
+  }
+  // The Gilera Stalker, modelled in parts: what stands still (frame, body, seat, engine, exhaust) and what turns with the
+  // handlebars (fork, front mudguard, bars, mirrors, the lamp mask with its screen). The steering axis leans back 26°.
+  // Its own frame: z forwards, +x the rider's left, y up; the front assembly is returned in the frame of the steering
+  // head, y along the steering axis.
+  function mopedGeometry(M, paint) {
+    const mg = new Merger(carSurf(paint)), front = new Merger(carSurf(paint)), gl = new Merger(), plateB = new Builder();
+    const R = M.R, az = M.wb / 2, rake = 26 * Math.PI / 180, ca = Math.cos(rake), sa = Math.sin(rake);
+    const BLACK = 0x1c1d20, FRAME = 0xaeb3b8, ALU = 0x8a8f94, SEAT = 0x16171a;
+    // the steering head sits where a 0.7 m fork with 3 cm of offset puts the front axle
+    const off = 0.03, Lf = (0.86 - R + off * sa) / ca, head = [0, 0.86, az - Lf * sa - off * ca], up = [0, ca, -sa];
+    const along = (t) => [head[0], head[1] + up[1] * t, head[2] + up[2] * t];
+    // frame: the big tube down from the head to the floor, out in the open, and the rails under the floor and the seat
+    tubePath(mg, [along(-0.06), [0, 0.62, head[2] - 0.05], [0, 0.45, head[2] - 0.11], [0, 0.34, head[2] - 0.2], [0, 0.3, 0.0]], 0.028, FRAME);
+    for (const s of [1, -1]) tubePath(mg, [[s * 0.1, 0.29, 0.06], [s * 0.1, 0.29, -0.2], [s * 0.1, 0.5, -0.38], [s * 0.09, 0.66, -0.72]], 0.014, FRAME);
+    // a cover round the steering head, the floor with its black mat, and the belly pan under it
+    mg.hexa([[-0.075, 0.66, head[2] - 0.06], [0.075, 0.66, head[2] - 0.06], [0.075, 0.66, head[2] + 0.08], [-0.075, 0.66, head[2] + 0.08], [-0.065, 0.84, head[2] - 0.02], [0.065, 0.84, head[2] - 0.02], [0.065, 0.84, head[2] + 0.08], [-0.065, 0.84, head[2] + 0.08]], paint);
+    mg.box(0.32, 0.04, 0.32, BLACK, 0, 0.32, -0.05);
+    for (let z = -0.18; z < 0.1; z += 0.05) mg.box(0.28, 0.006, 0.012, 0x2a2c30, 0, 0.343, z);
+    mg.box(0.26, 0.09, 0.36, BLACK, 0, 0.255, -0.04);
+    // the body under the seat, narrowing and rising to a sharp tail
+    sectionLoft(mg, [[0.05, 0.11, 0.34, 0.6], [-0.15, 0.16, 0.36, 0.71], [-0.42, 0.165, 0.42, 0.75], [-0.68, 0.12, 0.52, 0.79], [-0.88, 0.05, 0.66, 0.82]], paint);
+    for (const s of [1, -1]) {
+      // vents along the sides and a black stripe low down
+      for (let i = 0; i < 3; i++) mg.box(0.006, 0.025, 0.16, 0x2a2c30, s * 0.166, 0.6 - i * 0.045, -0.36);
+      mg.box(0.006, 0.05, 0.28, BLACK, s * 0.164, 0.43, -0.28);
+    }
+    // the seat: the rider's part, then a step up for the passenger
+    sectionLoft(mg, [[0.06, 0.09, 0.6, 0.66], [-0.05, 0.14, 0.68, 0.79], [-0.36, 0.15, 0.72, 0.81], [-0.46, 0.14, 0.74, 0.86], [-0.74, 0.1, 0.77, 0.87]], SEAT);
+    for (const s of [1, -1]) mg.box(0.004, 0.01, 0.42, 0x5a5d61, s * 0.148, 0.79, -0.2);
+    // the grab rail round the back of the seat, the tail lamp and indicators, the plate on its black flap
+    for (const s of [1, -1]) tubePath(mg, [[s * 0.15, 0.8, -0.44], [s * 0.13, 0.84, -0.66], [s * 0.08, 0.85, -0.84]], 0.012, ALU);
+    tubeTo(mg, [0.08, 0.85, -0.84], [-0.08, 0.85, -0.84], 0.012, ALU);
+    mg.box(0.11, 0.045, 0.04, COL.tail, 0, 0.78, -0.885);
+    for (const s of [1, -1]) mg.box(0.05, 0.035, 0.05, IND(s), s * 0.1, 0.74, -0.85);
+    mg.hexa([[-0.1, 0.46, -0.93], [0.1, 0.46, -0.93], [0.1, 0.46, -0.9], [-0.1, 0.46, -0.9], [-0.06, 0.68, -0.86], [0.06, 0.68, -0.86], [0.06, 0.68, -0.83], [-0.06, 0.68, -0.83]], BLACK);
+    mg.box(0.21, 0.11, 0.012, GLOSS, 0, 0.53, -0.928);
+    plateB.quad([0.095, 0.48, -0.936], [-0.095, 0.48, -0.936], [-0.095, 0.58, -0.936], [0.095, 0.58, -0.936], 0xffffff, [[0, 0], [1, 0], [1, 1], [0, 1]], [0, 0, -1]);
+    // the engine: an air-cooled cylinder lying forwards with its fins, the fan cowl on the right, the long belt case of
+    // the variator down the left to the rear axle, the air box on top of it
+    mg.add(new THREE.CylinderGeometry(0.062, 0.062, 0.2, 14), ALU, 0, 0.22, 0.06, Math.PI / 2, 0, 0);
+    for (let z = -0.02; z < 0.15; z += 0.024) mg.add(new THREE.CylinderGeometry(0.088, 0.088, 0.008, 14), 0x6a6f75, 0, 0.22, z, Math.PI / 2, 0, 0);
+    mg.add(new THREE.CylinderGeometry(0.03, 0.03, 0.05, 10), 0x2a2c30, 0, 0.3, 0.12);
+    mg.box(0.09, 0.2, 0.2, BLACK, -0.115, 0.26, -0.02);
+    mg.hexa([[0.07, 0.14, 0.02], [0.165, 0.14, 0.02], [0.165, 0.12, -0.66], [0.07, 0.12, -0.66], [0.07, 0.4, 0.02], [0.165, 0.4, 0.02], [0.165, 0.35, -0.66], [0.07, 0.35, -0.66]], ALU);
+    mg.add(new THREE.CylinderGeometry(0.11, 0.11, 0.012, 18), 0x6a6f75, 0.168, 0.25, -0.5, 0, 0, Math.PI / 2);
+    mg.box(0.1, 0.08, 0.26, BLACK, 0.09, 0.4, -0.47);
+    // the exhaust on the right: down under the engine, out through the fat belly of the expansion chamber and up to the
+    // silencer alongside the back wheel
+    tubePath(mg, [[-0.02, 0.18, 0.13], [-0.03, 0.1, 0.06], [-0.06, 0.1, -0.06]], 0.025, 0x3a3d41);
+    tubePath(mg, [[-0.06, 0.1, -0.06], [-0.11, 0.12, -0.2], [-0.15, 0.18, -0.34], [-0.17, 0.26, -0.44]], 0.04, 0x3a3d41, 0.065);
+    tubePath(mg, [[-0.17, 0.26, -0.44], [-0.18, 0.3, -0.5]], 0.065, 0x3a3d41, 0.03);
+    tubeTo(mg, [-0.18, 0.3, -0.5], [-0.2, 0.44, -0.84], 0.055, 0x2a2c30);
+    tubeTo(mg, [-0.199, 0.43, -0.82], [-0.2, 0.445, -0.86], 0.058, CHROME);
+    mg.add(new THREE.CylinderGeometry(0.018, 0.018, 0.04, 10), UNDER, -0.2, 0.445, -0.875, Math.PI / 2 - 0.4, 0, 0);
+    // the rear shock on the right, a red spring round it
+    tubeTo(mg, [-0.12, 0.3, -0.62], [-0.12, 0.58, -0.5], 0.016, BLACK);
+    tubeTo(mg, [-0.12, 0.36, -0.6], [-0.12, 0.54, -0.52], 0.032, 0xb3131c);
+    // what turns with the bars, built where it stands and then moved into the frame of the steering head
+    const crown = along(-0.05), axle = [0, R, az];
+    for (const s of [1, -1]) {
+      const top = [s * 0.1, crown[1], crown[2]], bot = [s * 0.1, axle[1], axle[2]], mid = [s * 0.1, lerp(top[1], bot[1], 0.55), lerp(top[2], bot[2], 0.55)];
+      tubeTo(front, top, mid, 0.019, 0xc6cbd1);
+      tubeTo(front, mid, bot, 0.028, BLACK);
+    }
+    front.box(0.26, 0.05, 0.08, BLACK, 0, crown[1], crown[2]);
+    tubeTo(front, crown, along(0.17), 0.02, BLACK);
+    // the brake calliper on the left leg, the front mudguard over the wheel
+    front.box(0.03, 0.08, 0.06, 0x2a2c30, 0.085, R + 0.08, az - 0.06);
+    for (let i = 0; i < 12; i++) {
+      const p = (-60 + i * 10) * Math.PI / 180, q = p + 10 * Math.PI / 180, rr0 = R + 0.045, pm = (p + q) / 2;
+      front.add(new THREE.BoxGeometry(0.15, 0.012, rr0 * 0.18), paint, 0, axle[1] + Math.cos(pm) * rr0, axle[2] + Math.sin(pm) * rr0, pm, 0, 0);
+    }
+    // the handlebars, bare: grips, levers, mirrors on stalks
+    const bar = along(0.17), bars = [[0.37, bar[1] + 0.02, bar[2] - 0.1], [0.2, bar[1] + 0.01, bar[2] - 0.03], [0, bar[1], bar[2]], [-0.2, bar[1] + 0.01, bar[2] - 0.03], [-0.37, bar[1] + 0.02, bar[2] - 0.1]];
+    tubePath(front, bars, 0.011, 0x2a2c30);
+    for (const s of [1, -1]) {
+      tubeTo(front, [s * 0.25, bar[1] + 0.015, bar[2] - 0.06], [s * 0.37, bar[1] + 0.02, bar[2] - 0.1], 0.018, BLACK);
+      tubeTo(front, [s * 0.18, bar[1] + 0.02, bar[2] - 0.0], [s * 0.33, bar[1] + 0.0, bar[2] + 0.02], 0.006, ALU);
+      front.box(0.05, 0.03, 0.04, BLACK, s * 0.17, bar[1] + 0.035, bar[2] - 0.03);
+      tubeTo(front, [s * 0.23, bar[1] + 0.03, bar[2] - 0.04], [s * 0.3, bar[1] + 0.28, bar[2] - 0.09], 0.006, BLACK);
+      front.box(0.12, 0.07, 0.025, BLACK, s * 0.31, bar[1] + 0.3, bar[2] - 0.09);
+      front.box(0.105, 0.055, 0.004, 0xb9c6cd, s * 0.31, bar[1] + 0.3, bar[2] - 0.103);
+    }
+    // the mask in front of the bars: two round lamps side by side, indicators at its corners, a little tinted screen
+    const mk = [0, bar[1] - 0.1, bar[2] + 0.17];
+    front.hexa([[-0.16, mk[1] - 0.08, mk[2] - 0.12], [0.16, mk[1] - 0.08, mk[2] - 0.12], [0.13, mk[1] - 0.07, mk[2] + 0.05], [-0.13, mk[1] - 0.07, mk[2] + 0.05], [-0.16, mk[1] + 0.07, mk[2] - 0.14], [0.16, mk[1] + 0.07, mk[2] - 0.14], [0.13, mk[1] + 0.06, mk[2] + 0.02], [-0.13, mk[1] + 0.06, mk[2] + 0.02]], paint);
+    for (const s of [1, -1]) {
+      front.add(new THREE.CylinderGeometry(0.058, 0.058, 0.04, 18), GLOSS, s * 0.068, mk[1], mk[2] + 0.04, Math.PI / 2 - 0.12, 0, 0);
+      front.add(new THREE.CylinderGeometry(0.048, 0.044, 0.045, 18), COL.head, s * 0.068, mk[1], mk[2] + 0.05, Math.PI / 2 - 0.12, 0, 0);
+      front.box(0.04, 0.03, 0.05, IND(s), s * 0.16, mk[1] - 0.02, mk[2] - 0.04);
+    }
+    front.box(0.16, 0.06, 0.05, BLACK, 0, mk[1] + 0.09, mk[2] - 0.1);
+    gl.hexa([[-0.13, mk[1] + 0.06, mk[2] - 0.12], [0.13, mk[1] + 0.06, mk[2] - 0.12], [0.13, mk[1] + 0.065, mk[2] - 0.1], [-0.13, mk[1] + 0.065, mk[2] - 0.1], [-0.1, mk[1] + 0.2, mk[2] - 0.2], [0.1, mk[1] + 0.2, mk[2] - 0.2], [0.1, mk[1] + 0.205, mk[2] - 0.18], [-0.1, mk[1] + 0.205, mk[2] - 0.18]], 0xffffff);
+    // into the frame of the steering head
+    const toHead = new THREE.Matrix4().makeRotationX(rake).multiply(new THREE.Matrix4().makeTranslation(-head[0], -head[1], -head[2]));
+    const frontGeo = front.build(), glassGeo = gl.build();
+    frontGeo.applyMatrix4(toHead); glassGeo.applyMatrix4(toHead);
+    frontGeo.computeBoundingSphere(); glassGeo.computeBoundingSphere();
+    const frontAxle = new THREE.Vector3(...axle).applyMatrix4(toHead);
+    return {
+      body: mg.build(), glass: glassGeo, front: frontGeo, decal: null, plates: plateB.build(), flashers: null, head, rake, frontAxle,
+      driver: { x: 0, y: 0.8, z: -0.16 }, rear: null, parts: [{ cz: -0.05, hw: 0.26, hl: 0.86, top: 0.86 }]
+    };
+  }
+  // A hull lofted through stations [z, half beam, keel y, gunwale y] (y = 0 is the waterline): a vee from the keel out to
+  // the chine, the topsides up to the gunwale, then either a closed deck with some camber or an open cockpit with a
+  // floor at floorY. cols: { bottom, side, rail, deck, inner, floor }
+  function hullLoft(m, st, cols, floorY) {
+    const ring = ([z, w, k, t]) => {
+      const pts = [[0, k, 'bottom'], [w * 0.9, lerp(k, t, 0.3), 'bottom'], [w, lerp(k, t, 0.42), 'side'], [w, t, 'rail']];
+      if (floorY !== undefined && w > 0.25) pts.push([w - 0.07, t + 0.02, 'inner'], [w - 0.1, floorY, 'floor'], [0, floorY, 'floor']);
+      else pts.push([w * 0.55, t + 0.025, 'deck'], [w * 0.0001, t + 0.035, 'deck'], [0, t + 0.035, 'deck']);
+      return pts.map(([x, y, tag]) => [x, y, z, tag]);
+    };
+    const hint = { bottom: [0, -1, 0], side: [1, 0, 0], rail: [0, 1, 0], inner: [-1, 0, 0], floor: [0, 1, 0], deck: [0, 1, 0] };
+    const quad = (a, b, c, d, col, h) => {
+      const ux = c[0] - a[0], uy = c[1] - a[1], uz = c[2] - a[2], vx = d[0] - b[0], vy = d[1] - b[1], vz = d[2] - b[2];
+      let n = [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx];
+      const l = Math.hypot(n[0], n[1], n[2]);
+      if (l < 1e-9) return;
+      n = n.map((v) => v / l);
+      if (n[0] * h[0] + n[1] * h[1] + n[2] * h[2] < 0) { n = n.map((v) => -v); m.triN(a, c, b, n, n, n, col); m.triN(a, d, c, n, n, n, col); }
+      else { m.triN(a, b, c, n, n, n, col); m.triN(a, c, d, n, n, n, col); }
+    };
+    const rings = st.map(ring);
+    for (let i = 0; i < rings.length - 1; i++) {
+      const A = rings[i], B = rings[i + 1], n = Math.min(A.length, B.length);
+      for (let j = 0; j < n - 1; j++) {
+        const tag = A[j + 1][3], col = cols[tag] ?? cols.side;
+        for (const s of [1, -1]) {
+          const P = (p) => [p[0] * s, p[1], p[2]], h = hint[tag].slice();
+          h[0] *= s;
+          quad(P(A[j]), P(A[j + 1]), P(B[j + 1]), P(B[j]), col, h);
+        }
+      }
+    }
+    // the transom across the stern
+    const T = rings[0], z0 = T[0][2];
+    for (let j = 0; j < 3; j++) for (const s of [1, -1]) {
+      const a = [T[j][0] * s, T[j][1], z0], b = [T[j + 1][0] * s, T[j + 1][1], z0], c = [0, T[3][1], z0], n = [0, 0, -1];
+      const cr = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+      if (Math.abs(cr) < 1e-9) continue;
+      if (cr > 0) m.triN(a, c, b, n, n, n, cols.side); else m.triN(a, b, c, n, n, n, cols.side);
+    }
+  }
+  // The boats, in their own frame: z forwards, +x the driver's left, y = 0 at the waterline. The jet ski's handlebars turn
+  // with the steering like the moped's (front, about head).
+  function boatGeometry(M, paint) {
+    const mg = new Merger(carSurf(paint)), gl = new Merger(), front = new Merger(carSurf(paint));
+    const BLACK = 0x1c1d20, GREY = 0x3a3d41, WHITE = 0xeeeeea, SEAT = 0x16171a;
+    let driver, head = null, rake = 0, frontGeo = null, parts, flashers = null, decal = null;
+    // the hull's half width and rail height at z, between its stations
+    const hullAt = (z) => {
+      const st = M.hull;
+      let i = 0;
+      while (i < st.length - 2 && z > st[i + 1][0]) i++;
+      const t = clamp((z - st[i][0]) / (st[i + 1][0] - st[i][0]), 0, 1);
+      return { w: lerp(st[i][1], st[i + 1][1], t), top: lerp(st[i][3], st[i + 1][3], t) };
+    };
+    // the police's blue and yellow checks, a row of them down each side just under the rail
+    const checks = (z0, z1, n, h, below) => {
+      for (let i = 0; i < n; i++) {
+        const za = lerp(z0, z1, i / n), zb = lerp(z0, z1, (i + 1) / n), H = hullAt((za + zb) / 2), y = H.top - below - h / 2;
+        for (const s of [1, -1]) mg.box(0.02, h, zb - za, i % 2 ? COL.polYellow : COL.polBlue, s * (H.w + 0.012), y, (za + zb) / 2);
+      }
+    };
+    if (M.boat === 'jetski') {
+      // Sea-Doo RXP-X: a deep-vee hull in white, the deck and hood in the colour, a black saddle for one, the handlebars
+      // on a column in front of it, the jet nozzle under the stern, footwells either side
+      const hull = paint === WHITE ? 0xd9dcdf : WHITE;
+      hullLoft(mg, M.hull, { bottom: hull, side: hull, rail: BLACK, deck: GREY });
+      // the hood over the bow and the console up to the handlebars, a tinted screen on it
+      sectionLoft(mg, [[0.05, 0.36, 0.45, 0.72], [0.45, 0.44, 0.47, 0.8], [0.95, 0.38, 0.49, 0.74], [1.35, 0.2, 0.47, 0.6]], paint);
+      gl.hexa([[-0.2, 0.8, 0.42], [0.2, 0.8, 0.42], [0.18, 0.76, 0.6], [-0.18, 0.76, 0.6], [-0.18, 0.96, 0.3], [0.18, 0.96, 0.3], [0.16, 0.92, 0.36], [-0.16, 0.92, 0.36]], 0xffffff);
+      // the saddle, the grab strap and the stern with its reboarding step
+      sectionLoft(mg, [[0.05, 0.16, 0.5, 0.78], [-0.3, 0.21, 0.5, 0.86], [-0.9, 0.22, 0.5, 0.86], [-1.3, 0.2, 0.48, 0.8]], SEAT);
+      sectionLoft(mg, [[-0.6, 0.3, 0.44, 0.58], [-1.45, 0.32, 0.42, 0.56], [-1.6, 0.3, 0.4, 0.5]], paint);
+      mg.box(0.5, 0.05, 0.24, BLACK, 0, 0.37, -1.66);
+      for (const s of [1, -1]) mg.box(0.03, 0.03, 0.9, 0xd8203a, s * 0.62, 0.38, -0.2);
+      mg.add(new THREE.CylinderGeometry(0.11, 0.13, 0.36, 12), BLACK, 0, -0.02, -1.62, Math.PI / 2, 0, 0);
+      // the handlebars, turning about the column
+      head = [0, 0.8, 0.2]; rake = 0.45;
+      tubeTo(front, [0, -0.05, 0], [0, 0.22, 0], 0.03, BLACK);
+      tubePath(front, [[0.34, 0.24, -0.06], [0.16, 0.24, 0], [-0.16, 0.24, 0], [-0.34, 0.24, -0.06]], 0.016, GREY);
+      for (const s of [1, -1]) tubeTo(front, [s * 0.24, 0.24, -0.04], [s * 0.36, 0.24, -0.07], 0.024, BLACK);
+      front.box(0.14, 0.06, 0.1, BLACK, 0, 0.25, 0.02);
+      const toHead = new THREE.Matrix4().makeRotationX(rake).multiply(new THREE.Matrix4().makeTranslation(0, 0, 0));
+      frontGeo = front.build(); frontGeo.applyMatrix4(toHead); frontGeo.computeBoundingSphere();
+      driver = { x: 0, y: 0.86, z: -0.48, rider: true };
+      parts = [{ cz: 0, hw: M.W / 2, hl: M.L / 2, top: 0.9 }];
+      if (M.police) {
+        // the police's: the checks down the sides, and blue lights on a short mast behind the saddle
+        checks(-1.15, 0.55, 6, 0.1, 0.02);
+        tubeTo(mg, [0, 0.42, -1.42], [0, 1.12, -1.5], 0.022, BLACK);
+        mg.box(0.44, 0.06, 0.1, BLACK, 0, 1.14, -1.5);
+        mg.box(0.18, 0.07, 0.09, COL.blueL, -0.11, 1.2, -1.5);
+        mg.box(0.18, 0.07, 0.09, COL.blueR, 0.11, 1.2, -1.5);
+        flashers = [[-0.11, 1.25, -1.5], [0.11, 1.25, -1.5]];
+      }
+    } else if (M.boat === 'console') {
+      // Anytec 622 SPD: a grey aluminium deep vee with a black rail, open from bow to stern round a centre console with a
+      // screen and a wheel, a leaning post behind it, cushions in the bow, the big black outboard on the transom
+      hullLoft(mg, M.hull, { bottom: 0x5d6266, side: paint, rail: BLACK, inner: 0xb9bdc2, floor: 0x2d3034, deck: 0x2d3034 }, 0.22);
+      mg.box(0.66, 0.84, 0.7, WHITE, 0, 0.64, 0.45);
+      mg.box(0.62, 0.06, 0.5, BLACK, 0, 1.08, 0.4);
+      gl.hexa([[-0.36, 1.06, 0.68], [0.36, 1.06, 0.68], [0.36, 1.06, 0.74], [-0.36, 1.06, 0.74], [-0.33, 1.42, 0.52], [0.33, 1.42, 0.52], [0.33, 1.42, 0.58], [-0.33, 1.42, 0.58]], 0xffffff);
+      mg.add(new THREE.TorusGeometry(0.16, 0.02, 6, 18), BLACK, 0, 1.12, 0.08, -0.9, 0, 0);
+      mg.box(0.9, 0.5, 0.45, SEAT, 0, 0.47, -0.45);
+      mg.box(0.9, 0.5, 0.12, SEAT, 0, 0.95, -0.66);
+      mg.box(1.5, 0.3, 0.9, 0xd9d4c6, 0, 0.37, 1.85);
+      mg.box(1.9, 0.32, 0.5, 0xd9d4c6, 0, 0.38, -2.7);
+      // the outboard: the cowl high on the transom, the leg down into the water
+      mg.box(0.62, 0.78, 0.7, BLACK, 0, 1.05, -3.42);
+      mg.box(0.66, 0.08, 0.74, 0xc8102e, 0, 0.95, -3.42);
+      mg.box(0.2, 0.9, 0.32, BLACK, 0, 0.25, -3.45);
+      mg.box(0.5, 0.06, 0.3, BLACK, 0, -0.18, -3.45);
+      driver = { x: 0, y: 0.6, z: -0.35 };
+      parts = [{ cz: 0, hw: M.W / 2, hl: M.L / 2, top: 1.0 }];
+    } else if (M.boat === 'patrol') {
+      // Polisen's patrol boat: a white deep vee with a dark bottom, the blue and yellow checks down its sides, a wheelhouse
+      // with windows all round and POLIS on its sides, the blue light bar, a radar dome and a searchlight on its roof
+      hullLoft(mg, M.hull, { bottom: 0x2e3338, side: 0x2e3338, rail: paint, inner: 0xdadde0, floor: 0x3a3f44, deck: 0x3a3f44 }, 0.3);
+      checks(-4.2, 3.6, 18, 0.2, 0.08);
+      const z0 = -0.95, z1 = 1.5, zt = 1.12, w = 1.05, top = 2.25;
+      mg.box(2 * w, 0.92, z1 - z0, paint, 0, 0.76, (z0 + z1) / 2);
+      // the frame round the windows: corner posts, the slanted front ones, and the roof
+      for (const sx of [1, -1]) {
+        mg.box(0.08, top - 1.22, 0.08, paint, sx * (w - 0.04), (top + 1.22) / 2, z0 + 0.04);
+        tubeTo(mg, [sx * (w - 0.05), 1.22, z1 - 0.05], [sx * (w - 0.08), top, zt], 0.045, paint);
+        mg.box(0.06, top - 1.22, 0.06, paint, sx * (w - 0.04), (top + 1.22) / 2, (z0 + zt) / 2);
+      }
+      mg.box(2 * w + 0.1, 0.1, zt - z0 + 0.25, paint, 0, top + 0.05, (z0 + zt) / 2 + 0.05);
+      // the windows: down both sides, at the back, and the screen leaning back at the front
+      for (const sx of [1, -1]) gl.box(0.02, top - 1.25, zt - z0 - 0.1, 0xffffff, sx * (w - 0.02), (top + 1.25) / 2, (z0 + zt) / 2);
+      gl.box(2 * w - 0.12, top - 1.3, 0.02, 0xffffff, 0, (top + 1.3) / 2, z0 + 0.02);
+      gl.hexa([[-w + 0.08, 1.22, z1 - 0.06], [w - 0.08, 1.22, z1 - 0.06], [w - 0.08, 1.22, z1 - 0.03], [-w + 0.08, 1.22, z1 - 0.03], [-w + 0.1, top - 0.02, zt - 0.02], [w - 0.1, top - 0.02, zt - 0.02], [w - 0.1, top - 0.02, zt + 0.01], [-w + 0.1, top - 0.02, zt + 0.01]], 0xffffff);
+      // inside: the helm on the right, a seat behind it, a bench for the other constable
+      mg.box(0.7, 0.55, 0.3, GREY, 0.45, 0.85, z1 - 0.35);
+      mg.add(new THREE.TorusGeometry(0.17, 0.022, 6, 18), BLACK, 0.45, 1.25, z1 - 0.52, -0.9, 0, 0);
+      mg.box(0.5, 0.45, 0.5, SEAT, 0.45, 0.52, 0.3);
+      mg.box(0.5, 0.45, 0.5, SEAT, -0.45, 0.52, 0.3);
+      // on the roof: the light bar, the radar dome, the searchlight and the aerials
+      mg.box(1.1, 0.07, 0.3, BLACK, 0, top + 0.13, 0.6);
+      mg.box(0.48, 0.1, 0.26, COL.blueL, -0.3, top + 0.21, 0.6);
+      mg.box(0.48, 0.1, 0.26, COL.blueR, 0.3, top + 0.21, 0.6);
+      flashers = [[-0.3, top + 0.28, 0.6], [0.3, top + 0.28, 0.6]];
+      mg.add(new THREE.CylinderGeometry(0.28, 0.3, 0.2, 18), WHITE, 0, top + 0.2, -0.4);
+      mg.add(new THREE.CylinderGeometry(0.1, 0.1, 0.16, 14), CHROME, 0.75, top + 0.16, 0.9, Math.PI / 2, 0, 0);
+      for (const sx of [0.85, -0.85]) tubeTo(mg, [sx, top + 0.1, -0.7], [sx * 1.05, top + 1.4, -0.85], 0.012, BLACK);
+      // the swim platform across the transom, and the rubbing strake round the hull
+      mg.box(2.6, 0.08, 0.6, 0x3a3f44, 0, 0.32, -M.L / 2 - 0.25);
+      for (const sx of [1, -1]) for (let z = -4.3; z < 3.9; z += 0.6) { const H = hullAt(z + 0.3); mg.box(0.06, 0.06, 0.62, BLACK, sx * (H.w + 0.03), H.top - 0.02, z + 0.3); }
+      // POLIS on both sides of the wheelhouse
+      const db = new Builder(), POL = [[0, 0.5], [1, 0.5], [1, 1], [0, 1]], zf = 1.25, zr = -0.55, y0 = 0.58, y1 = 1.02, X = w + 0.006;
+      db.quad([X, y0, zf], [X, y0, zr], [X, y1, zr], [X, y1, zf], 0xffffff, POL, [1, 0, 0]);
+      db.quad([-X, y0, zr], [-X, y0, zf], [-X, y1, zf], [-X, y1, zr], 0xffffff, POL, [-1, 0, 0]);
+      decal = db.build();
+      driver = { x: 0.45, y: 0.72, z: 0.3 };
+      parts = [{ cz: 0, hw: M.W / 2, hl: M.L / 2, top: top + 0.1 }];
+    } else if (M.boat === 'cb90') {
+      // Stridsbåt 90 H: 16 metres of aluminium on two water jets, a low troop deck forward that ends in the bow ramp, the
+      // angular wheelhouse with its band of windows, the radar mast, and the heavy machine gun on a ring on the roof,
+      // which turns on its own (front, about head). All in the navy's camouflage
+      const DARK = 0x2a2c2e, DECK = 0x4a5240;
+      hullLoft(mg, M.hull, { bottom: 0x2f3330, side: paint, rail: DARK, deck: DECK });
+      const hx = (y, x0, x1, y0, y1) => lerp(x0, x1, (y - y0) / (y1 - y0));
+      // the troop deck's roof, sloping down to the bow ramp
+      mg.hexa([[-1.55, 1.36, 1.5], [1.55, 1.36, 1.5], [1.4, 1.42, 6.4], [-1.4, 1.42, 6.4], [-1.38, 1.98, 1.65], [1.38, 1.98, 1.65], [1.15, 1.72, 6.1], [-1.15, 1.72, 6.1]], paint);
+      mg.hexa([[-0.95, 1.5, 6.4], [0.95, 1.5, 6.4], [0.62, 1.56, 7.85], [-0.62, 1.56, 7.85], [-0.92, 1.62, 6.4], [0.92, 1.62, 6.4], [0.6, 1.62, 7.85], [-0.6, 1.62, 7.85]], DECK);
+      // the wheelhouse: slanted all round
+      const yb = 1.36, yt = 3.0;
+      mg.hexa([[-1.62, yb, -1.7], [1.62, yb, -1.7], [1.62, yb, 1.6], [-1.62, yb, 1.6], [-1.25, yt, -1.45], [1.25, yt, -1.45], [1.25, yt, 0.92], [-1.25, yt, 0.92]], paint);
+      // its windows: a band across the front and down the sides, leaning in with the walls
+      const fz = (y) => hx(y, 1.6, 0.92, yb, yt) + 0.02, sxw = (y) => hx(y, 1.62, 1.25, yb, yt) + 0.02;
+      const ya = 2.3, yc = 2.78;
+      gl.hexa([[-sxw(ya) + 0.12, ya, fz(ya) - 0.02], [sxw(ya) - 0.12, ya, fz(ya) - 0.02], [sxw(ya) - 0.12, ya, fz(ya) + 0.01], [-sxw(ya) + 0.12, ya, fz(ya) + 0.01], [-sxw(yc) + 0.12, yc, fz(yc) - 0.02], [sxw(yc) - 0.12, yc, fz(yc) - 0.02], [sxw(yc) - 0.12, yc, fz(yc) + 0.01], [-sxw(yc) + 0.12, yc, fz(yc) + 0.01]], 0xffffff);
+      for (const s of [1, -1]) gl.hexa([[s * sxw(ya), ya, -1.2], [s * (sxw(ya) + 0.02), ya, -1.2], [s * (sxw(ya) + 0.02), ya, 1.0], [s * sxw(ya), ya, 1.0], [s * sxw(yc), yc, -1.05], [s * (sxw(yc) + 0.02), yc, -1.05], [s * (sxw(yc) + 0.02), yc, 0.75], [s * sxw(yc), yc, 0.75]], 0xffffff);
+      // the radar mast and its aerials, the engine deck aft with its grilles, the two jets in the transom
+      tubeTo(mg, [0, yt, -0.8], [0, yt + 1.5, -0.95], 0.06, DARK);
+      mg.box(1.3, 0.09, 0.22, DARK, 0, yt + 1.45, -0.95);
+      for (const sx of [0.9, -0.9]) tubeTo(mg, [sx, yt, -1.2], [sx * 1.1, yt + 2.0, -1.35], 0.015, DARK);
+      for (let i = 0; i < 4; i++) mg.box(2.2, 0.04, 0.5, DARK, 0, 1.37, -3.0 - i * 0.9);
+      for (const sx of [0.8, -0.8]) mg.add(new THREE.CylinderGeometry(0.3, 0.34, 0.5, 14), DARK, sx, 0.1, -M.L / 2 - 0.1, Math.PI / 2, 0, 0);
+      // the navy's red and green sidelights on the wheelhouse
+      mg.box(0.05, 0.1, 0.18, 0xb3121b, 1.5, 1.9, 1.2); mg.box(0.05, 0.1, 0.18, 0x1f8a3a, -1.5, 1.9, 1.2);
+      // the gun: a ring on the roof, a shield and the 12.7 mm barrel
+      head = [0, yt, 0.25];
+      front.add(new THREE.CylinderGeometry(0.42, 0.45, 0.14, 16), paint, 0, 0.07, 0);
+      front.box(0.75, 0.42, 0.06, paint, 0, 0.4, 0.32);
+      front.box(0.2, 0.2, 0.5, DARK, 0.06, 0.38, 0.1);
+      front.add(new THREE.CylinderGeometry(0.03, 0.035, 1.3, 8), DARK, 0.06, 0.4, 0.85, Math.PI / 2, 0, 0);
+      camouflage(front, paint);
+      frontGeo = front.build(); frontGeo.computeBoundingSphere();
+      camouflage(mg, paint);
+      driver = { x: 0.6, y: 1.75, z: 0.75 };
+      parts = [{ cz: 0, hw: M.W / 2, hl: M.L / 2, top: yt + 0.1 }];
+    } else {
+      // Riva Aquarama: the varnished mahogany hull and deck with pale seams between the planks, a white bottom, the
+      // chrome-framed screen, two rows of aquamarine leather seats and the sun pad over the engines
+      const wood = paint, seam = 0xe9dfc6, leather = 0x7fb8b0;
+      hullLoft(mg, M.hull, { bottom: 0xf0f0ec, side: wood, rail: CHROME, deck: wood });
+      for (let x = -1.0; x <= 1.01; x += 0.25) mg.box(0.015, 0.008, 6.4, seam, x, 0.84 - Math.abs(x) * 0.02, 0.2);
+      // the cockpit: a well with two benches, the dashboard, the wheel
+      mg.box(2.1, 0.12, 2.6, 0x5a2a12, 0, 0.66, -0.5);
+      for (const z of [0.15, -1.25]) { mg.box(2.0, 0.28, 0.7, leather, 0, 0.88, z); mg.box(2.0, 0.42, 0.14, leather, 0, 1.12, z - 0.35); }
+      mg.box(2.1, 0.22, 0.2, 0x5a2a12, 0, 0.95, 0.75);
+      mg.add(new THREE.TorusGeometry(0.19, 0.022, 6, 22), 0xf2f2ee, -0.45, 1.12, 0.6, -0.5, 0, 0);
+      gl.hexa([[-1.05, 0.92, 0.92], [1.05, 0.92, 0.92], [1.05, 0.92, 0.97], [-1.05, 0.92, 0.97], [-0.98, 1.25, 0.82], [0.98, 1.25, 0.82], [0.98, 1.25, 0.87], [-0.98, 1.25, 0.87]], 0xffffff);
+      mg.box(2.12, 0.03, 0.06, CHROME, 0, 1.26, 0.84);
+      for (const s of [1, -1]) mg.box(0.03, 0.36, 0.06, CHROME, s * 1.05, 1.08, 0.9);
+      // the sun pad over the engine hatch, the flag at the stern
+      mg.box(2.0, 0.12, 1.4, leather, 0, 0.92, -2.6);
+      tubeTo(mg, [0, 0.8, -3.95], [0, 1.9, -4.05], 0.015, CHROME);
+      mg.box(0.01, 0.3, 0.45, 0x1f4fae, 0, 1.72, -4.3);
+      mg.box(0.012, 0.06, 0.45, 0xf2c200, 0, 1.72, -4.3);
+      mg.box(0.012, 0.3, 0.06, 0xf2c200, 0, 1.72, -4.24);
+      driver = { x: -0.45, y: 0.62, z: 0.1 };
+      parts = [{ cz: 0, hw: M.W / 2, hl: M.L / 2, top: 1.0 }];
+    }
+    return { body: mg.build(), glass: gl.build(), front: frontGeo, decal, plates: new Builder().build(), flashers, head, rake, frontAxle: null, driver, rear: null, parts };
+  }
+  // The army's vehicles, in their own frame (z forwards, y up from the road, +x the driver's left), painted in M90: the
+  // Swedish splinter camouflage of light and dark green, black and pale green in sharp-edged patches. The tank's turret
+  // with its gun and the Patria's weapon station turn on their own (front, about head).
+  const M90 = [0x5b6b45, 0x34402b, 0x1e2119, 0x7d8b5e];
+  function camouflage(m, base) {
+    const b = new THREE.Color(base), cols = M90.map((c) => new THREE.Color(c)), P = m.p, C = m.c;
+    const hash = (u, v) => { const h = Math.sin(u * 127.1 + v * 311.7) * 43758.5453; return h - Math.floor(h); };
+    for (let i = 0; i < P.length; i += 9) {
+      if (Math.abs(C[i] - b.r) > 1e-4 || Math.abs(C[i + 1] - b.g) > 1e-4 || Math.abs(C[i + 2] - b.b) > 1e-4) continue;
+      const x = (P[i] + P[i + 3] + P[i + 6]) / 3, y = (P[i + 1] + P[i + 4] + P[i + 7]) / 3, z = (P[i + 2] + P[i + 5] + P[i + 8]) / 3;
+      const h = hash(Math.floor(x * 0.9 + z * 0.55 + y * 0.5), Math.floor(z * 0.8 - x * 0.6 + y * 0.9));
+      const c = cols[h < 0.4 ? 0 : h < 0.68 ? 1 : h < 0.84 ? 2 : 3];
+      for (let k = 0; k < 9; k += 3) { C[i + k] = c.r; C[i + k + 1] = c.g; C[i + k + 2] = c.b; }
+    }
+  }
+  function militaryGeometry(M, paint) {
+    const surf = (col) => (col === COL.head ? SURF.head : col === COL.tail ? SURF.tail : col === COL.rev ? SURF.rev : col === COL.indL ? SURF.indL : col === COL.indR ? SURF.indR : col === GLOSS ? SURF.gloss : [0.82, 0.05, 0, 0]);
+    const mg = new Merger(surf), gl = new Merger(), front = new Merger(surf);
+    // a box cut into pieces about half a metre across, so the camouflage has room for its patches
+    const cbox = (m, w, h, d, col, x, y, z) => m.add(new THREE.BoxGeometry(w, h, d, Math.max(1, Math.round(w / 0.55)), Math.max(1, Math.round(h / 0.55)), Math.max(1, Math.round(d / 0.55))), col, x, y, z);
+    const DARK = 0x2a2c2e, OLIVE = 0x4f5a3c, hw = M.W / 2, hl = M.L / 2;
+    let driver, head = null, parts;
+    if (M.mil === 'tank') {
+      const tw = 0.62;
+      for (const s of [1, -1]) {
+        const xc = s * (hw - tw / 2);
+        // the track: the top and bottom runs and the slanted ends, the sprocket at the back and the idler at the front
+        mg.box(tw, 0.09, 7.1, DARK, xc, 0.92, 0); mg.box(tw, 0.09, 6.7, DARK, xc, 0.05, 0);
+        mg.hexa([[xc - tw / 2, 0.01, 3.35], [xc + tw / 2, 0.01, 3.35], [xc + tw / 2, 0.86, 3.86], [xc - tw / 2, 0.86, 3.86], [xc - tw / 2, 0.1, 3.35], [xc + tw / 2, 0.1, 3.35], [xc + tw / 2, 0.97, 3.55], [xc - tw / 2, 0.97, 3.55]], DARK);
+        mg.hexa([[xc - tw / 2, 0.01, -3.35], [xc + tw / 2, 0.01, -3.35], [xc + tw / 2, 0.86, -3.86], [xc - tw / 2, 0.86, -3.86], [xc - tw / 2, 0.1, -3.35], [xc + tw / 2, 0.1, -3.35], [xc + tw / 2, 0.97, -3.55], [xc - tw / 2, 0.97, -3.55]], DARK);
+        for (const z of [3.45, -3.45]) mg.add(new THREE.CylinderGeometry(0.34, 0.34, tw * 0.8, 14), 0x3a3d38, xc, 0.55, z, 0, 0, Math.PI / 2);
+        // the armoured skirt over the top of the track, the lower half of the road wheels showing under it
+        cbox(mg, 0.08, 0.55, 7.2, paint, s * (hw + 0.02), 0.76, -0.05);
+      }
+      // the hull between the tracks, the deck over them, the sloped glacis plate, the engine deck with its grilles
+      cbox(mg, M.W - 2 * tw, 0.75, 7.2, paint, 0, 0.72, 0);
+      cbox(mg, M.W + 0.04, 0.3, 6.5, paint, 0, 1.18, -0.45);
+      mg.hexa([[-hw, 1.03, 2.8], [hw, 1.03, 2.8], [hw, 0.85, 3.85], [-hw + 0.1, 0.85, 3.85], [-hw, 1.33, 2.8], [hw, 1.33, 2.8], [hw - 0.1, 0.98, 3.85], [-hw + 0.1, 0.98, 3.85]], paint);
+      for (let z = -3.4; z < -1.6; z += 0.36) mg.box(2.2, 0.03, 0.18, DARK, 0, 1.345, z);
+      for (const s of [1, -1]) {
+        mg.box(0.22, 0.12, 0.06, COL.head, s * 1.35, 1.02, 3.66);
+        mg.box(0.2, 0.1, 0.05, COL.tail, s * 1.5, 1.15, -3.72);
+        mg.box(0.1, 0.06, 0.06, IND(s), s * 1.35, 1.12, 3.66); mg.box(0.1, 0.06, 0.05, IND(s), s * 1.5, 1.24, -3.72);
+      }
+      // the driver's hatch at the front left, the driver's head out of it
+      mg.add(new THREE.CylinderGeometry(0.34, 0.34, 0.08, 14), DARK, 0.75, 1.38, 2.35);
+      driver = { x: 0.75, y: 0.8, z: 2.3 };
+      // the turret: the box with its bustle behind, the arrowhead armour on the front, the mantlet and the 120 mm gun with
+      // its thermal sleeve, the commander's cupola and the gunner's sight, smoke dischargers on the sides
+      head = [0, 1.33, -0.45];
+      cbox(front, 3.0, 0.78, 3.4, paint, 0, 0.39, -0.1);
+      cbox(front, 2.6, 0.62, 1.1, paint, 0, 0.42, -2.3);
+      for (const s of [1, -1]) {
+        front.hexa([[s * 0.36, 0.04, 1.6], [s * 1.5, 0.04, 1.6], [s * 1.0, 0.04, 2.55], [s * 0.62, 0.04, 2.55], [s * 0.36, 0.76, 1.6], [s * 1.5, 0.76, 1.6], [s * 1.0, 0.66, 2.45], [s * 0.62, 0.66, 2.45]], paint);
+        for (let k = 0; k < 4; k++) front.add(new THREE.CylinderGeometry(0.06, 0.06, 0.3, 8), DARK, s * 1.56, 0.62, -0.9 - k * 0.16, 0.3, 0, s * 0.9);
+      }
+      cbox(front, 0.7, 0.62, 0.5, paint, 0, 0.42, 1.85);
+      front.add(new THREE.CylinderGeometry(0.085, 0.09, 5.2, 12), paint, 0, 0.46, 4.6, Math.PI / 2, 0, 0);
+      front.add(new THREE.CylinderGeometry(0.12, 0.12, 1.4, 12), DARK, 0, 0.46, 3.2, Math.PI / 2, 0, 0);
+      front.add(new THREE.CylinderGeometry(0.1, 0.1, 0.12, 12), 0x1a1c19, 0, 0.46, 7.2, Math.PI / 2, 0, 0);
+      front.add(new THREE.CylinderGeometry(0.36, 0.38, 0.28, 14), paint, 0.62, 0.92, -0.75);
+      for (let k = 0; k < 6; k++) { const a = (k / 6) * TAU; front.box(0.1, 0.08, 0.06, GLOSS, 0.62 + Math.cos(a) * 0.3, 1.02, -0.75 + Math.sin(a) * 0.3); }
+      cbox(front, 0.45, 0.4, 0.55, paint, -0.75, 0.95, 0.75);
+      front.box(0.32, 0.22, 0.04, GLOSS, -0.75, 0.98, 1.03);
+      tubeTo(front, [-1.2, 0.78, -2.4], [-1.25, 3.0, -2.5], 0.015, DARK);
+      tubeTo(front, [1.2, 0.78, -2.4], [1.25, 2.6, -2.5], 0.015, DARK);
+      camouflage(front, paint);
+      parts = [{ cz: 0, hw, hl, top: 2.15 }];
+    } else if (M.mil === 'patria') {
+      // Patria AMV: the lower hull between the wheels, the upper hull leaning in, the long sloped glacis, the driver's
+      // hatch with its vision blocks, the rear door, and a remote weapon station on the roof
+      const lo = 0.55, mid = 1.12, top = 2.25;
+      mg.hexa([[-hw + 0.22, lo, -hl + 0.1], [hw - 0.22, lo, -hl + 0.1], [hw - 0.22, lo, hl - 0.45], [-hw + 0.22, lo, hl - 0.45], [-hw + 0.12, mid, -hl], [hw - 0.12, mid, -hl], [hw - 0.12, mid, hl], [-hw + 0.12, mid, hl]], paint);
+      cbox(mg, 2 * hw - 0.24, mid - lo, M.L - 0.4, paint, 0, (lo + mid) / 2, -0.15);
+      mg.hexa([[-hw, mid, -hl], [hw, mid, -hl], [hw, mid, 2.85], [-hw, mid, 2.85], [-hw + 0.26, top, -hl + 0.08], [hw - 0.26, top, -hl + 0.08], [hw - 0.26, top, 2.2], [-hw + 0.26, top, 2.2]], paint);
+      mg.hexa([[-hw, mid, 2.85], [hw, mid, 2.85], [hw - 0.08, mid, hl], [-hw + 0.08, mid, hl], [-hw + 0.26, top, 2.2], [hw - 0.26, top, 2.2], [hw - 0.16, mid + 0.2, hl], [-hw + 0.16, mid + 0.2, hl]], paint);
+      for (let i = 0; i < 5; i++) { const z = -hl + 0.6 + i * 1.3; cbox(mg, 2 * hw - 0.6, 0.06, 0.9, paint, 0, top + 0.03, z); }
+      for (const s of [1, -1]) {
+        mg.box(0.24, 0.13, 0.05, COL.head, s * (hw - 0.35), mid + 0.12, hl + 0.01);
+        mg.box(0.2, 0.12, 0.05, COL.tail, s * (hw - 0.3), mid + 0.4, -hl - 0.01);
+        mg.box(0.12, 0.06, 0.05, IND(s), s * (hw - 0.35), mid + 0.23, hl + 0.01); mg.box(0.12, 0.06, 0.05, IND(s), s * (hw - 0.3), mid + 0.51, -hl - 0.01);
+        // the wheel stations, dark behind the tyres
+        for (const az of M.axles) mg.box(0.08, 0.85, 1.3, DARK, s * (hw - 0.2), 0.95, az);
+        tubeTo(mg, [s * (hw - 0.4), top, -hl + 0.4], [s * (hw - 0.45), top + 2.2, -hl + 0.35], 0.012, DARK);
+      }
+      mg.box(1.2, 1.1, 0.04, OLIVE, 0, 1.55, -hl - 0.02);
+      mg.add(new THREE.CylinderGeometry(0.36, 0.36, 0.08, 14), DARK, 0.75, top + 0.06, 2.0);
+      for (let k = 0; k < 3; k++) gl.box(0.16, 0.08, 0.04, 0xffffff, 0.52 + k * 0.23, top - 0.02, 2.24 + 0.002 * k);
+      driver = { x: 0.75, y: 1.53, z: 1.95 };
+      head = [0, top + 0.06, 0.2];
+      front.add(new THREE.CylinderGeometry(0.45, 0.5, 0.25, 16), paint, 0, 0.12, 0);
+      cbox(front, 0.62, 0.45, 0.75, paint, 0, 0.47, 0.05);
+      front.add(new THREE.CylinderGeometry(0.035, 0.04, 1.3, 8), DARK, 0.12, 0.5, 0.95, Math.PI / 2, 0, 0);
+      front.box(0.22, 0.2, 0.28, DARK, -0.28, 0.55, 0.22);
+      front.box(0.14, 0.1, 0.03, GLOSS, -0.28, 0.56, 0.37);
+      camouflage(front, paint);
+      parts = [{ cz: 0, hw, hl, top: top + 0.6 }];
+    } else {
+      // the Scania: a forward cab with its windscreen and grille, the chassis, and the cargo body under an arched olive
+      // tarpaulin on its hoops, mudguards over the wheels
+      const cab0 = 2.3, cab1 = hl - 0.1;
+      cbox(mg, M.W, 1.55, cab1 - cab0, paint, 0, 1.92, (cab0 + cab1) / 2);
+      cbox(mg, M.W - 0.2, 0.32, cab1 - cab0 - 0.4, paint, 0, 2.86, (cab0 + cab1) / 2 - 0.15);
+      gl.hexa([[-hw + 0.12, 2.12, cab1 + 0.01], [hw - 0.12, 2.12, cab1 + 0.01], [hw - 0.12, 2.12, cab1 + 0.04], [-hw + 0.12, 2.12, cab1 + 0.04], [-hw + 0.14, 2.62, cab1 - 0.04], [hw - 0.14, 2.62, cab1 - 0.04], [hw - 0.14, 2.62, cab1 - 0.01], [-hw + 0.14, 2.62, cab1 - 0.01]], 0xffffff);
+      for (const s of [1, -1]) {
+        gl.box(0.03, 0.5, 0.75, 0xffffff, s * (hw + 0.005), 2.38, cab1 - 0.55);
+        mg.box(0.26, 0.16, 0.05, COL.head, s * (hw - 0.3), 1.08, cab1 + 0.12);
+        mg.box(0.18, 0.12, 0.05, COL.tail, s * (hw - 0.25), 1.05, -hl - 0.02);
+        mg.box(0.12, 0.07, 0.05, IND(s), s * (hw - 0.3), 1.21, cab1 + 0.12); mg.box(0.12, 0.07, 0.05, IND(s), s * (hw - 0.25), 1.16, -hl - 0.02);
+        tubeTo(mg, [s * hw, 2.6, cab1 - 0.3], [s * (hw + 0.35), 2.5, cab1 - 0.2], 0.025, DARK);
+        mg.box(0.06, 0.38, 0.22, GLOSS, s * (hw + 0.38), 2.35, cab1 - 0.2);
+        for (const az of M.axles) mg.box(0.5, 0.06, 1.35, DARK, s * (hw - 0.3), 1.32, az);
+        mg.box(0.12, 0.45, 1.0, DARK, s * 0.62, 1.0, 0.8);
+      }
+      mg.box(M.W - 0.3, 0.6, 0.06, DARK, 0, 1.45, cab1 + 0.02);
+      mg.box(M.W + 0.1, 0.32, 0.25, DARK, 0, 0.9, cab1 + 0.12);
+      for (const s of [1, -1]) mg.box(0.18, 0.3, M.L - 0.4, DARK, s * 0.5, 0.95, -0.1);
+      // the cargo body: a floor, low sides in the camouflage, the tarpaulin over its hoops
+      const b0 = -hl + 0.1, b1 = cab0 - 0.15, bl = b1 - b0, bz = (b0 + b1) / 2;
+      cbox(mg, M.W, 0.15, bl, DARK, 0, 1.22, bz);
+      cbox(mg, M.W, 0.55, bl, paint, 0, 1.57, bz);
+      mg.box(M.W - 0.02, 1.0, bl - 0.02, OLIVE, 0, 2.35, bz);
+      sectionLoft(mg, Array.from({ length: 2 }, (_, i) => [b0 + i * bl, hw - 0.05, 2.84, 3.2]), OLIVE);
+      for (let z = b0 + 0.4; z < b1; z += 1.1) mg.box(M.W + 0.02, 1.4, 0.06, 0x434c33, 0, 2.5, z);
+      mg.box(1.9, 1.2, 0.04, 0x434c33, 0, 2.35, b0 - 0.02);
+      driver = { x: 0.6, y: 1.72, z: 3.35 };
+      parts = [{ cz: 0, hw, hl, top: 3.25 }];
+    }
+    camouflage(mg, paint);
+    let frontGeo = null;
+    if (head) { frontGeo = front.build(); frontGeo.computeBoundingSphere(); }
+    return { body: mg.build(), glass: gl.build(), front: frontGeo, decal: null, plates: new Builder().build(), flashers: null, head, rake: 0, frontAxle: null, driver, rear: null, parts };
+  }
+  // someone riding the moped: sitting upright on the seat, feet on the floor, hands on the grips, a full-face helmet
+  function riderGeometry(id) {
+    if (id.riderGeo) return id.riderGeo;
+    const m = new Merger(), helmet = id === playerId ? 0xf7c600 : id.hatColor, sl = id.sleeves ? id.shirt : id.skin;
+    m.add(squash(cyl(0.16, 0.16, 0.18, 12), 1.15, 1, 0.8), id.pants, 0, 0.07, 0);
+    tubeTo(m, [0, 0.14, 0.0], [0, 0.42, 0.05], 0.17, id.shirt, 0.165);
+    m.add(squash(ball(0.175, 12, 8), 1.22, 0.42, 0.76), id.shirt, 0, 0.48, 0.06);
+    tubeTo(m, [0, 0.53, 0.07], [0, 0.6, 0.08], 0.05, id.skin);
+    // the helmet, its visor and a strip of colour round it
+    m.add(ball(0.152, 16, 12), helmet, 0, 0.71, 0.08);
+    m.add(squash(ball(0.153, 16, 6, Math.PI * 0.32), 1, 1, 1), 0x15171a, 0, 0.71, 0.08, Math.PI / 2 - 0.1, 0, 0);
+    m.add(squash(cyl(0.135, 0.15, 0.05, 16), 1, 1, 1.05), shade(helmet, 0.7), 0, 0.6, 0.07);
+    for (const s of [1, -1]) {
+      // legs: the thigh forwards along the seat, the shin down to the foot on the floor
+      tubeTo(m, [s * 0.09, 0.02, 0.0], [s * 0.14, -0.04, 0.4], 0.075, id.pants, 0.06);
+      tubeTo(m, [s * 0.14, -0.04, 0.4], [s * 0.13, -0.42, 0.22], 0.06, id.pants, 0.048);
+      m.box(0.1, 0.07, 0.24, 0x1c1c1c, s * 0.13, -0.44, 0.28);
+      // arms: from the shoulder down to the elbow and forwards to the grip
+      tubeTo(m, [s * 0.2, 0.5, 0.04], [s * 0.29, 0.31, 0.11], 0.052, id.shirt, 0.045);
+      tubeTo(m, [s * 0.29, 0.31, 0.11], [s * 0.31, 0.24, 0.3], 0.044, sl, 0.038);
+      m.add(ball(0.045, 8, 6), id.skin, s * 0.31, 0.24, 0.31);
+    }
+    id.riderGeo = m.build();
+    return id.riderGeo;
+  }
+  function carGeometry(M, paint) {
+    if (M.moped) return mopedGeometry(M, paint);
+    if (M.boat) return boatGeometry(M, paint);
+    if (M.mil) return militaryGeometry(M, paint);
+    const mg = new Merger(carSurf(paint)), gl = new Merger();
+    const sh = loftBody(M, paint, mg, gl), S = M.shape, { hl, hw, r0, r1, r2, r3 } = sh;
+    const roofMid = sh.ring((r1 + r2) / 2), gT = roofMid.gT;
+    // wheel wells: dark liners behind the arches
+    for (const az of [M.wb / 2, -M.wb / 2]) {
+      const x = wheelX(M) - 0.17, y0 = sh.sill(az) + 0.02, y1 = Math.min(sh.archTop, sh.belt(az) - 0.15) - 0.01;
+      mg.box(2 * x, y1 - y0, sh.rA * 1.7, UNDER, 0, (y0 + y1) / 2, az);
+    }
+    // interior: a dark tub up to the waist, seats and a steering wheel, seen through the windows
+    let seatZ = M.bus ? hl - 1.3 : r3 - (M.sport ? 0.98 : 0.92);
+    // a long raked windscreen (the Lamborghini's) would come down on the driver's head: sit further back, against the
+    // bulkhead in front of the engine
+    if (M.sport && seatZ > r2 + 0.05) seatZ = Math.max(r1 + 0.35, r2 - 0.2);
+    const driver = { x: M.bus ? hw - 0.62 : Math.max(0.3, hw - S.shoulder - 0.42), y: (M.bus ? 2.3 : sh.roof(seatZ)) - 0.92, z: seatZ };
+    // whoever sits there has to fit under the roof: sink the seat, and in the lowest cars slide it inboard, until the
+    // head and the cap or beanie clear the glass and the roof all round (and the cap's peak the windscreen)
+    const HEAD = [[-0.17, 0.92, -0.17], [0.17, 0.92, -0.17], [-0.17, 0.92, 0.17], [0.17, 0.92, 0.17], [-0.16, 0.83, 0.31], [0.16, 0.83, 0.31], [0, 0.93, 0]];
+    const headRoom = (x, y, z) => Math.max(...HEAD.map(([hx, hy, hz]) => y + hy - (sh.shellY(x + hx, z + hz) - 0.035)));
+    const fitSeat = (x, y, z, minX) => {
+      // sinking is cheap (the doors hide the body) until the head drops below the window line; sliding inboard costs
+      // a little more. Take the cheapest mix that fits
+      let best = null;
+      const sill = sh.belt(z) + 0.2;
+      for (let xx = x; xx >= minX - 1e-6; xx -= 0.02) {
+        const d = Math.max(0, headRoom(xx, y, z)), cost = d + 1.5 * (x - xx) + 4 * Math.max(0, sill - (y - d + 0.8));
+        if (!best || cost < best.cost) best = { x: xx, d, cost };
+      }
+      return { x: best.x, y: y - best.d, z };
+    };
+    if (S.open) driver.y = sh.belt(seatZ) - 0.4;
+    else if (!M.bus) Object.assign(driver, fitSeat(driver.x, driver.y, driver.z, 0.22));
+    // the back seat, where an arrested driver is put (behind the driver, as the police do)
+    const rear = M.sport || M.bus ? null : fitSeat(driver.x, driver.y, seatZ - 0.88, 0.2);
+    {
+      const z0 = Math.max(r0, -hl + S.rc[0] * 0.7) + 0.05, z1 = Math.min(r3, hl - S.rc[1]) - 0.05;
+      let yMin = 9;
+      for (let z = z0; z <= z1; z += 0.1) yMin = Math.min(yMin, sh.belt(z));
+      const xi = hw - S.shoulder - 0.05, y0 = sh.sill(0) + 0.08, y1 = yMin - 0.03;
+      if (z1 > z0) mg.box(2 * xi, y1 - y0, z1 - z0, 0x1a1b1e, 0, (y0 + y1) / 2, (z0 + z1) / 2);
+      const seat = S.seatCol || 0x2b2d31, sy = y1 + 0.2;
+      if (M.bus) {
+        for (let z = hl - 3.2; z > -hl + 1.2; z -= 0.85) for (const sx of [1, -1]) if (!S.busDoors.some(([a, b]) => z > a - 0.3 && z < b + 0.3)) mg.box(0.9, 0.5, 0.1, 0x2f4f7a, sx * (hw - 0.6), y1 + 0.25, z);
+      } else {
+        // the seats follow the roof: a low or sloping roof gets a shorter backrest, and the headrest goes if there's no room
+        const ceil = (z) => Math.min(sh.topAt(z - 0.08), sh.topAt(z), sh.topAt(z + 0.08)) - 0.08;
+        const inner = (z, y) => { const r = sh.ring(z); return lerp(r.gB, r.gT, clamp((y - r.yt) / Math.max(1e-3, r.top - r.yt), 0, 1)) - 0.06; };
+        const bz = seatZ - 0.32, bot = sy - 0.275, top = Math.min(sy + 0.275, ceil(bz)), roomTop = ceil(bz - 0.02);
+        const sx = Math.min(driver.x, xi - 0.28, inner(bz, top) - 0.25);
+        for (const s of [1, -1]) {
+          mg.box(0.5, top - bot, 0.12, seat, s * sx, (top + bot) / 2, bz);
+          const hTop = Math.min(sy + 0.465, roomTop), hBot = top + 0.02;
+          if (hTop - hBot > 0.08) mg.box(0.26, hTop - hBot, 0.1, seat, s * sx, (hTop + hBot) / 2, seatZ - 0.34);
+        }
+        const rz = seatZ - 1.2;
+        if (!M.sport && rz > z0) {
+          const rBot = sy - 0.28, rTop = Math.min(sy + 0.22, ceil(rz));
+          if (rTop - rBot > 0.25) mg.box(2 * Math.min(xi, inner(rz, rTop)) - 0.1, rTop - rBot, 0.12, seat, 0, (rTop + rBot) / 2, rz);
+        }
+        mg.add(new THREE.TorusGeometry(0.17, 0.025, 6, 18), 0x15171a, driver.x, y1 + 0.16, seatZ + 0.42, -0.45, 0, 0);
+      }
+    }
+    // mirrors on the doors at the foot of the windscreen
+    if (!M.bus) for (const s of [1, -1]) {
+      const z = r3 - 0.28, y = sh.belt(z) + 0.1, x = sh.ring(z).gB;
+      mg.box(0.07, 0.04, 0.07, GLOSS, s * (x + 0.035), y - 0.03, z);
+      mg.add(new THREE.BoxGeometry(0.16, 0.09, 0.07), paint, s * (x + 0.13), y, z, 0, s * 0.15, 0);
+      mg.box(0.13, 0.07, 0.01, GLOSS, s * (x + 0.13), y, z - 0.04);
+      // (the indicator repeater in the outer end of the mirror)
+      mg.add(new THREE.BoxGeometry(0.014, 0.024, 0.062), IND(s), s * (x + 0.211), y - 0.022, z - 0.012, 0, s * 0.15, 0);
+    } else for (const s of [1, -1]) {
+      mg.box(0.06, 0.06, 0.5, GLOSS, s * (hw + 0.03), 2.55, hl - 0.25);
+      mg.box(0.06, 0.4, 0.2, GLOSS, s * (hw + 0.06), 2.3, hl + 0.05);
+    }
+    // door handles near the rear edge of each door
+    const doors = (S.doors || []).slice().sort((a, b) => b - a);
+    for (let k = 1; k < doors.length; k++) for (const s of [1, -1]) {
+      const z = doors[k] + 0.22, y = sh.belt(z) - 0.1, x = sh.sideX(z, y);
+      mg.box(0.03, 0.035, 0.15, S.handles === 'paint' ? shade(paint, 0.9) : S.trim === 'chrome' ? CHROME : GLOSS, s * (x + 0.006), y, z);
+    }
+    // number plates: a frame on the body and the plate itself, a quad that shows this car's registration from the atlas
+    const plateB = new Builder();
+    for (const [s, y] of [[1, S.plate[0]], [-1, S.plate[1]]]) {
+      const z = sh.endZ(0.26, s) + s * 0.014, f = z + s * 0.0135, x0 = 0.25 * s, x1 = -0.25 * s;
+      mg.box(0.53, 0.12, 0.025, GLOSS, 0, y, z);
+      plateB.quad([x1, y - 0.052, f], [x0, y - 0.052, f], [x0, y + 0.052, f], [x1, y + 0.052, f], 0xffffff, [[0, 0], [1, 0], [1, 1], [0, 1]], [0, 0, s]);
+    }
+    // special lamps
+    for (const L of S.lamps || []) {
+      if (L.type === 'round') for (const s of [1, -1]) {
+        const y = sh.belt(L.z) + 0.012, rx = Math.PI / 2 - L.tilt;
+        mg.add(new THREE.CylinderGeometry(L.r + 0.018, L.r + 0.018, 0.05, 20), CHROME, s * L.x, y, L.z, rx, 0, 0);
+        mg.add(new THREE.CylinderGeometry(L.r, L.r, 0.07, 20), COL.head, s * L.x, y, L.z + 0.004, rx, 0, 0);
+      } else if (L.type === 'bars') for (const s of [1, -1]) for (const x of L.xs) {
+        const zr = sh.endZ(x + L.w / 2, -1), yt = sh.belt(zr + 0.05), y0 = yt + L.y[0], y1 = yt + L.y[1];
+        mg.box(L.w, y1 - y0, 0.05, COL.tail, s * x, (y0 + y1) / 2, zr - 0.005);
+      }
+    }
+    if (S.lamps && S.lamps.some((L) => L.type === 'bars')) for (const s of [1, -1]) mg.box(0.12, 0.05, 0.04, COL.rev, s * 0.3, S.plate[1] + 0.13, sh.endZ(0.3, -1) - 0.005);
+    for (const L of S.lamps || []) {
+      if (L.type === 'face') for (const s of [1, -1]) {
+        // a round lamp set into the front (the Mini's, the Fiat 500's, the G-Class's): a ring, then the glass
+        const z = sh.endZ(Math.min(L.x + L.r, hw - 0.02), 1) - 0.012;
+        mg.add(new THREE.CylinderGeometry(L.r + 0.024, L.r + 0.024, 0.05, 24), L.ring === 'paint' ? paint : L.ring === 'gloss' ? GLOSS : CHROME, s * L.x, L.y, z, Math.PI / 2, 0, 0);
+        mg.add(new THREE.CylinderGeometry(L.r, L.r * 0.92, 0.06, 24), COL.head, s * L.x, L.y, z + 0.012, Math.PI / 2, 0, 0);
+        if (!L.noInd && (L.ind || !S.lamps.some((K) => K.type === 'pod'))) mg.box(0.07, 0.05, 0.03, IND(s), s * (L.x + L.r + 0.08), L.y - L.r * 0.5, sh.endZ(L.x + L.r + 0.08, 1) - 0.005);
+      } else if (L.type === 'pod') for (const s of [1, -1]) mg.box(0.08, 0.055, 0.13, IND(s), s * L.x, sh.belt(L.z) + 0.026, L.z);
+      else if (L.type === 'pixel') for (const [end, R, col] of [[1, L.front, COL.head], [-1, L.rear, COL.tail]]) {
+        // square "pixels" in a grid, as on the Hyundai Ioniq 5
+        if (!R) continue;
+        const n = Math.max(1, Math.round((R.x[1] - R.x[0]) / 0.05)), m = Math.max(1, Math.round((R.y[1] - R.y[0]) / 0.05));
+        for (const s of [1, -1]) {
+          const zb = sh.endZ((R.x[0] + R.x[1]) / 2, end) + end * 0.004;
+          mg.box(R.x[1] - R.x[0] + 0.03, R.y[1] - R.y[0] + 0.03, 0.02, GLOSS, s * (R.x[0] + R.x[1]) / 2, (R.y[0] + R.y[1]) / 2, zb);
+          for (let i = 0; i < n; i++) for (let j = 0; j < m; j++) mg.box(0.032, 0.032, 0.02, col, s * (R.x[0] + ((i + 0.5) * (R.x[1] - R.x[0])) / n), R.y[0] + ((j + 0.5) * (R.y[1] - R.y[0])) / m, zb + end * 0.008);
+        }
+      } else if (L.type === 'dots') for (const s of [1, -1]) {
+        // four points of light in a square inside each headlamp (Porsche's)
+        const z = sh.endZ(L.x, 1) - 0.004;
+        for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) mg.box(0.03, 0.022, 0.03, COL.head, s * (L.x + dx * L.s), L.y + dy * L.s * 0.7, z);
+      } else if (L.type === 'tailRound') for (const s of [1, -1]) for (const x of L.xs) {
+        // round tail lamps, two a side (Ferrari's)
+        const z = sh.endZ(Math.min(x + L.r, hw - 0.02), -1) + 0.01;
+        mg.add(new THREE.CylinderGeometry(L.r + 0.02, L.r + 0.02, 0.05, 20), GLOSS, s * x, L.y, z, Math.PI / 2, 0, 0);
+        mg.add(new THREE.CylinderGeometry(L.r, L.r, 0.06, 20), COL.tail, s * x, L.y, z - 0.012, Math.PI / 2, 0, 0);
+      }
+    }
+    // Indicators, amber: on the outer corners of the nose and the tail, and a repeater in each door mirror. Each lamp
+    // lies flat on the curve of the corner it sits on (the cars with their own lamps keep theirs: the Mini's and the
+    // Fiat's round ones, the G-Class's on the wings, the F40's)
+    {
+      // where the rounded end (1 the nose, -1 the tail) is at lateral offset x and height y
+      const endAt = (x, y, end) => {
+        let a = end * (hl - (end > 0 ? S.rc[1] : S.rc[0])), b = end * hl;
+        for (let i = 0; i < 20; i++) { const m = (a + b) / 2; if (sh.sideX(m, y) >= x) a = m; else b = m; }
+        return a;
+      };
+      const cornerLamp = (x, y, w, h, end) => {
+        const zIn = endAt(Math.max(0, x - w / 2), y, end), zOut = endAt(x + w / 2, y, end), L = Math.hypot(w, zOut - zIn);
+        const nx = (end * (zIn - zOut)) / L, nz = (end * w) / L, ang = Math.atan2(zOut - zIn, w), d = 0.022, o = d / 2 - 0.004;
+        for (const s of [1, -1]) mg.add(new THREE.BoxGeometry(w, h, d), IND(s), s * (x + nx * o), y, (zIn + zOut) / 2 + nz * o, 0, -s * ang, 0);
+      };
+      const lamps = S.lamps || [];
+      if (!S.f40 && !lamps.some((L) => L.type === 'face')) {
+        // under the outer end of the headlamp (or, with the lamps up on the wings, beside the plate)
+        const zh = hl - (S.head ? S.head.d / 2 : 0.15), yt = sh.ring(zh).yt;
+        const y = S.head ? sh.lv(S.head.y[0], yt) - 0.037 : S.plate[0] + 0.02;
+        cornerLamp(Math.max(S.head ? S.head.x + 0.09 : 0, hw - 0.18), y, 0.14, 0.05, 1);
+      }
+      const tr = lamps.find((L) => L.type === 'tailRound');
+      if (S.f40) { /* its outer round tail lamps are the indicators */ }
+      else if (tr) cornerLamp(Math.max(...tr.xs), tr.y - tr.r - 0.05, 0.12, 0.045, -1);
+      else if (S.tail) {
+        // in the bottom outer corner of the tail lamp
+        const zt = -hl + S.tail.d / 2, yt = sh.ring(zt).yt;
+        cornerLamp(Math.max(S.tail.x + 0.07, hw - 0.17), sh.lv(S.tail.y[0], yt) + 0.035, 0.12, 0.055, -1);
+      }
+      // the bus has its repeaters on the sides, just behind the front corners
+      if (M.bus) for (const s of [1, -1]) mg.box(0.012, 0.05, 0.14, IND(s), s * (hw + 0.004), 1.2, hl - 0.5);
+    }
+    // BMW's kidney grille: two tall openings with chrome surrounds and slats, either side of the middle of the nose
+    if (S.kidney) {
+      const K = S.kidney, w = K.x1 - K.x0, h = K.y1 - K.y0, cy = (K.y0 + K.y1) / 2, z = sh.endZ((K.x0 + K.x1) / 2, 1) - 0.035;
+      for (const s of [1, -1]) {
+        const cx = s * (K.x0 + K.x1) / 2;
+        mg.box(w + 0.05, h + 0.05, 0.05, CHROME, cx, cy, z);
+        mg.box(w, h, 0.05, GLOSS, cx, cy, z + 0.012);
+        for (let i = 1; i < 7; i++) mg.box(0.014, h - 0.02, 0.02, 0x4a4f55, cx - w / 2 + (i * w) / 7, cy, z + 0.04);
+      }
+    }
+    // the G-Class's grille: upright chrome bars across it
+    if (S.grilleBars) {
+      const G = S.grilleBars, h = G.y[1] - G.y[0];
+      for (let i = 0; i <= G.n; i++) { const x = -G.x + (2 * G.x * i) / G.n; mg.box(0.02, h, 0.02, CHROME, x, (G.y[0] + G.y[1]) / 2, sh.endZ(Math.abs(x), 1) + 0.004); }
+      mg.box(2 * G.x + 0.04, 0.03, 0.02, CHROME, 0, G.y[1] + 0.015, sh.endZ(G.x, 1) + 0.004);
+    }
+    // the maker's badge on the nose
+    if (S.badge) {
+      const B = S.badge, z = sh.endZ(0.03, 1) + 0.01, y = B.y;
+      if (B.kind === 'star') {
+        mg.add(new THREE.TorusGeometry(0.075, 0.009, 6, 24), CHROME, 0, y, z);
+        for (let i = 0; i < 3; i++) mg.add(new THREE.BoxGeometry(0.012, 0.075, 0.01), CHROME, Math.sin((i / 3) * TAU) * 0.037, y + Math.cos((i / 3) * TAU) * 0.037, z, 0, 0, -(i / 3) * TAU);
+      } else if (B.kind === 'rings') for (let i = 0; i < 4; i++) mg.add(new THREE.TorusGeometry(0.045, 0.007, 6, 20), CHROME, (i - 1.5) * 0.068, y, z);
+      else if (B.kind === 'mg') { mg.add(new THREE.CylinderGeometry(0.075, 0.075, 0.015, 8), CHROME, 0, y, z, Math.PI / 2, Math.PI / 8, 0); mg.add(new THREE.CylinderGeometry(0.06, 0.06, 0.02, 8), 0x8c1a1a, 0, y, z + 0.003, Math.PI / 2, Math.PI / 8, 0); }
+      else if (B.kind === 'vw') { mg.add(new THREE.TorusGeometry(0.07, 0.009, 6, 24), CHROME, 0, y, z); for (const sx of [-1, 1]) mg.add(new THREE.BoxGeometry(0.012, 0.09, 0.01), CHROME, sx * 0.022, y + 0.005, z, 0, 0, sx * 0.35); }
+      else if (B.kind === 'bar') { mg.box(B.w || 0.5, 0.025, 0.02, CHROME, 0, y, z - 0.004); mg.add(new THREE.CylinderGeometry(0.04, 0.04, 0.02, 16), 0x8c1a1a, 0, y, z + 0.004, Math.PI / 2, 0, 0); }
+      else mg.add(new THREE.CylinderGeometry(0.05, 0.05, 0.015, 16), CHROME, 0, y, z, Math.PI / 2, 0, 0);
+    }
+    // a spare wheel on the back door, under a hard cover
+    if (S.spare) {
+      const z = sh.endZ(0.1, -1) - 0.14, y = S.spare.y;
+      mg.add(new THREE.CylinderGeometry(M.R, M.R, 0.26, 28), COL.tyre, S.spare.x || 0, y, z, Math.PI / 2, 0, 0);
+      mg.add(new THREE.CylinderGeometry(M.R * 0.97, M.R * 0.97, 0.28, 28), S.spare.col === 'paint' ? paint : CHROME, S.spare.x || 0, y, z - 0.01, Math.PI / 2, 0, 0);
+      mg.add(new THREE.TorusGeometry(M.R * 0.97, 0.012, 6, 28), CHROME, S.spare.x || 0, y, z - 0.155);
+    }
+    if (S.iron) {
+      const z = sh.endZ(0.05, 1) + 0.006, yt = sh.belt(hl - 0.05), y = lerp(sh.lv(S.grille.y[0], yt), sh.lv(S.grille.y[1], yt), 0.5);
+      mg.add(new THREE.TorusGeometry(0.06, 0.012, 6, 16), CHROME, 0, y, z, 0, 0, 0);
+      mg.add(new THREE.BoxGeometry(0.34, 0.022, 0.02), CHROME, 0, y, z + 0.004, 0, 0, 0.62);
+    }
+    // wipers parked at the foot of the windscreen
+    if (!M.bus) {
+      const z = r3 - 0.06, y = sh.belt(r3) + 0.025, x0 = sh.ring(r3).gT * 0.85;
+      for (const sx of [-0.08, -x0 * 0.92]) mg.add(new THREE.BoxGeometry(x0 * 0.9, 0.018, 0.022), GLOSS, sx + x0 * 0.45, y, z, 0, 0.12, 0.03);
+    } else for (const sx of [0.55, -0.55]) mg.add(new THREE.BoxGeometry(0.9, 0.03, 0.03), GLOSS, sx, 1.25, hl + 0.02, 0, 0, 0.5 * Math.sign(sx));
+    // exhausts: twin pipes in the middle on the sports cars, one at the side on the rest, none on the electric ones
+    if (!M.ev) {
+      const zr = -hl + 0.06, yb = sh.sill(-hl + 0.3) + 0.06;
+      const pipes = S.sidePipes || S.f40 || S.pipes ? [] : M.sport ? [-0.2, 0.2] : M.bus ? [-hw + 0.4] : [-hw + 0.45];
+      // (pipes of its own: the Huayra's cluster of four in the middle of the tail, the Corvette's two pairs)
+      for (const [x, y] of S.pipes || []) {
+        mg.add(new THREE.CylinderGeometry(0.045, 0.045, 0.22, 12), CHROME, x, y, zr, Math.PI / 2, 0, 0);
+        mg.add(new THREE.CylinderGeometry(0.034, 0.034, 0.01, 12), UNDER, x, y, zr - 0.112, Math.PI / 2, 0, 0);
+      }
+      // (the G 63's come out at the sides, in front of the rear wheels)
+      if (S.sidePipes) for (const s of [1, -1]) for (const dz of [0, 0.11]) mg.add(new THREE.CylinderGeometry(0.04, 0.04, 0.16, 12), CHROME, s * (hw - 0.03), sh.sill(-M.wb / 2 + 0.6) + 0.05, -M.wb / 2 + 0.55 + dz, 0, 0, Math.PI / 2);
+      for (const x of pipes) {
+        mg.add(new THREE.CylinderGeometry(M.sport ? 0.048 : 0.035, M.sport ? 0.048 : 0.035, 0.22, 12), CHROME, x, M.sport ? Math.max(yb, (S.diffuser || 0.3) - 0.1) : yb, zr, Math.PI / 2, 0, 0);
+        mg.add(new THREE.CylinderGeometry(M.sport ? 0.036 : 0.025, M.sport ? 0.036 : 0.025, 0.01, 12), UNDER, x, M.sport ? Math.max(yb, (S.diffuser || 0.3) - 0.1) : yb, zr - 0.112, Math.PI / 2, 0, 0);
+      }
+    }
+    // the aerial fin on the roof of the newer cars
+    if (!M.bus && !M.sport && !M.classic && !S.roofGlass && !S.taxi && !S.police && r2 - r1 > 0.6) {
+      const z = r1 + 0.18, y = sh.surfY(z, 0);
+      mg.add(new THREE.BoxGeometry(0.045, 0.06, 0.16), GLOSS, 0, y + 0.025, z, 0.25, 0, 0);
+    }
+    // the third brake light at the top of the rear window
+    if (!M.bus && !M.sport && r1 > r0 + 0.04) {
+      const z = r1 - 0.03, y = sh.topAt(r1) - 0.035;
+      mg.box(0.32, 0.03, 0.02, COL.tail, 0, y, z);
+    }
+    // fog lamps low in the front
+    if (S.intake && !M.sport && !M.bus) for (const s of [1, -1]) {
+      const x = Math.min(hw - 0.28, S.intake.x + 0.08), y = S.intake.y[0] - 0.01, z = sh.endZ(x, 1) - 0.02;
+      if (y > sh.sill(hl - 0.2) + 0.03) mg.add(new THREE.CylinderGeometry(0.045, 0.045, 0.04, 14), COL.head, s * x, y, z, Math.PI / 2, 0, 0);
+    }
+    // roof rails, taxi sign, police light bar, rear wing, the bus's roof pack
+    const roofY = (z, x = 0) => sh.surfY(z, x);
+    if (S.rails) for (const s of [1, -1]) {
+      const x = gT - 0.14, za = r1 + 0.15, zb = r2 - 0.1, n = Math.max(2, Math.round((zb - za) / 0.35));
+      for (let i = 0; i < n; i++) {
+        const a = za + ((zb - za) * i) / n, b = za + ((zb - za) * (i + 1)) / n, y = (roofY(a, x) + roofY(b, x)) / 2 + 0.06;
+        mg.box(0.045, 0.035, b - a + 0.01, GLOSS, s * x, y, (a + b) / 2);
+      }
+      for (const z of [za, zb]) mg.box(0.05, 0.06, 0.12, GLOSS, s * x, roofY(z, x) + 0.03, z);
+    }
+    const roofZ = (r1 + r2) / 2;
+    let flashers = null;
+    if (S.taxi) {
+      const y = roofY(roofZ) + 0.02;
+      mg.box(0.66, 0.04, 0.26, GLOSS, 0, y + 0.02, roofZ);
+      mg.box(0.62, 0.17, 0.22, 0xf2c200, 0, y + 0.125, roofZ);
+    }
+    if (S.police) {
+      const z = roofZ + 0.25, y = roofY(z) + 0.02;
+      mg.box(1.2, 0.07, 0.3, GLOSS, 0, y + 0.035, z);
+      mg.box(0.5, 0.1, 0.26, COL.blueL, -0.33, y + 0.12, z);
+      mg.box(0.5, 0.1, 0.26, COL.blueR, 0.33, y + 0.12, z);
+      const fz = sh.endZ(0.2, 1) + 0.01, fy = sh.lv(S.grille.y[1], sh.belt(hl - 0.1)) - 0.03;
+      mg.box(0.12, 0.05, 0.03, COL.blueL, -0.2, fy, fz);
+      mg.box(0.12, 0.05, 0.03, COL.blueR, 0.2, fy, fz);
+      flashers = [[-0.33, y + 0.15, z], [0.33, y + 0.15, z]];
+    }
+    if (S.wing) {
+      // the rear wing on two posts: h high above the tail, z in from the end, w across, chord deep
+      const Wg = S.wing === true ? {} : S.wing, wz = -hl + (Wg.z ?? 0.32), wy = sh.belt(wz), h = Wg.h ?? 0.28, span = Wg.w ?? M.W - 0.2, ch = Wg.chord ?? 0.36;
+      for (const s of [-1, 1]) mg.box(0.05, h, 0.12, GLOSS, s * (Wg.posts ?? 0.55), wy + h / 2 - 0.01, wz);
+      mg.box(span, 0.04, ch, GLOSS, 0, wy + h + 0.01, wz - 0.04);
+      for (const s of [-1, 1]) mg.box(0.03, 0.16, ch + 0.06, GLOSS, s * (span / 2 - 0.02), wy + h - 0.01, wz - 0.04);
+    }
+    if (S.open) {
+      // an open car: the windscreen leaning back from the front of the cockpit in a thin frame, and roll hoops behind the seats
+      const zf = S.open.z[1], yb = sh.belt(zf), ws = S.open.screen ?? 0.3, back = ws * 0.55, w = sh.ring(zf).gB - 0.03, frame = M.classic ? CHROME : GLOSS;
+      gl.hexa([[-w, yb, zf - 0.02], [w, yb, zf - 0.02], [w, yb, zf + 0.005], [-w, yb, zf + 0.005], [-w + 0.05, yb + ws, zf - back - 0.02], [w - 0.05, yb + ws, zf - back - 0.02], [w - 0.05, yb + ws, zf - back + 0.005], [-w + 0.05, yb + ws, zf - back + 0.005]], 0xffffff);
+      for (const s of [1, -1]) tubeTo(mg, [s * w, yb, zf - 0.01], [s * (w - 0.05), yb + ws, zf - back - 0.01], 0.016, frame);
+      tubeTo(mg, [-(w - 0.05), yb + ws, zf - back - 0.01], [w - 0.05, yb + ws, zf - back - 0.01], 0.016, frame);
+      if (S.open.hoop) {
+        const hz = seatZ - 0.55, hy = sh.belt(hz), hx = Math.min(hw - S.shoulder - 0.08, driver.x + 0.28);
+        tubePath(mg, [[-hx, hy - 0.05, hz], [-hx + 0.05, hy + 0.32, hz], [hx - 0.05, hy + 0.32, hz], [hx, hy - 0.05, hz]], 0.028, GLOSS);
+      }
+    }
+    // chrome (or black) bumper bars round the nose and the tail, following the curve of the ends
+    if (S.bumper) {
+      const B = S.bumper, col = TRIM[B.col || 'chrome'], xm = hw * (B.w || 0.86), n = 8;
+      for (const [end, y] of [[1, B.y[0]], [-1, B.y[1]]]) for (let i = 0; i < n; i++) {
+        const xa = -xm + (2 * xm * i) / n, xb = -xm + (2 * xm * (i + 1)) / n;
+        const za = sh.endZ(Math.abs(xa), end) + end * 0.035, zb = sh.endZ(Math.abs(xb), end) + end * 0.035, len = Math.hypot(xb - xa, zb - za);
+        mg.add(new THREE.BoxGeometry(len + 0.012, 0.065, 0.05), col, (xa + xb) / 2, y, (za + zb) / 2, 0, -Math.atan2(zb - za, xb - xa), 0);
+      }
+    }
+    if (S.f40) {
+      const F = S.f40, up = [0, 1, 0];
+      // a flat patch of four corners lying just above the body (ducts, slots, panel gaps), facing up
+      const patch = (q, col) => {
+        const ux = q[1][0] - q[0][0], uz = q[1][2] - q[0][2], vx = q[2][0] - q[0][0], vz = q[2][2] - q[0][2];
+        if (uz * vx - ux * vz < 0) q = [q[0], q[3], q[2], q[1]];
+        mg.triN(q[0], q[1], q[2], up, up, up, col); mg.triN(q[0], q[2], q[3], up, up, up, col);
+      };
+      const onTop = (x, z, lift = 0.006) => [x, sh.surfY(z, Math.abs(x)) + lift, z];
+      // (in short pieces, so that it follows the curve of the body instead of cutting under it)
+      const line = (xa, za, xb, zb, w, col) => {
+        const l = Math.hypot(xb - xa, zb - za), nx = (-(zb - za) / l) * w, nz = ((xb - xa) / l) * w, n = Math.max(1, Math.ceil(l / 0.06));
+        for (let i = 0; i < n; i++) {
+          const x0 = lerp(xa, xb, i / n), z0 = lerp(za, zb, i / n), x1 = lerp(xa, xb, (i + 1) / n), z1 = lerp(za, zb, (i + 1) / n);
+          patch([onTop(x0 + nx, z0 + nz, 0.005), onTop(x1 + nx, z1 + nz, 0.005), onTop(x1 - nx, z1 - nz, 0.005), onTop(x0 - nx, z0 - nz, 0.005)], col);
+        }
+      };
+      for (const s of [1, -1]) {
+        // the two NACA ducts in the bonnet, narrow at the front and opening out towards the windscreen
+        for (let i = 0; i < 10; i++) {
+          const t0 = i / 10, t1 = (i + 1) / 10, za = lerp(1.72, 1.12, t0), zb = lerp(1.72, 1.12, t1);
+          patch([onTop(s * lerp(0.175, 0.09, t0), za), onTop(s * lerp(0.225, 0.31, t0), za), onTop(s * lerp(0.225, 0.31, t1), zb), onTop(s * lerp(0.175, 0.09, t1), zb)], UNDER);
+        }
+        // the lids of the pop-up headlamps at the front corners, shut, seen by their panel gaps
+        const xa = s * 0.47, xb = s * 0.83, za = 1.5, zb = 1.86;
+        line(xa, za, xb, za, 0.005, UNDER); line(xa, zb, xb, zb, 0.005, UNDER); line(xa, za, xa, zb, 0.005, UNDER);
+        // the amber indicator at the outer end of each lamp, behind the clear cover
+        mg.box(0.12, 0.05, 0.02, IND(s), s * 0.79, 0.455, sh.endZ(0.86, 1) - 0.006);
+        // the yellow Ferrari shield on each front wing, behind the wheel
+        const zs = M.wb / 2 - sh.rA - 0.13, ys = 0.62, xs = sh.sideX(zs, ys);
+        mg.box(0.008, 0.08, 0.06, 0xf2c200, s * (xs + 0.002), ys, zs);
+        // the fog and reversing lamps low in the corners of the tail
+        mg.box(0.09, 0.045, 0.03, s > 0 ? COL.tail : COL.rev, s * 0.72, 0.47, sh.endZ(0.77, -1) - 0.008);
+        // four round lamps in the black mesh of the tail: red inside, amber outside
+        for (const [x, kind] of F.tail) {
+          const z = sh.endZ(Math.min(x + F.lampR, hw - 0.02), -1) - 0.004;
+          mg.add(new THREE.CylinderGeometry(F.lampR + 0.016, F.lampR + 0.016, 0.03, 22), GLOSS, s * x, F.lampY, z, Math.PI / 2, 0, 0);
+          mg.add(new THREE.CylinderGeometry(F.lampR, F.lampR * 0.94, 0.04, 22), kind === 'red' ? COL.tail : IND(s), s * x, F.lampY, z - 0.012, Math.PI / 2, 0, 0);
+        }
+      }
+      // the Lexan engine cover: a window behind the roof, then rows of slots either side of a spine down the middle
+      for (let z = r0 + 0.1; z < r1 - 0.35; z += 0.075) {
+        const xe = sh.ring(z).xe - 0.05;
+        for (const s of [1, -1]) line(s * 0.07, z, s * xe, z, 0.014, UNDER);
+      }
+      line(0, r0 + 0.04, 0, r1 - 0.3, 0.035, paint);
+      // the wing across the whole tail, carried on the rear wings swept up into it
+      const wy = F.wingY, wa = -hl + 0.03, wb = -hl + 0.4, ex = hw - 0.03;
+      mg.add(new THREE.BoxGeometry(2 * ex, 0.035, wb - wa), paint, 0, wy - 0.02, (wa + wb) / 2, 0.07, 0, 0);
+      mg.box(2 * ex - 0.1, 0.012, 0.02, GLOSS, 0, wy - 0.01, wa + 0.005);
+      for (const s of [1, -1]) {
+        const x0 = s * (ex - 0.055), x1 = s * ex, zf = -1.55, yb = (z) => sh.belt(z) - 0.03;
+        mg.hexa([[x0, yb(wa), wa], [x1, yb(wa), wa], [x1, yb(zf), zf], [x0, yb(zf), zf], [x0, wy + 0.02, wa], [x1, wy + 0.02, wa], [x1, wy + 0.01, wb], [x0, wy + 0.01, wb]], paint);
+      }
+      // three pipes in an oval in the middle of the tail, the middle one for the wastegates
+      const ye = 0.46;
+      mg.box(0.44, 0.13, 0.05, GLOSS, 0, ye, sh.endZ(0.22, -1) + 0.01);
+      for (const [x, r] of [[-0.125, 0.046], [0, 0.036], [0.125, 0.046]]) {
+        mg.add(new THREE.CylinderGeometry(r, r, 0.16, 14), CHROME, x, ye, -hl + 0.02, Math.PI / 2, 0, 0);
+        mg.add(new THREE.CylinderGeometry(r - 0.012, r - 0.012, 0.01, 14), UNDER, x, ye, -hl - 0.062, Math.PI / 2, 0, 0);
+      }
+    }
+    if (S.roofPack) {
+      mg.box(1.9, 0.26, 3.6, 0xd8dadc, 0, 3.13, -2.9);
+      mg.box(1.5, 0.18, 1.6, 0xd8dadc, 0, 3.09, 2.6);
+    }
+    // POLIS on the doors and the bonnet, TAXI on the roof sign (the decal texture holds both words)
+    let decal = null;
+    if (S.police || S.taxi) {
+      const db = new Builder(), POL = [[0, 0.5], [1, 0.5], [1, 1], [0, 1]], TAX = [[0, 0], [1, 0], [1, 0.5], [0, 0.5]];
+      if (S.police) {
+        const zf = r3 - 0.3, zr = zf - 0.7, yt = sh.belt((zf + zr) / 2), y0 = yt - 0.165, y1 = yt - 0.045;
+        const X = (z, y) => sh.sideX(z, y) + 0.008;
+        db.quad([X(zf, y0), y0, zf], [X(zr, y0), y0, zr], [X(zr, y1), y1, zr], [X(zf, y1), y1, zf], 0xffffff, POL, [1, 0, 0]);
+        db.quad([-X(zr, y0), y0, zr], [-X(zf, y0), y0, zf], [-X(zf, y1), y1, zf], [-X(zr, y1), y1, zr], 0xffffff, POL, [-1, 0, 0]);
+        const hz0 = hl - S.rc[1] - 0.05, hz1 = hz0 - 0.3, Y = (z, x) => sh.surfY(z, Math.abs(x)) + 0.02;
+        db.quad([-0.5, Y(hz0, -0.5), hz0], [0.5, Y(hz0, 0.5), hz0], [0.5, Y(hz1, 0.5), hz1], [-0.5, Y(hz1, -0.5), hz1], 0xffffff, POL, [0, 1, 0]);
+      }
+      if (S.taxi) {
+        const y = roofY(roofZ) + 0.04, y0 = y + 0.02, y1 = y + 0.19, zf = roofZ + 0.112, zr = roofZ - 0.112;
+        db.quad([-0.3, y0, zf], [0.3, y0, zf], [0.3, y1, zf], [-0.3, y1, zf], 0xffffff, TAX, [0, 0, 1]);
+        db.quad([0.3, y0, zr], [-0.3, y0, zr], [-0.3, y1, zr], [0.3, y1, zr], 0xffffff, TAX, [0, 0, -1]);
+      }
+      decal = db.build();
+    }
+    const beltMax = Math.max(...sh.Z.filter((z) => Math.abs(z) < hl * 0.7).map(sh.belt)), roofMax = Math.max(...sh.Z.map(sh.topAt));
+    const parts = M.bus ? [{ cz: 0, hw, hl, top: roofMax }]
+      : [{ cz: 0, hw, hl, top: beltMax }, { cz: (Math.max(r1, -hl + 0.3) + r2) / 2, hw: hw - 0.12, hl: (r2 - Math.max(r1, -hl + 0.3)) / 2, top: roofMax + 0.03 }];
+    return { body: mg.build(), glass: gl.build(), decal, plates: plateB.build(), flashers, driver, rear, parts };
+  }
+  // one geometry per model and colour, shared by every car like it until a crash dents one (see ownGeometry)
+  const carGeoCache = new Map();
+  function sharedCarGeometry(M, paint) {
+    const key = M.id + ':' + paint;
+    if (!carGeoCache.has(key)) carGeoCache.set(key, carGeometry(M, paint));
+    return carGeoCache.get(key);
+  }
+  const wheelCache = new Map();
+  function wheelGeometry(R, style) {
+    const key = R + style;
+    if (wheelCache.has(key)) return wheelCache.get(key);
+    if (style === 'mil' || style === 'tank') {
+      // the army's: a fat cross-country tyre on a plain olive rim with a big hub, or a tank's rubber-tyred road wheel
+      const m = new Merger(carSurf(-1)), tank = style === 'tank', tw = tank ? 0.62 : 0.42, rim = R * (tank ? 0.82 : 0.55);
+      m.add(new THREE.CylinderGeometry(R, R, tw * 0.9, 24, 1, true), tank ? 0x2a2c2e : COL.tyre, 0, 0, 0, 0, 0, Math.PI / 2);
+      m.add(new THREE.CylinderGeometry(R * 0.96, R * 0.96, tw, 24), tank ? 0x2a2c2e : COL.tyre, 0, 0, 0, 0, 0, Math.PI / 2);
+      for (const sx of [-1, 1]) {
+        const fx = sx * (tw / 2 + 0.004);
+        m.add(new THREE.CylinderGeometry(rim, rim * 0.92, 0.03, 20), tank ? 0x4a5240 : 0x4f5a3c, fx, 0, 0, 0, 0, Math.PI / 2);
+        m.add(new THREE.CylinderGeometry(rim * 0.32, rim * 0.32, 0.06, 10), 0x2b2e2a, fx + sx * 0.02, 0, 0, 0, 0, Math.PI / 2);
+        if (!tank) for (let k = 0; k < 8; k++) { const a = (k / 8) * TAU; m.add(new THREE.CylinderGeometry(0.022, 0.022, 0.05, 6), 0x8a8f94, fx + sx * 0.02, Math.cos(a) * rim * 0.48, Math.sin(a) * rim * 0.48, 0, 0, Math.PI / 2); }
+      }
+      const g = m.build();
+      wheelCache.set(key, g);
+      return g;
+    }
+    if (style === 'scooter') {
+      // a 12-inch scooter wheel: a fat tyre, round in profile, on five spokes, the brake disc on the left
+      const m = new Merger(carSurf(-1)), tube = 0.064, rim = 0.155;
+      m.add(new THREE.TorusGeometry(R - tube, tube, 10, 32), COL.tyre, 0, 0, 0, 0, Math.PI / 2, 0);
+      m.add(new THREE.CylinderGeometry(rim, rim, 0.1, 24, 1, true), COL.hub, 0, 0, 0, 0, 0, Math.PI / 2);
+      for (const sx of [-1, 1]) {
+        m.add(new THREE.TorusGeometry(rim - 0.008, 0.012, 4, 20), COL.rim, sx * 0.05, 0, 0, 0, Math.PI / 2, 0);
+        for (let k = 0; k < 5; k++) { const a = (k / 5) * TAU; m.add(new THREE.BoxGeometry(0.018, rim * 0.95, 0.04), COL.rim, sx * 0.045, Math.cos(a) * rim * 0.48, Math.sin(a) * rim * 0.48, a, 0, 0); }
+        m.add(new THREE.CylinderGeometry(0.035, 0.035, 0.03, 10), CHROME, sx * 0.05, 0, 0, 0, 0, Math.PI / 2);
+      }
+      m.add(new THREE.CylinderGeometry(0.11, 0.11, 0.004, 22), COL.disc, 0.062, 0, 0, 0, 0, Math.PI / 2);
+      const g = m.build();
+      wheelCache.set(key, g);
+      return g;
+    }
+    const m = new Merger(carSurf(-1)), big = style === 'sport' || style === 'black' || style === 'f40', tw = style === 'steel' ? 0.3 : big ? 0.3 : 0.27;
+    const rim = R * (big ? 0.74 : style === 'steel' ? 0.6 : 0.68), face = style === 'black' ? COL.rimDark : style === 'aero' ? COL.aero : style === 'steel' ? 0x6a6e73 : style === 'f40' ? COL.rimLight : style === 'wire' ? CHROME : COL.rim;
+    m.add(new THREE.CylinderGeometry(R, R, tw * 0.84, 30, 1, true), COL.tyre, 0, 0, 0, 0, 0, Math.PI / 2);
+    m.add(new THREE.CylinderGeometry(R * 0.95, R * 0.95, tw, 30), COL.tyre, 0, 0, 0, 0, 0, Math.PI / 2);
+    m.add(new THREE.CylinderGeometry(rim, rim, tw + 0.004, 24, 1, false), COL.hub, 0, 0, 0, 0, 0, Math.PI / 2);
+    for (const sx of [-1, 1]) {
+      const fx = sx * (tw / 2 + 0.004);
+      // the brake disc, seen between the spokes
+      if (style !== 'aero' && style !== 'steel') m.add(new THREE.CylinderGeometry(rim * 0.8, rim * 0.8, 0.003, 26), COL.disc, sx * (tw / 2 + 0.0045), 0, 0, 0, 0, Math.PI / 2);
+      m.add(new THREE.TorusGeometry(rim - 0.012, 0.016, 3, 18), face, fx, 0, 0, 0, Math.PI / 2, 0);
+      if (style === 'aero') {
+        m.add(new THREE.CylinderGeometry(rim - 0.02, rim - 0.02, 0.012, 18), face, fx, 0, 0, 0, 0, Math.PI / 2);
+        for (let k = 0; k < 5; k++) { const a = (k / 5) * TAU; m.add(new THREE.BoxGeometry(0.016, rim * 0.5, 0.05), COL.hub, fx + sx * 0.004, Math.cos(a) * rim * 0.55, Math.sin(a) * rim * 0.55, a, 0, 0); }
+      } else if (style === 'steel') {
+        m.add(new THREE.CylinderGeometry(rim - 0.03, rim * 0.5, 0.03, 18), face, fx, 0, 0, 0, 0, Math.PI / 2);
+        for (let k = 0; k < 8; k++) { const a = (k / 8) * TAU; m.add(new THREE.CylinderGeometry(0.035, 0.035, 0.04, 6), COL.hub, fx, Math.cos(a) * rim * 0.68, Math.sin(a) * rim * 0.68, 0, 0, Math.PI / 2); }
+      } else if (style === 'wire') {
+        // wire wheels: forty spokes laced from the hub to the chrome rim, crossing, and the eared knock-off in the middle
+        for (let k = 0; k < 20; k++) { const a = (k / 20) * TAU; m.add(new THREE.CylinderGeometry(0.0045, 0.0045, rim * 0.9, 4), CHROME, fx, Math.cos(a) * rim * 0.47, Math.sin(a) * rim * 0.47, a + (k % 2 ? 0.12 : -0.12), 0, 0); }
+        m.add(new THREE.CylinderGeometry(rim * 0.2, rim * 0.24, 0.05, 12), CHROME, fx + sx * 0.01, 0, 0, 0, 0, Math.PI / 2);
+        for (const a of [0.4, 0.4 + Math.PI / 2]) m.add(new THREE.BoxGeometry(0.025, rim * 0.6, 0.03), CHROME, fx + sx * 0.04, 0, 0, a, 0, 0);
+      } else if (style === 'f40') {
+        // Speedline's five-spoke star, each spoke broad at the hub and narrowing out to the rim, and the centre-lock nut
+        for (let k = 0; k < 5; k++) {
+          const a = (k / 5) * TAU, g = new THREE.CylinderGeometry(0.022, 0.05, rim * 0.86, 4, 1);
+          g.rotateY(Math.PI / 4); g.scale(0.5, 1, 1);
+          m.add(g, face, fx, Math.cos(a) * rim * 0.47, Math.sin(a) * rim * 0.47, a, 0, 0);
+        }
+        m.add(new THREE.CylinderGeometry(rim * 0.3, rim * 0.34, 0.03, 20), face, fx, 0, 0, 0, 0, Math.PI / 2);
+        m.add(new THREE.CylinderGeometry(rim * 0.16, rim * 0.16, 0.05, 6), CHROME, fx + sx * 0.018, 0, 0, 0, 0, Math.PI / 2);
+        for (let k = 0; k < 3; k++) m.add(new THREE.BoxGeometry(0.03, rim * 0.48, 0.03), CHROME, fx + sx * 0.03, 0, 0, (k / 3) * Math.PI, 0, 0);
+      } else {
+        const n = style === 'sport' ? 10 : 5, wdt = style === 'sport' ? 0.035 : 0.075;
+        for (let k = 0; k < n; k++) {
+          const a = (k / n) * TAU;
+          if (style === 'alloy') for (const da of [-0.13, 0.13]) m.add(new THREE.BoxGeometry(0.02, rim * 0.92, 0.04), face, fx, Math.cos(a + da) * rim * 0.48, Math.sin(a + da) * rim * 0.48, a + da, 0, 0);
+          else m.add(new THREE.BoxGeometry(0.02, rim * 0.95, wdt), face, fx, Math.cos(a) * rim * 0.48, Math.sin(a) * rim * 0.48, a, 0, 0);
+        }
+      }
+      if (style !== 'f40' && style !== 'wire') m.add(new THREE.CylinderGeometry(rim * 0.2, rim * 0.2, 0.024, 8), style === 'black' ? COL.rimDark : CHROME, fx + sx * 0.004, 0, 0, 0, 0, Math.PI / 2);
+    }
+    const g = m.build();
+    wheelCache.set(key, g);
+    return g;
+  }
+
+  // brake callipers sit on the hub, so they stay put while the wheel turns: red on the sports cars
+  const caliperCache = new Map();
+  function caliperGeometry(R, style) {
+    const key = R + style;
+    if (caliperCache.has(key)) return caliperCache.get(key);
+    let g = null;
+    if (style !== 'aero' && style !== 'steel' && style !== 'scooter' && style !== 'mil' && style !== 'tank') {
+      const m = new Merger(carSurf(-1)), big = style === 'sport' || style === 'black' || style === 'f40', tw = big ? 0.3 : 0.27, rim = R * (big ? 0.74 : 0.68);
+      for (const sx of [-1, 1]) m.add(new THREE.BoxGeometry(0.014, rim * 0.34, rim * 0.42), big ? COL.caliper : COL.caliperGrey, sx * (tw / 2 + 0.0075), rim * 0.47, -rim * 0.3, 0.55, 0, 0);
+      g = m.build();
+    }
+    caliperCache.set(key, g);
+    return g;
+  }
+  // number plates: one atlas of Swedish registrations (white, and yellow for the taxis), each car showing its own
+  const PLATE_LETTERS = 'ABCDEFGHJKLMNOPRSTUWXYZ', PLATE_N = 32, PLATE_TAXI = 28;
+  const plateLetter = () => PLATE_LETTERS[Math.floor(Math.random() * PLATE_LETTERS.length)];
+  const PLATE_REGS = Array.from({ length: PLATE_N }, () => plateLetter() + plateLetter() + plateLetter() + ' ' + String(Math.floor(Math.random() * 100)).padStart(2, '0') + (Math.random() < 0.5 ? Math.floor(Math.random() * 10) : plateLetter()));
+  const plateTex = canvasTex(1024, 512, (g) => {
+    PLATE_REGS.forEach((reg, i) => {
+      const x = (i % 4) * 256, y = Math.floor(i / 4) * 64, taxi = i >= PLATE_TAXI;
+      g.fillStyle = '#1b1c1e'; g.fillRect(x, y, 256, 64);
+      g.fillStyle = taxi ? '#f2c200' : '#f4f4f1'; roundRect(g, x + 3, y + 3, 250, 58, 6); g.fill();
+      g.fillStyle = '#1f4fae'; roundRect(g, x + 3, y + 3, 30, 58, 6); g.fill(); g.fillRect(x + 20, y + 3, 13, 58);
+      g.fillStyle = '#f2c200';
+      for (let k = 0; k < 12; k++) { const a = (k / 12) * TAU; g.fillRect(x + 18 + Math.cos(a) * 8 - 1, y + 21 + Math.sin(a) * 8 - 1, 2.2, 2.2); }
+      g.fillStyle = '#ffffff'; g.font = '700 17px Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('S', x + 18, y + 47);
+      g.fillStyle = '#121314'; g.font = '700 44px "Arial Narrow", Arial, sans-serif'; g.fillText(reg, x + 144, y + 35, 204);
+    });
+  });
+  function plateMaterial(slot) {
+    const m = std({ map: plateTex, roughness: 0.4, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    const u = { value: new THREE.Vector2((slot % 4) * 0.25, 1 - (Math.floor(slot / 4) + 1) * 0.125) };
+    m.onBeforeCompile = (sh) => { sh.uniforms.uSlot = u; sh.vertexShader = 'uniform vec2 uSlot;\n' + sh.vertexShader.replace('#include <uv_vertex>', '#include <uv_vertex>\n\tvUv = uSlot + uv * vec2( 0.25, 0.125 );'); };
+    return m;
+  }
+
+  const cars = [];
+  let driving = null, spawnedCar = null;
+  // who sits astride rather than in a seat: on the moped and the jet ski
+  const rides = (M) => M.moped || M.boat === 'jetski';
+  function makeCar(M, color) {
+    const geo = sharedCarGeometry(M, color);
+    const group = new THREE.Group(), body = new THREE.Group();
+    group.add(body);
+    const mat = carMaterial();
+    const bodyMesh = new THREE.Mesh(geo.body, mat); bodyMesh.castShadow = true; bodyMesh.receiveShadow = true; body.add(bodyMesh);
+    const glass = new THREE.Mesh(geo.glass, glassMat);
+    // a moped's handlebars, fork and front wheel turn about its steering head, which leans back
+    let steerGroup = null;
+    if (M.moped || geo.front) {
+      steerGroup = new THREE.Group();
+      steerGroup.rotation.order = 'XYZ'; steerGroup.position.set(geo.head[0], geo.head[1], geo.head[2]); steerGroup.rotation.x = -geo.rake;
+      const fm = new THREE.Mesh(geo.front, mat); fm.castShadow = true; fm.receiveShadow = true;
+      steerGroup.add(fm); body.add(steerGroup);
+      // (the moped's lamp mask and screen turn with its bars; the jet ski's screen stays on the hull)
+      if (M.moped) steerGroup.add(glass); else body.add(glass);
+    } else body.add(glass);
+    const decal = geo.decal ? new THREE.Mesh(geo.decal, decalMat) : null;
+    if (decal) body.add(decal);
+    const plateSlot = M.shape.taxi ? PLATE_TAXI + Math.floor(Math.random() * (PLATE_N - PLATE_TAXI)) : Math.floor(Math.random() * PLATE_TAXI);
+    const plateMat = plateMaterial(plateSlot), plates = new THREE.Mesh(geo.plates, plateMat);
+    body.add(plates);
+    // (boats have no plates, and no shadow on the road under them)
+    plates.visible = !M.boat;
+    const blob = new THREE.Mesh(blobGeo, blobMat);
+    blob.scale.set(M.W * 1.35, 1, M.L * 1.12); blob.position.y = 0.045; blob.renderOrder = 1; blob.visible = !M.boat;
+    group.add(blob);
+    const driver = new THREE.Mesh(rides(M) ? riderGeometry(playerId) : playerId.driverGeo, personMat);
+    driver.position.set(geo.driver.x, geo.driver.y, geo.driver.z);
+    driver.visible = false;
+    body.add(driver);
+    // someone in the back seat (you, after an arrest)
+    let rearSeat = null;
+    if (geo.rear) { rearSeat = new THREE.Mesh(playerId.driverGeo, personMat); rearSeat.position.set(geo.rear.x, geo.rear.y, geo.rear.z); rearSeat.visible = false; body.add(rearSeat); }
+    const spins = [], pivots = [], wheels = [], calipers = [], wg = wheelGeometry(M.R, M.rim), cg = caliperGeometry(M.R, M.rim);
+    const wx = wheelX(M), wz = M.wb / 2;
+    // (a moped's two wheels lean with its body; the front one is in the steering. The army's vehicles run on more axles,
+    // the front M.steers of them steering, and the tank's road wheels inside its tracks steer none)
+    const axles = M.boat ? [] : M.axles || [wz, -wz];
+    axles.forEach((az, ai) => { for (const sx of M.moped ? [0] : [1, -1]) {
+      const sz = az > 0 ? 1 : -1, steers = M.axles ? ai < M.steers : sz === 1;
+      const pivot = new THREE.Group(); pivot.position.set(sx * wx, M.R, az);
+      if (M.moped) {
+        if (sz === 1) pivot.position.copy(geo.frontAxle);
+        (sz === 1 ? steerGroup : body).add(pivot);
+      }
+      const spin = new THREE.Group(); pivot.add(spin);
+      const w = new THREE.Mesh(wg, wheelMat); w.castShadow = true; spin.add(w);
+      // (the callipers are only shown on your own car, to keep the number of things drawn down)
+      if (cg) { const cm = new THREE.Mesh(cg, wheelMat); cm.visible = false; pivot.add(cm); calipers.push(cm); }
+      if (!M.moped) group.add(pivot);
+      spins.push(spin);
+      wheels.push({ pivot, sx, sz, z: az, steers, toe: 0, camber: 0 });
+      if (steers) pivots.push(pivot);
+    } });
+    const flashers = geo.flashers ? geo.flashers.map(([x, y, z]) => {
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0x4d7bff, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0 }));
+      s.position.set(x, y, z); s.scale.setScalar(2.2); body.add(s);
+      return s;
+    }) : null;
+    scene.add(group);
+    const r = M.W / 2 + 0.04, span = M.L / 2 - r, n = Math.max(2, Math.ceil((2 * span) / (r * 1.2)) + 1);
+    const offs = [];
+    for (let i = 0; i < n; i++) offs.push(-span + (2 * span * i) / (n - 1));
+    const c = {
+      M, color, group, body, driver, rearSeat, spins, pivots, wheels, calipers, geo, mat, bodyMesh, glass, decal, flashers, plateSlot, plateMat, plates, steerGroup, fallen: 0,
+      geoShared: true, x: 0, z: 0, h: 0, vx: 0, vz: 0, steer: 0, wheelRot: 0, roll: 0, pitch: 0,
+      prevVf: 0, throttle: 0, r, offs, parts: geo.parts, bot: null, occupant: null, keep: false, input: null, px: 0, pz: 0,
+      // gearbox
+      gear: 0, rpm: M.idle, shiftT: 0, auto: true, limiter: false, reversing: false, braking: false,
+      // damage
+      health: 100, power: 1, align: 0, dented: false, glassBroken: false, dead: false, hitT: 0, smokeT: 0, slip: 0,
+      police: null
+    };
+    cars.push(c);
+    return c;
+  }
+  function setOccupant(c, id) {
+    c.occupant = id;
+    if (id) c.driver.geometry = rides(c.M) ? riderGeometry(id) : id.driverGeo;
+    c.driver.visible = !!id;
+  }
+  function removeCar(c) {
+    scene.remove(c.group);
+    if (!c.geoShared) { c.geo.body.dispose(); c.geo.glass.dispose(); if (c.geo.decal) c.geo.decal.dispose(); }
+    c.mat.dispose(); c.plateMat.dispose();
+    if (c.flashers) for (const s of c.flashers) s.material.dispose();
+    const i = cars.indexOf(c);
+    if (i >= 0) cars.splice(i, 1);
+    if (c === spawnedCar) spawnedCar = null;
+  }
+  function fitsM(M, x, z, h) {
+    const co = Math.cos(h), si = Math.sin(h), hw = M.W / 2 - 0.05, hl = M.L / 2 - 0.05;
+    const n = Math.max(1, Math.ceil((2 * hl) / 3));
+    for (let i = 0; i <= n; i++) {
+      const lz = -hl + (2 * hl * i) / n;
+      for (const lx of [-hw, hw]) if (!walkable(x + lx * co + lz * si, z - lx * si + lz * co)) return false;
+    }
+    return true;
+  }
+  function spotFree(M, x, z, h, ignore) {
+    if (!fitsM(M, x, z, h)) return false;
+    const r = M.W / 2 + 0.04, span = M.L / 2 - r, fx = Math.sin(h), fz = Math.cos(h);
+    for (const o of [-span, 0, span]) if (blockedAt(x + fx * o, z + fz * o, r)) return false;
+    for (const o of cars) if (o !== ignore && Math.hypot(o.x - x, o.z - z) < (o.M.L + M.L) / 2 + 0.6) return false;
+    return true;
+  }
+
+  /* ---------- car physics ---------- */
+  let shake = 0;
+  function bump(strength) {
+    if (!reduceMotion) shake = Math.max(shake, Math.min(0.5, strength * 0.035));
+  }
+  function shiftTo(c, g) {
+    g = clamp(g, 0, c.M.gears - 1);
+    if (g === c.gear) return false;
+    const dir = g > c.gear ? 1 : -1;
+    c.gear = g;
+    c.shiftT = c.auto ? SHIFT_TIME : SHIFT_TIME * 0.7;
+    if (c === driving) onShift(c, dir);
+    return true;
+  }
+  function autoShift(c, vf, thr) {
+    const M = c.M;
+    if (c.shiftT > 0) return;
+    if (vf < 0.6) { c.gear = 0; return; }
+    const hard = thr > 0.6, r = vf / M.gearTop[c.gear];
+    if (c.gear < M.gears - 1 && r > (hard ? UP_HARD : UP_SOFT)) shiftTo(c, c.gear + 1);
+    else if (c.gear > 0 && vf < M.gearTop[c.gear - 1] * (hard ? 0.6 : 0.34)) shiftTo(c, c.gear - 1);
+  }
+  // where a boat may be: open water all round its hull (under a bridge counts), inside the map
+  function boatFits(M, x, z, h) {
+    if (x < BOUNDS.x0 + 20 || x > BOUNDS.x1 - 20 || z < BOUNDS.z0 + 20 || z > BOUNDS.z1 - 20) return false;
+    const co = Math.cos(h), si = Math.sin(h), hw = M.W / 2 - 0.05, hl = M.L / 2 - 0.05;
+    for (const [lx, lz] of [[0, hl], [-hw * 0.6, hl * 0.6], [hw * 0.6, hl * 0.6], [-hw, 0], [hw, 0], [-hw, -hl], [hw, -hl], [0, -hl]]) {
+      if (groundAt(x + lx * co + lz * si, z - lx * si + lz * co) & 1) return false;
+    }
+    return true;
+  }
+  // a boat: the propeller or the jet pushes it along, the water drags it back, it slides sideways through a turn before
+  // the hull bites, and it only steers while it moves (a jet ski hardly at all off the throttle, as its jet is the rudder)
+  function updateBoat(c, dt, inp) {
+    const M = c.M;
+    if (!inp && Math.abs(c.vx) + Math.abs(c.vz) < 0.02) { c.vx = c.vz = 0; c.steer = 0; c.throttle = 0; c.thr = 0; c.braking = false; c.slip = 0; return; }
+    const ox = c.x, oz = c.z, oh = c.h, jet = M.boat === 'jetski';
+    const fx = Math.sin(c.h), fz = Math.cos(c.h), rx = Math.cos(c.h), rz = -Math.sin(c.h);
+    let vf = c.vx * fx + c.vz * fz, vl = c.vx * rx + c.vz * rz;
+    const throttle = inp ? inp.fwd : 0, steerIn = inp ? -inp.right : 0, power = c.dead ? 0 : c.power;
+    c.throttle = Math.abs(throttle); c.thr = throttle;
+    if (throttle > 0.05) { if (vf < -0.3) vf += M.brake * throttle * dt; else vf += driveAccel(M, Math.max(0, vf), 0, power) * throttle * dt; }
+    else if (throttle < -0.05) { if (vf > 0.3) vf += M.brake * throttle * dt; else if (vf > -M.rev) vf += M.accel * 0.3 * throttle * power * dt; }
+    // the water holds the hull back, harder the faster it goes, and it slows fast off the throttle
+    vf -= vf * Math.min(1, (throttle > 0.05 ? 0.05 : 0.3 + 0.02 * Math.abs(vf)) * dt);
+    c.reversing = vf < -0.3 || (throttle < -0.05 && vf < 0.3);
+    c.braking = false;
+    const sp = Math.abs(vf), bite = jet ? 0.25 + 0.75 * Math.max(c.throttle, 0.3 * clamp(sp / 10, 0, 1)) : clamp(sp / 5, 0.25, 1);
+    c.steer += (steerIn * 0.55 - c.steer) * Math.min(1, 5 * dt);
+    c.h += (c.steer / 0.55) * (jet ? 1.7 : 0.75) * bite * clamp(sp / 3 + 0.2, 0, 1) * Math.sign(vf || 1) * dt;
+    vl *= Math.exp(-(jet ? 2.4 : 1.5) * dt);
+    c.slip = Math.abs(vl);
+    c.vx = fx * vf + rx * vl; c.vz = fz * vf + rz * vl;
+    c.x += c.vx * dt; c.z += c.vz * dt;
+    c.wheelRot += vf * dt;
+    if (!boatFits(M, c.x, c.z, c.h)) {
+      // ran into the quay: the end that leads takes the knock
+      const v = Math.hypot(c.vx, c.vz), dir = vf >= 0 ? 1 : -1;
+      if (v > 3) crash(c, c.x + fx * dir * M.L / 2, c.z + fz * dir * M.L / 2, -fx * dir, -fz * dir, Math.abs(vf), null);
+      if (boatFits(M, c.x, oz, c.h)) { c.z = oz; c.vz *= -0.2; c.vx *= 0.8; }
+      else if (boatFits(M, ox, c.z, c.h)) { c.x = ox; c.vx *= -0.2; c.vz *= 0.8; }
+      else if (boatFits(M, ox, oz, c.h)) { c.x = ox; c.z = oz; c.vx *= -0.2; c.vz *= -0.2; }
+      else { c.x = ox; c.z = oz; c.h = oh; c.vx *= -0.2; c.vz *= -0.2; }
+      if (c === driving && v > 4) bump(v * 0.6);
+    }
+  }
+  function updateCar(c, dt, inp) {
+    const M = c.M;
+    if (M.boat) return updateBoat(c, dt, inp);
+    if (c.shiftT > 0) c.shiftT -= dt;
+    if (!inp && Math.abs(c.vx) + Math.abs(c.vz) < 0.02 && Math.abs(c.steer) < 0.002) { c.vx = c.vz = 0; c.steer = 0; c.throttle = 0; c.thr = 0; c.braking = false; c.slip = 0; return; }
+    const ox = c.x, oz = c.z, oh = c.h;
+    const fx = Math.sin(c.h), fz = Math.cos(c.h), rx = Math.cos(c.h), rz = -Math.sin(c.h);
+    let vf = c.vx * fx + c.vz * fz, vl = c.vx * rx + c.vz * rz;
+    const throttle = inp ? inp.fwd : 0, steerIn = inp ? -inp.right : 0, hand = inp ? inp.brake : false;
+    c.throttle = Math.abs(throttle); c.thr = throttle;
+    const you = c === driving;
+    if (you) {
+      // hold S and the car brakes to a stop and then backs up, without letting go; hold W while backing and it stops
+      // and drives forwards again (in first gear with the manual box)
+      const want = throttle > 0.05 ? 1 : throttle < -0.05 ? -1 : 0, still = Math.abs(vf) < 0.6;
+      if (!want || !still || (want < 0) === !!c.inR) c.rT = 0;
+      else if ((c.rT += dt) > 0.12) { c.inR = want < 0; c.rT = 0; if (!c.inR) c.gear = 0; onShift(c, c.inR ? -1 : 1); }
+    }
+    c.reversing = you ? c.inR || vf < -0.3 : vf < -0.3 || (throttle < -0.05 && vf < 0.5);
+    if (c.auto && !c.inR) autoShift(c, vf, throttle);
+    const power = c.dead ? 0 : c.power;
+    if (you) {
+      // your car goes where the gear says: forwards in 1 and up, backwards only in R; the other pedal brakes to a stop
+      const go = c.inR ? -throttle : throttle, back = c.inR ? -1 : 1;
+      if (go > 0.05) {
+        if (vf * back < -0.5) vf += M.brake * go * back * dt;
+        else if (c.inR) { if (vf > -M.rev) vf -= M.accel * 0.7 * go * power * dt; }
+        else if (c.shiftT <= 0) vf += driveAccel(M, Math.max(0, vf), c.gear, power) * go * dt;
+      } else if (go < -0.05) {
+        const dv = M.brake * -go * dt;
+        vf = Math.abs(vf) <= dv ? 0 : vf - Math.sign(vf) * dv;
+      } else {
+        const r = Math.max(0, vf) / M.gearTop[c.gear];
+        const engine = c.shiftT > 0 || Math.abs(vf) < 1 || c.dead || c.inR ? 0 : 0.9 * Math.pow(M.max / M.gearTop[c.gear], 0.5) * Math.min(r, 1.2);
+        const roll = (2.2 + engine) * dt;
+        vf = Math.abs(vf) <= roll ? 0 : vf - Math.sign(vf) * roll;
+      }
+    } else if (throttle > 0.05) {
+      if (vf < -0.5) vf += M.brake * throttle * dt;
+      else if (c.shiftT <= 0) vf += driveAccel(M, Math.max(0, vf), c.gear, power) * throttle * dt;
+    } else if (throttle < -0.05) {
+      if (vf > 0.5) vf += M.brake * throttle * dt;
+      else if (vf > -M.rev) vf += M.accel * 0.7 * throttle * power * dt;
+    } else {
+      // rolling resistance, plus engine braking that is stronger in low gears and at high revs
+      const r = vf / M.gearTop[c.gear];
+      const engine = c.shiftT > 0 || vf < 1 || c.dead ? 0 : 0.9 * Math.pow(M.max / M.gearTop[c.gear], 0.5) * Math.min(r, 1.2);
+      const roll = ((inp ? 2.2 : 7) + engine) * dt;
+      vf = Math.abs(vf) <= roll ? 0 : vf - Math.sign(vf) * roll;
+    }
+    // a manual downshift at too high a speed: the engine over-revs and holds the car back hard
+    if (vf > M.gearTop[c.gear] * 1.06 && c.shiftT <= 0) vf -= 4 * dt;
+    if (vf > M.max) vf = M.max;
+    if (hand) vf -= Math.sign(vf) * Math.min(Math.abs(vf), 8 * dt);
+    c.braking = hand || (throttle < -0.05 && vf > 0.5) || (throttle > 0.05 && vf < -0.5);
+    const maxSteer = 0.6 / (1 + Math.abs(vf) * 0.03);
+    // bent suspension after a crash pulls the car to one side
+    c.steer += (steerIn * maxSteer + c.align - c.steer) * Math.min(1, 6 * dt);
+    vl *= Math.exp(-(hand ? 1.4 : 9) * M.grip * dt);
+    c.slip = Math.abs(vl) + (hand && Math.abs(vf) > 3 ? Math.abs(vf) * 0.35 : 0)
+      + (throttle > 0.9 && c.gear === 0 && vf < 7 && M.zero[1] < 5 && !c.dead ? 4 : 0);
+    let yaw = (vf / M.wb) * Math.tan(c.steer);
+    const cap = ((hand ? 1.8 : 1) * 14 * M.grip) / Math.max(Math.abs(vf), 5);
+    yaw = clamp(yaw, -cap, cap);
+    c.h += yaw * dt;
+    // velocity stays in the old frame; the new heading picks up a little slip next step
+    c.vx = fx * vf + rx * vl; c.vz = fz * vf + rz * vl;
+    c.x += c.vx * dt; c.z += c.vz * dt;
+    c.wheelRot += (vf * dt) / M.R;
+    if (!fitsM(M, c.x, c.z, c.h)) {
+      // ran into the quay edge or the end of a bridge: the end of the car that leads takes the hit
+      const sp = Math.hypot(c.vx, c.vz), dir = vf >= 0 ? 1 : -1;
+      if (sp > 3) crash(c, c.x + fx * dir * M.L / 2, c.z + fz * dir * M.L / 2, -fx * dir, -fz * dir, Math.abs(vf), null);
+      if (fitsM(M, c.x, oz, c.h)) { c.z = oz; c.vz *= -0.2; c.vx *= 0.8; }
+      else if (fitsM(M, ox, c.z, c.h)) { c.x = ox; c.vx *= -0.2; c.vz *= 0.8; }
+      else if (fitsM(M, ox, oz, c.h)) { c.x = ox; c.z = oz; c.vx *= -0.2; c.vz *= -0.2; }
+      else { c.x = ox; c.z = oz; c.h = oh; c.vx *= -0.2; c.vz *= -0.2; }
+      if (c === driving && sp > 4) bump(sp * 0.6);
+    }
+  }
+  // engine speed for the rev counter and the engine sound
+  function updateEngine(c, vf, dt) {
+    const M = c.M, v = Math.abs(vf), thr = Math.max(0, c.thr || 0);
+    let target;
+    if (c.dead) target = 0;
+    else if (M.cvt || M.boat) {
+      // the variator (and a boat's engine, its propeller slipping in the water): the clutch takes up at about half revs and the engine stays up near its best revs while the
+      // ratio changes; let go of the throttle and it drops back towards idle
+      const k = clamp(v / M.max, 0, 1);
+      target = c.throttle > 0.05 && !c.reversing ? lerp(M.red * 0.72, M.red * 0.87, k) * (0.82 + 0.18 * c.throttle) : v > 0.8 ? lerp(M.idle * 1.4, M.red * 0.5, k) : M.idle;
+    } else {
+      target = c.reversing ? M.red * 0.75 * clamp(v / M.rev, 0, 1) : (M.red * v) / M.gearTop[c.gear];
+      // clutch slipping off the line, or revving with the car standing still (an electric motor turns with the wheels)
+      if (!M.ev && (c.reversing || c.gear === 0 || v < 0.5)) target = Math.max(target, lerp(M.idle, M.red * (v < 0.5 ? 0.6 : 0.4), c.throttle));
+      target = clamp(target, M.idle, M.red * 1.04);
+    }
+    c.limiter = !c.dead && c.shiftT <= 0 && thr > 0.3 && target >= M.red * 0.99;
+    c.rpm += (target - c.rpm) * (1 - Math.exp(-dt * (target > c.rpm ? 9 : 6)));
+    if (c.limiter) c.rpm = M.red * (0.965 + 0.035 * Math.random());
+    c.load = c.dead || c.shiftT > 0 ? 0 : c.throttle;
+  }
+  function carWorld(c) {
+    const fx = Math.sin(c.h), fz = Math.cos(c.h);
+    let px = 0, pz = 0, nx = 0, nz = 0, hit = false, hx = 0, hz = 0, best = 0;
+    for (const off of c.offs) {
+      const cx = c.x + fx * off, cz = c.z + fz * off;
+      const res = resolveWorld(cx, cz, c.r, c.M.boat ? WATER_Y : undefined);
+      if (res.hit) {
+        if (Math.abs(res.x - cx) > Math.abs(px)) px = res.x - cx;
+        if (Math.abs(res.z - cz) > Math.abs(pz)) pz = res.z - cz;
+        nx += res.nx; nz += res.nz; hit = true;
+        const pen = Math.hypot(res.x - cx, res.z - cz);
+        if (pen >= best) { best = pen; hx = cx; hz = cz; }
+      }
+    }
+    if (!hit) return;
+    if (c.M.boat ? boatFits(c.M, c.x + px, c.z + pz, c.h) : fitsM(c.M, c.x + px, c.z + pz, c.h)) { c.x += px; c.z += pz; }
+    const nl = Math.hypot(nx, nz);
+    if (nl < 1e-6) return;
+    nx /= nl; nz /= nl;
+    const vn = c.vx * nx + c.vz * nz;
+    if (vn < 0) {
+      if (-vn > 2) crash(c, hx - nx * c.r, hz - nz * c.r, nx, nz, -vn, null);
+      c.vx -= 1.3 * vn * nx; c.vz -= 1.3 * vn * nz;
+      c.vx *= 0.8; c.vz *= 0.8;
+      if (c === driving && -vn > 2) bump(-vn);
+    }
+  }
+  function carPairs() {
+    for (const c of cars) { c.px = c.x; c.pz = c.z; }
+    for (let i = 0; i < cars.length; i++) for (let j = i + 1; j < cars.length; j++) {
+      const a = cars[i], b = cars[j];
+      if (a.remote && b.remote) continue;
+      const lim = (a.M.L + b.M.L) / 2 + 0.5, ddx = a.x - b.x, ddz = a.z - b.z;
+      if (ddx * ddx + ddz * ddz > lim * lim) continue;
+      const afx = Math.sin(a.h), afz = Math.cos(a.h), bfx = Math.sin(b.h), bfz = Math.cos(b.h);
+      // A friend's car is where their game says it is: it can't be shoved, only bounced off. (ia, ib push the cars apart,
+      // ma, mb share out the knock by the real masses, so each game gives its own car what a local crash would)
+      const ma = 1 / a.M.mass, mb = 1 / b.M.mass, ia = a.remote ? 0 : ma, ib = b.remote ? 0 : mb;
+      for (const oa of a.offs) for (const ob of b.offs) {
+        const ax = a.x + afx * oa, az = a.z + afz * oa, bx = b.x + bfx * ob, bz = b.z + bfz * ob;
+        const dx = ax - bx, dz = az - bz, rr2 = a.r + b.r, d2 = dx * dx + dz * dz;
+        if (d2 >= rr2 * rr2 || d2 < 1e-8) continue;
+        const d = Math.sqrt(d2), nx = dx / d, nz = dz / d, pen = rr2 - d;
+        const wa = ia / (ia + ib), wb = ib / (ia + ib);
+        a.x += nx * pen * wa; a.z += nz * pen * wa; b.x -= nx * pen * wb; b.z -= nz * pen * wb;
+        const vr = (a.vx - b.vx) * nx + (a.vz - b.vz) * nz;
+        if (vr < 0) {
+          const ka = ma / (ma + mb), kb = mb / (ma + mb);
+          if (-vr > 2) {
+            // each car takes the share of the change in speed that the other's mass forces on it
+            const cx = ax - nx * a.r, cz = az - nz * a.r;
+            crash(a, cx, cz, nx, nz, -vr * ka, b);
+            crash(b, cx, cz, -nx, -nz, -vr * kb, a);
+          }
+          const jimp = (-1.3 * vr) / (ma + mb);
+          if (!a.remote) { a.vx += jimp * ma * nx; a.vz += jimp * ma * nz; }
+          if (!b.remote) { b.vx -= jimp * mb * nx; b.vz -= jimp * mb * nz; }
+          if ((a === driving || b === driving) && -vr > 2) bump(-vr);
+        }
+      }
+    }
+    for (const c of cars) if (!c.remote && (c.x !== c.px || c.z !== c.pz) && !(c.M.boat ? boatFits(c.M, c.x, c.z, c.h) : fitsM(c.M, c.x, c.z, c.h))) { c.x = c.px; c.z = c.pz; }
+  }
+
+  /* ---------- particles: smoke, sparks, glass and bits ---------- */
+  const PARTICLE_VERT = [
+    'attribute vec3 pcol; attribute float psize; attribute float palpha;',
+    'uniform float scale;',
+    'varying vec3 vCol; varying float vA;',
+    'void main() {',
+    '  vCol = pcol; vA = palpha;',
+    '  vec4 mv = modelViewMatrix * vec4(position, 1.0);',
+    '  gl_PointSize = psize * scale / -mv.z;',
+    '  gl_Position = projectionMatrix * mv;',
+    '}'
+  ].join('\n');
+  const PARTICLE_FRAG = [
+    'uniform float soft;',
+    'varying vec3 vCol; varying float vA;',
+    'void main() {',
+    '  vec2 p = gl_PointCoord * 2.0 - 1.0; float d = dot(p, p);',
+    '  if (d > 1.0) discard;',
+    '  float a = vA * (soft > 0.5 ? (1.0 - d) * (1.0 - d) : 1.0 - smoothstep(0.55, 1.0, d));',
+    '  gl_FragColor = vec4(vCol, a);',
+    '  #include <tonemapping_fragment>',
+    '  #include <encodings_fragment>',
+    '}'
+  ].join('\n');
+  class Particles {
+    constructor(max, blending, soft) {
+      this.max = max; this.list = [];
+      this.pos = new Float32Array(max * 3); this.col = new Float32Array(max * 3); this.size = new Float32Array(max); this.alpha = new Float32Array(max);
+      const g = new THREE.BufferGeometry();
+      const attr = (name, arr, n) => { const a = new THREE.BufferAttribute(arr, n); a.setUsage(THREE.DynamicDrawUsage); g.setAttribute(name, a); return a; };
+      this.aPos = attr('position', this.pos, 3); this.aCol = attr('pcol', this.col, 3); this.aSize = attr('psize', this.size, 1); this.aAlpha = attr('palpha', this.alpha, 1);
+      g.setDrawRange(0, 0);
+      this.geo = g;
+      this.mat = new THREE.ShaderMaterial({
+        vertexShader: PARTICLE_VERT, fragmentShader: PARTICLE_FRAG, transparent: true, depthWrite: false, blending,
+        uniforms: { scale: { value: 500 }, soft: { value: soft ? 1 : 0 } }
+      });
+      const pts = new THREE.Points(g, this.mat);
+      pts.frustumCulled = false; pts.renderOrder = 2;
+      scene.add(pts);
+    }
+    // o: x y z, vx vy vz, life, size [from, to], alpha, colour, gravity, drag, bounce, fadeIn
+    spawn(o) {
+      if (this.list.length >= this.max) this.list.shift();
+      o.t = 0; o.c = o.c || new THREE.Color(o.color);
+      this.list.push(o);
+    }
+    update(dt) {
+      const L = this.list;
+      let w = 0;
+      for (let i = 0; i < L.length; i++) {
+        const q = L[i];
+        q.t += dt;
+        if (q.t >= q.life) continue;
+        const dr = Math.exp(-(q.drag || 0) * dt);
+        q.vx *= dr; q.vz *= dr; q.vy = q.vy * dr - (q.grav || 0) * dt;
+        q.x += q.vx * dt; q.y += q.vy * dt; q.z += q.vz * dt;
+        const fl = q.floor ?? 0.04;
+        if (q.y < fl && q.vy < 0) { q.y = fl; q.vy *= -(q.bounce || 0); q.vx *= 0.6; q.vz *= 0.6; }
+        L[w++] = q;
+      }
+      L.length = w;
+      for (let i = 0; i < w; i++) {
+        const q = L[i], k = q.t / q.life;
+        this.pos[i * 3] = q.x; this.pos[i * 3 + 1] = q.y; this.pos[i * 3 + 2] = q.z;
+        this.col[i * 3] = q.c.r; this.col[i * 3 + 1] = q.c.g; this.col[i * 3 + 2] = q.c.b;
+        this.size[i] = lerp(q.size[0], q.size[1], k);
+        this.alpha[i] = q.alpha * Math.min(1, q.t / (q.fadeIn || 0.0001)) * (1 - k) * (1 - k * 0.3);
+      }
+      this.geo.setDrawRange(0, w);
+      if (w) { this.aPos.needsUpdate = true; this.aCol.needsUpdate = true; this.aSize.needsUpdate = true; this.aAlpha.needsUpdate = true; }
+    }
+  }
+  const smokeFx = new Particles(260, THREE.NormalBlending, true);
+  const sparkFx = new Particles(160, THREE.AdditiveBlending, false);
+  const bitsFx = new Particles(220, THREE.NormalBlending, false);
+  const SMOKE_COL = { steam: new THREE.Color(0xe9ecef), grey: new THREE.Color(0x9a9da1), black: new THREE.Color(0x515357), tyre: new THREE.Color(0xd6d8da) };
+  const SPARK_COL = new THREE.Color(0xffb347), GLASS_COL = new THREE.Color(0xcfe4ee);
+
+  /* ---------- skid marks ---------- */
+  const SKID_MAX = 900;
+  const skidPos = new Float32Array(SKID_MAX * 18);
+  const skidGeo = new THREE.BufferGeometry();
+  const skidAttr = new THREE.BufferAttribute(skidPos, 3); skidAttr.setUsage(THREE.DynamicDrawUsage);
+  skidGeo.setAttribute('position', skidAttr);
+  skidGeo.setDrawRange(0, 0);
+  const skids = new THREE.Mesh(skidGeo, new THREE.MeshBasicMaterial({ color: 0x0d0d0e, transparent: true, opacity: 0.5, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -8 }));
+  skids.frustumCulled = false;
+  scene.add(skids);
+  let skidN = 0, skidCount = 0;
+  function skidSegment(x0, z0, x1, z1) {
+    const dx = x1 - x0, dz = z1 - z0, l = Math.hypot(dx, dz) || 1, px = (-dz / l) * 0.12, pz = (dx / l) * 0.12, y = 0.03;
+    const o = skidN * 18;
+    const v = [x0 - px, y, z0 - pz, x1 - px, y, z1 - pz, x1 + px, y, z1 + pz, x0 - px, y, z0 - pz, x1 + px, y, z1 + pz, x0 + px, y, z0 + pz];
+    for (let i = 0; i < 18; i++) skidPos[o + i] = v[i];
+    skidN = (skidN + 1) % SKID_MAX;
+    skidCount = Math.min(SKID_MAX, skidCount + 1);
+    skidGeo.setDrawRange(0, skidCount * 6);
+    skidAttr.needsUpdate = true;
+  }
+  function trackSkids(c) {
+    if (!c.skid) c.skid = [null, null];
+    const sliding = c.slip > 2.6 && Math.hypot(c.vx, c.vz) > 1.5 && Math.hypot(c.x - camTarget.x, c.z - camTarget.z) < 80;
+    const co = Math.cos(c.h), si = Math.sin(c.h), wx = wheelX(c.M), wz = -c.M.wb / 2;
+    for (let i = 0; i < (c.M.moped ? 1 : 2); i++) {
+      const lx = i ? -wx : wx, x = c.x + lx * co + wz * si, z = c.z - lx * si + wz * co;
+      if (!sliding) { c.skid[i] = null; continue; }
+      const last = c.skid[i];
+      if (!last) { c.skid[i] = [x, z]; continue; }
+      if (Math.hypot(x - last[0], z - last[1]) > 0.35) { skidSegment(last[0], last[1], x, z); c.skid[i] = [x, z]; }
+    }
+  }
+
+  /* ---------- damage ---------- */
+  // A crash dents the body where it hits: the vertices near the contact point are pushed into the car (never more
+  // than MAX_DENT from where they started), the paint there is scraped, lamps break, windows crack, and a hit
+  // at the engine end costs engine health. Below about 50 % the engine steams and loses power, below 25 % it
+  // smokes, and at 0 it stops.
+  const MAX_DENT = 0.62;
+  const posHash = (x, y, z) => { const h = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719) * 43758.5453; return h - Math.floor(h); };
+  // a car's geometry is shared with others of the same model and colour until its first dent
+  function ownGeometry(c) {
+    if (!c.geoShared) return;
+    const g = c.geo;
+    c.geo = { ...g, body: g.body.clone(), glass: g.glass.clone(), decal: g.decal ? g.decal.clone() : null };
+    c.bodyMesh.geometry = c.geo.body; c.glass.geometry = c.geo.glass;
+    if (c.decal) c.decal.geometry = c.geo.decal;
+    c.geoShared = false;
+  }
+  function dentGeometry(geo, lx, ly, lz, dx, dz, depth, radius, scrape, breakLamps) {
+    if (!geo) return false;
+    const P = geo.attributes.position.array;
+    if (!geo.userData.orig) geo.userData.orig = P.slice();
+    const O = geo.userData.orig, C = geo.attributes.color ? geo.attributes.color.array : null, S = geo.attributes.surf ? geo.attributes.surf.array : null;
+    let touched = false;
+    const moved = geo.index ? null : new Uint8Array(P.length / 3);
+    for (let i = 0, n = P.length / 3; i < n; i++) {
+      const px = P[i * 3], py = P[i * 3 + 1], pz = P[i * 3 + 2];
+      const ex = px - lx, ey = (py - ly) * 0.75, ez = pz - lz, d = Math.sqrt(ex * ex + ey * ey + ez * ez);
+      if (d >= radius) continue;
+      touched = true;
+      if (moved) moved[i] = 1;
+      const w = (1 - d / radius) * (1 - d / radius), push = depth * w;
+      const ox = O[i * 3], oy = O[i * 3 + 1], oz = O[i * 3 + 2], hsh = posHash(ox, oy, oz) - 0.5, hsh2 = posHash(oz, ox, oy) - 0.5;
+      // push along the impact, with some crumple sideways and up/down so panels buckle instead of sliding
+      let nx = px + dx * push - dz * push * hsh * 0.5, ny = py + push * hsh2 * 0.45, nz = pz + dz * push + dx * push * hsh * 0.5;
+      const mx = nx - ox, my = ny - oy, mz = nz - oz, m = Math.sqrt(mx * mx + my * my + mz * mz);
+      if (m > MAX_DENT) { const k = MAX_DENT / m; nx = ox + mx * k; ny = oy + my * k; nz = oz + mz * k; }
+      P[i * 3] = nx; P[i * 3 + 1] = Math.max(0.06, ny); P[i * 3 + 2] = nz;
+      if (C && scrape > 0) {
+        const k = Math.min(0.7, w * scrape);
+        C[i * 3] = lerp(C[i * 3], 0.12, k); C[i * 3 + 1] = lerp(C[i * 3 + 1], 0.12, k); C[i * 3 + 2] = lerp(C[i * 3 + 2], 0.13, k);
+      }
+      if (S && breakLamps && w > 0.15) {
+        const ch = S[i * 4 + 3];
+        if (ch > 0.5 && ch < 5.5 && (ch < 2.5 || ch > 4.5)) { S[i * 4 + 3] = 0; if (C) { C[i * 3] = 0.05; C[i * 3 + 1] = 0.05; C[i * 3 + 2] = 0.06; } }
+      }
+    }
+    if (!touched) return false;
+    geo.attributes.position.needsUpdate = true;
+    if (C) geo.attributes.color.needsUpdate = true;
+    if (S) geo.attributes.surf.needsUpdate = true;
+    if (moved) {
+      // only the crumpled triangles get new (flat) normals; the rest of the body keeps its smooth shading
+      const N = geo.attributes.normal.array;
+      for (let t = 0; t < moved.length; t += 3) {
+        if (!moved[t] && !moved[t + 1] && !moved[t + 2]) continue;
+        const a = t * 3, b = a + 3, c = a + 6;
+        const ux = P[b] - P[a], uy = P[b + 1] - P[a + 1], uz = P[b + 2] - P[a + 2], wx = P[c] - P[a], wy = P[c + 1] - P[a + 1], wz = P[c + 2] - P[a + 2];
+        let nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx;
+        const l = Math.hypot(nx, ny, nz);
+        if (l < 1e-12) continue;
+        nx /= l; ny /= l; nz /= l;
+        for (const o of [a, b, c]) { N[o] = nx; N[o + 1] = ny; N[o + 2] = nz; }
+      }
+      geo.attributes.normal.needsUpdate = true;
+    } else geo.computeVertexNormals();
+    geo.computeBoundingSphere();
+    return true;
+  }
+  const engineEnd = (M) => (M.rearEngine || M.bus ? -1 : 1);
+  function engineSpot(c) {
+    const M = c.M, e = engineEnd(M), lz = M.moped ? 0.05 : M.boat ? -(M.L / 2 - 0.5) : e * (M.L / 2 - (M.bus ? 1 : 0.7)), ly = M.moped ? 0.3 : M.boat ? WATER_Y + 1.1 : M.mil ? 1.9 : M.bus ? 2.9 : carShape(M).belt(lz) + 0.05;
+    const co = Math.cos(c.h), si = Math.sin(c.h);
+    return { x: c.x + lz * si, y: ly, z: c.z + lz * co };
+  }
+  function crash(c, wx, wz, dx, dz, speed, other) {
+    if (speed < 2.5) return;
+    if (c.hitT > 0 && speed < c.lastHit * 1.25) return;
+    c.hitT = 0.2; c.lastHit = speed;
+    const M = c.M, co = Math.cos(c.h), si = Math.sin(c.h);
+    const ex = wx - c.x, ez = wz - c.z, lx = ex * co - ez * si, lz = ex * si + ez * co;
+    const ldx = dx * co - dz * si, ldz = dx * si + dz * co;
+    const ly = M.moped || M.boat ? 0.5 : M.mil ? 1.0 : M.bus ? 0.9 : carShape(M).sill(0) + 0.3;
+    // a friend's car: their own game dents it and tells us how, so here it only gives off sparks and a bang
+    if (c.remote) { sparkBurst(wx, ly + 0.1, wz, dx, dz, speed); crashSound(wx, wz, speed, false); return; }
+    const hard = speed - 2.5;
+    if (hard > 1.5) {
+      const depth = Math.min(0.7, 0.032 * Math.pow(hard, 1.15)), radius = Math.min(1.5, 0.55 + speed * 0.045);
+      dentCar(c, lx, ly, lz, ldx, ldz, depth, radius, speed);
+      if (c === driving) MP.dent(c, [lx, ly, lz, ldx, ldz, depth, radius, speed]);
+      // a hard knock near a wheel bends it, and a bent front wheel pulls the steering
+      if (!M.moped) for (const wh of c.wheels) {
+        if (speed < 7 || M.mil || Math.abs(lz - wh.z) > 0.9 || lx * wh.sx < M.W / 2 - 0.6) continue;
+        const k = Math.min(1, speed / 25);
+        wh.toe = clamp(wh.toe + (Math.random() - 0.5) * 0.25 * k, -0.18, 0.18);
+        wh.camber = clamp(wh.camber + wh.sx * (0.04 + Math.random() * 0.08) * k, -0.25, 0.25);
+        if (wh.steers) c.align = clamp(c.align + wh.sx * (0.01 + Math.random() * 0.03) * k, -0.08, 0.08);
+      }
+    }
+    // engine health: the end with the engine is the soft spot
+    const atEngine = lz * engineEnd(M) > M.L * 0.2;
+    if (!c.dead) {
+      c.health = Math.max(0, c.health - Math.pow(Math.max(0, hard), 1.25) * (atEngine ? 1.6 : 0.6));
+      c.power = c.health > 50 ? 1 : 0.45 + (c.health / 50) * 0.55;
+      if (c.health <= 0) engineDies(c);
+    }
+    sparkBurst(wx, ly + 0.1, wz, dx, dz, speed);
+    crashSound(wx, wz, speed, c.glassBroken && speed > 8);
+    if (c === driving && !c.dead && c.health < 50 && !c.warned) { c.warned = true; toast('Motorn är skadad. Bilen orkar mindre.'); }
+    if (c.police && other && other === driving) policeRammed(c);
+    // come off a moped in a hard knock: you fly, the moped falls over on its side
+    if (M.moped && c === driving && speed > 6.5) {
+      const vx = c.vx, vz = c.vz;
+      exitCar();
+      player.vx = vx * 0.55; player.vz = vz * 0.55; player.vy = 5.5; player.grounded = false; player.knockT = 1.4;
+      c.fallen = Math.random() < 0.5 ? 1.4 : -1.4;
+      toast('Du flög av mopeden!');
+    }
+  }
+  // a dent at (lx, ly, lz) in the car's own frame, pushed in along (ldx, ldz); a hard enough one breaks the glass
+  function dentCar(c, lx, ly, lz, ldx, ldz, depth, radius, speed) {
+    ownGeometry(c);
+    dentGeometry(c.geo.body, lx, ly, lz, ldx, ldz, depth, radius, Math.min(0.8, speed / 25), speed > 5);
+    dentGeometry(c.geo.decal, lx, ly, lz, ldx, ldz, depth, radius, 0, false);
+    const glassHit = dentGeometry(c.geo.glass, lx, ly + 0.4, lz, ldx, ldz, depth * 0.8, radius * 1.1, 0, false);
+    c.dented = true;
+    if (glassHit && speed > 8 && !c.glassBroken) {
+      c.glassBroken = true; c.glass.material = crackedMat;
+      const co = Math.cos(c.h), si = Math.sin(c.h);
+      glassBurst(c.x + lx * co + lz * si, ly + 0.6, c.z - lx * si + lz * co, ldx * co + ldz * si, -ldx * si + ldz * co, speed);
+    }
+  }
+  function engineDies(c) {
+    c.dead = true; c.health = 0; c.power = 0;
+    if (c === driving) toast('Motorn har lagt av. Kliv ur med E och ta en annan bil.');
+    else if (c.bot) {
+      // the driver gets out and walks away from the wreck
+      const spot = exitSpot(c);
+      if (spot && c.occupant) { const npc = makePerson(c.occupant, spot.x, spot.z, { state: 'flee', t: 3, dodgeT: 0 }); npc.rot = c.h; }
+      setOccupant(c, null);
+      c.bot = null;
+      c.police = null;
+    }
+    c.siren = false;
+  }
+  function sparkBurst(x, y, z, dx, dz, speed) {
+    const n = Math.min(26, Math.round(speed * 1.4));
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * TAU, s = 2 + Math.random() * speed * 0.35;
+      sparkFx.spawn({ x, y, z, vx: Math.cos(a) * s - dx * 2, vy: 1 + Math.random() * 4, vz: Math.sin(a) * s - dz * 2, life: 0.25 + Math.random() * 0.4, size: [0.09, 0.03], alpha: 1, c: SPARK_COL, grav: 14, drag: 1, bounce: 0.3 });
+    }
+    if (speed > 6) for (let i = 0; i < Math.min(12, speed * 0.5); i++) {
+      const a = Math.random() * TAU, s = 1 + Math.random() * 3;
+      bitsFx.spawn({ x, y, z, vx: Math.cos(a) * s, vy: 1.5 + Math.random() * 3, vz: Math.sin(a) * s, life: 1.6 + Math.random(), size: [0.07, 0.07], alpha: 1, color: rpick([0x1c1d20, 0x2a2b2e, 0x5a5d61]), grav: 12, drag: 0.6, bounce: 0.25 });
+    }
+    for (let i = 0; i < Math.min(6, speed * 0.3); i++) {
+      smokeFx.spawn({ x, y, z, vx: (Math.random() - 0.5) * 1.5, vy: 0.4 + Math.random() * 0.6, vz: (Math.random() - 0.5) * 1.5, life: 1.2 + Math.random(), size: [0.5, 2.2], alpha: 0.35, c: SMOKE_COL.grey, drag: 1.5, fadeIn: 0.1 });
+    }
+  }
+  function glassBurst(x, y, z, dx, dz, speed) {
+    for (let i = 0; i < 40; i++) {
+      const a = Math.random() * TAU, s = 1 + Math.random() * 3 + speed * 0.08;
+      bitsFx.spawn({ x: x + (Math.random() - 0.5) * 0.8, y, z: z + (Math.random() - 0.5) * 0.8, vx: Math.cos(a) * s - dx, vy: 1 + Math.random() * 3, vz: Math.sin(a) * s - dz, life: 1.4 + Math.random() * 1.4, size: [0.05, 0.05], alpha: 0.95, c: GLASS_COL, grav: 13, drag: 0.4, bounce: 0.35 });
+    }
+  }
+  // steam, then smoke, from the engine of every damaged car close to the camera; burnouts and slides smoke the tyres
+  function damageFx(c, dt) {
+    if (c.hitT > 0) c.hitT -= dt;
+    const near = Math.hypot(c.x - camTarget.x, c.z - camTarget.z) < 90;
+    if (!near) return;
+    if (c.health < 55) {
+      c.smokeT -= dt;
+      if (c.smokeT <= 0) {
+        const e = engineSpot(c), heavy = c.health < 25, col = c.dead ? SMOKE_COL.black : heavy ? SMOKE_COL.grey : SMOKE_COL.steam;
+        c.smokeT = c.dead ? 0.07 : heavy ? 0.1 : 0.16;
+        smokeFx.spawn({ x: e.x + (Math.random() - 0.5) * 0.4, y: e.y, z: e.z + (Math.random() - 0.5) * 0.4, vx: c.vx * 0.3 + (Math.random() - 0.5) * 0.6 + 0.4, vy: 1.3 + Math.random() * 0.9, vz: c.vz * 0.3 + (Math.random() - 0.5) * 0.6 + 0.2, life: c.dead ? 3.6 : 2.4, size: [0.6, c.dead ? 5 : 3.4], alpha: c.dead ? 0.38 : heavy ? 0.3 : 0.22, c: col, drag: 0.7, fadeIn: 0.3 });
+      }
+    }
+    if (c.slip > 3.5 && Math.random() < dt * 30) {
+      const co = Math.cos(c.h), si = Math.sin(c.h), lx = (Math.random() < 0.5 ? -1 : 1) * wheelX(c.M), lz = -c.M.wb / 2;
+      smokeFx.spawn({ x: c.x + lx * co + lz * si, y: 0.3, z: c.z - lx * si + lz * co, vx: (Math.random() - 0.5) * 1.2, vy: 0.5 + Math.random() * 0.5, vz: (Math.random() - 0.5) * 1.2, life: 1.8, size: [0.6, 3.2], alpha: Math.min(0.5, (c.slip - 3) * 0.08), c: SMOKE_COL.tyre, drag: 1.2, fadeIn: 0.15 });
+    }
+    trackSkids(c);
+  }
+
+  /* ---------- people physics ---------- */
+  const personFits = (x, z) => walkable(x - 0.3, z - 0.3) && walkable(x + 0.3, z - 0.3) && walkable(x - 0.3, z + 0.3) && walkable(x + 0.3, z + 0.3);
+  function personVsCars(p) {
+    let gy = 0;
+    const r = 0.35;
+    for (const c of cars) {
+      if (c === driving && p === player) continue;
+      let dx = p.x - c.x, dz = p.z - c.z;
+      const lim = c.M.L / 2 + 1;
+      if (dx * dx + dz * dz > lim * lim) continue;
+      const co = Math.cos(c.h), si = Math.sin(c.h);
+      for (const part of c.parts) {
+        const lx = dx * co - dz * si, lz = dx * si + dz * co - part.cz;
+        if (p.y >= part.top - 0.3) {
+          if (Math.abs(lx) < part.hw + 0.1 && Math.abs(lz) < part.hl + 0.1) gy = Math.max(gy, part.top);
+          continue;
+        }
+        const ex = part.hw + r - Math.abs(lx), ez = part.hl + r - Math.abs(lz);
+        if (ex <= 0 || ez <= 0) continue;
+        let ux = 0, uz = 0, pen;
+        if (ex < ez) { ux = Math.sign(lx) || 1; pen = ex; } else { uz = Math.sign(lz) || 1; pen = ez; }
+        const wx = ux * co + uz * si, wz = -ux * si + uz * co;
+        p.x += wx * pen; p.z += wz * pen;
+        const cvn = c.vx * wx + c.vz * wz;
+        if (cvn > 4.5 && p.knockT <= 0) {
+          p.vx = c.vx * 0.7 + wx * 3; p.vz = c.vz * 0.7 + wz * 3; p.vy = 5; p.grounded = false; p.knockT = 1.2;
+          if (c === driving && p !== player) offense('påkörning', 0, p.x, p.z);
+          // knocked down: ordinary people run off afterwards, constables, the desk officer and the sellers get up and carry on
+          if (p.ai && p.ai.state !== 'cop' && p.ai.state !== 'idle' && p.ai.state !== 'vendor') { p.ai.state = 'flee'; p.ai.t = 4; p.ai.from = null; }
+        } else {
+          const vn = p.vx * wx + p.vz * wz;
+          if (vn < cvn) { p.vx += (cvn - vn) * wx; p.vz += (cvn - vn) * wz; }
+        }
+        dx = p.x - c.x; dz = p.z - c.z;
+      }
+    }
+    return gy;
+  }
+  function personMove(p, dt, it) {
+    const k = Math.min(1, (p.grounded ? 14 : 3.5) * dt);
+    p.vx += (it.mx * it.speed - p.vx) * k;
+    p.vz += (it.mz * it.speed - p.vz) * k;
+    if (it.speed > 0.1 && (it.mx || it.mz)) p.rot = lerpAngle(p.rot, Math.atan2(it.mx, it.mz), 1 - Math.exp(-12 * dt));
+    if (it.jump && p.grounded) { p.vy = 9.6; p.grounded = false; it.jump = false; if (p === player) jumpQueued = false; }
+    const ox = p.x, oz = p.z;
+    p.x += p.vx * dt; p.z += p.vz * dt;
+    const res = resolveWorld(p.x, p.z, 0.35, p.y);
+    p.x = res.x; p.z = res.z; p.blocked = res.hit;
+    const span = indoorSpan(p.x, p.z, p.y), gy = Math.max(personVsCars(p), span ? span.floor : 0);
+    if (!personFits(p.x, p.z)) {
+      p.blocked = true;
+      if (personFits(p.x, oz)) { p.z = oz; p.vz = 0; }
+      else if (personFits(ox, p.z)) { p.x = ox; p.vx = 0; }
+      else { p.x = ox; p.z = oz; p.vx = p.vz = 0; }
+    }
+    p.vy -= 24 * dt * (p.vy < 0 && p.floaty ? p.floaty : 1);
+    p.y += p.vy * dt;
+    // walking down stairs you stay on the steps instead of floating off them
+    if (span && p.grounded && p.vy <= 0 && p.y - gy < 0.45) p.y = gy;
+    if (p.y <= gy && p.vy <= 0) { p.y = gy; p.vy = 0; p.grounded = true; } else p.grounded = false;
+    // indoors the ceiling stops a jump
+    if (span && p.y + 2.05 > span.ceil) { p.y = Math.max(gy, span.ceil - 2.05); if (p.vy > 0) p.vy = 0; }
+  }
+
+  /* ================= traffic AI ================= */
+  // shortest distance from every junction to one goal junction, along the streets (emerg: also lanes, squares and
+  // pedestrian streets, the way police on blue lights drive). Worked out when first asked for, then remembered.
+  const distCache = { nb: new Map(), nbE: new Map(), nbW: new Map() };
+  // graph: 'nb' streets for cars, 'nbE' also lanes and squares (blue lights), 'nbW' everything a person can walk
+  function distTo(goal, emerg) {
+    const graph = emerg === true ? 'nbE' : emerg || 'nb', cache = distCache[graph];
+    if (cache.has(goal)) return cache.get(goal);
+    const d = nodes.map(() => Infinity), done = nodes.map(() => false);
+    d[goal] = 0;
+    for (;;) {
+      let u = -1;
+      for (let i = 0; i < nodes.length; i++) if (!done[i] && d[i] < Infinity && (u < 0 || d[i] < d[u])) u = i;
+      if (u < 0) break;
+      done[u] = true;
+      for (const v of nodes[u][graph]) d[v] = Math.min(d[v], d[u] + Math.hypot(nodes[u].x - nodes[v].x, nodes[u].z - nodes[v].z));
+    }
+    if (cache.size > 160) cache.delete(cache.keys().next().value);
+    cache.set(goal, d);
+    return d;
+  }
+  // a junction only lanes lead to (where a police car can end up after a chase): the nearest one cars can leave from
+  const driveExit = nodes.map((n) => {
+    if (n.nb.length || !n.nbE.length) return null;
+    let best = -1, bd = Infinity;
+    nodes.forEach((m, i) => { const d = Math.hypot(m.x - n.x, m.z - n.z); if (m.nb.length && d < bd) { bd = d; best = i; } });
+    return best < 0 ? null : { node: best, x: nodes[best].x, z: nodes[best].z };
+  });
+  function nearestNode(x, z) {
+    let best = 0, bd = Infinity;
+    nodes.forEach((n, i) => { const d = Math.hypot(n.x - x, n.z - z); if (d < bd && n.nbE.length) { bd = d; best = i; } });
+    return best;
+  }
+  // goal: { node, x, z } to head for, or nothing to wander at random. emerg: blue lights on, so lanes and squares
+  // are fine and so is a U-turn if the way back is clearly shorter
+  function chooseNext(from, to, goal, emerg) {
+    if (!emerg && !nodes[to].nb.length && driveExit[to]) { emerg = true; goal = goal || driveExit[to]; }
+    const all = emerg ? nodes[to].nbE : nodes[to].nb, nb = all.filter((n) => n !== from);
+    if (!nb.length) return from;
+    if (!goal) return nb[Math.floor(Math.random() * nb.length)];
+    const D = distTo(goal.node, emerg);
+    const cost = (n) => (to === goal.node ? Math.hypot(nodes[n].x - goal.x, nodes[n].z - goal.z) : D[n] + Math.hypot(nodes[n].x - nodes[to].x, nodes[n].z - nodes[to].z));
+    let best = nb[0];
+    for (const n of nb) if (cost(n) < cost(best)) best = n;
+    // traffic never turns back: the way back goes round the block, which the AI handles far better
+    if (emerg && all.includes(from) && cost(from) + 60 < cost(best)) return from;
+    return best;
+  }
+  // (the army on a hunt goes everywhere the police can: lanes, squares, the wrong side)
+  const onBlueLights = (c) => !!(c.police && (c.police.state === 'chase' || c.police.state === 'call'));
+  function startTurn(b) {
+    const e1 = edgeFrame(b.from, b.to), e2 = edgeFrame(b.to, b.next), B = e1.B, off = B.r + 4;
+    b.P0 = [B.x - e1.ux * off + e1.rx * e1.lane, B.z - e1.uz * off + e1.rz * e1.lane];
+    b.P2 = [B.x + e2.ux * off + e2.rx * e2.lane, B.z + e2.uz * off + e2.rz * e2.lane];
+    const dot = e1.ux * e2.ux + e1.uz * e2.uz;
+    if (dot > 0.9) b.P1 = [(b.P0[0] + b.P2[0]) / 2, (b.P0[1] + b.P2[1]) / 2];
+    else if (dot < -0.9) b.P1 = [B.x + e1.ux * 6, B.z + e1.uz * 6];
+    else { const t = (b.P2[0] - b.P0[0]) * e1.ux + (b.P2[1] - b.P0[1]) * e1.uz; b.P1 = [b.P0[0] + e1.ux * t, b.P0[1] + e1.uz * t]; }
+    b.turnType = dot > 0.9 ? 0 : dot < -0.9 ? 2 : 1;
+    // which way to signal: left or right off into a side street, left for a U-turn; nothing where the street just bends
+    const side = e2.ux * e1.uz - e2.uz * e1.ux;
+    b.turnDir = b.turnType && nodes[b.to].nb.length > 2 ? (b.turnType === 2 || side > 0 ? 1 : 2) : 0;
+    b.curveLen = Math.hypot(b.P1[0] - b.P0[0], b.P1[1] - b.P0[1]) + Math.hypot(b.P2[0] - b.P1[0], b.P2[1] - b.P1[1]);
+    b.t = 0; b.turnAge = 0; b.phase = 'turn';
+  }
+  function bez(b, t) {
+    const u = 1 - t;
+    return [u * u * b.P0[0] + 2 * u * t * b.P1[0] + t * t * b.P2[0], u * u * b.P0[1] + 2 * u * t * b.P1[1] + t * t * b.P2[1]];
+  }
+  function botThink(c, dt) {
+    const b = c.bot, M = c.M;
+    const fx = Math.sin(c.h), fz = Math.cos(c.h), lxv = Math.cos(c.h), lzv = -Math.sin(c.h);
+    const vf = c.vx * fx + c.vz * fz, look = 5 + Math.abs(vf) * 0.55;
+    let vT = b.cruise, tx = c.x + fx * look, tz = c.z + fz * look;
+    b.passT -= dt; b.ignoreT -= dt; b.honkT -= dt;
+    // make way for blue lights coming up behind or towards you: pull in to the kerb and slow right down (a robber
+    // getting away doesn't, of course)
+    let yieldTo = false;
+    if (!c.police && !c.getaway) for (const o of sirenCars) {
+      if (o === c) continue;
+      const dx = o.x - c.x, dz = o.z - c.z, ah = dx * fx + dz * fz, lat = dx * lxv + dz * lzv;
+      if ((ah > -45 && ah < 10 && Math.abs(lat) < 7) || (ah >= 10 && ah < 55 && Math.abs(lat) < 9 && Math.cos(o.h - c.h) < -0.5)) { yieldTo = true; break; }
+    }
+    b.yielding = yieldTo;
+    if (yieldTo) { vT = 3; b.passT = 0; }
+
+    if (b.phase === 'edge') {
+      const e = edgeFrame(b.from, b.to);
+      if ((c.x - e.A.x) * e.ux + (c.z - e.A.z) * e.uz >= e.len - (e.B.r + 4) - 0.5) startTurn(b);
+    }
+    if (b.phase === 'turn') {
+      b.turnAge += dt;
+      let bt = b.t, bd = Infinity;
+      for (let k = 0; k <= 10; k++) {
+        const t = Math.min(1, b.t + k * 0.03), p = bez(b, t), d = (p[0] - c.x) ** 2 + (p[1] - c.z) ** 2;
+        if (d < bd) { bd = d; bt = t; }
+      }
+      b.t = bt;
+      if (b.t >= 0.96 || b.turnAge > 9) { b.from = b.to; b.to = b.next; b.next = chooseNext(b.from, b.to, b.goal, onBlueLights(c) || !!c.getaway); b.phase = 'edge'; }
+    }
+    if (b.phase === 'edge') {
+      const e = edgeFrame(b.from, b.to);
+      const s = (c.x - e.A.x) * e.ux + (c.z - e.A.z) * e.uz, remain = e.len - (e.B.r + 4) - s;
+      if (remain < 20) b.passT = Math.min(b.passT, 0);
+      // (blue lights, and a robber on the run, ignore the speed limits and drive on the crown of the road)
+      const chasing = onBlueLights(c) || !!c.getaway;
+      // traffic keeps to the speed limit; police on blue lights don't, but even they slow down in the narrow lanes
+      if (!chasing && !(c.military && c.police.state === 'chase')) vT = Math.min(vT, (e.e.limit / 3.6) * 1.08);
+      else if (!e.e.drive) vT = Math.min(vT, e.e.hw < 2.2 ? 11 : 17);
+      // police on blue lights drive on the crown of the road, straddling the solid line, and swing right over into
+      // the oncoming lane to get past; in a lane they keep to the middle
+      const narrow = !e.e.drive || e.e.hw < 4.5;
+      const lane = yieldTo ? e.e.hw - 0.8 : chasing ? (narrow ? 0 : b.passT > 0 ? -(e.e.hw >= 8 ? e.e.hw * 0.45 : e.lane) : e.e.hw >= 8 ? e.pass * 0.5 : 0.4)
+        : b.passT > 0 ? e.pass : e.lane, st = s + look;
+      tx = e.A.x + e.ux * st + e.rx * lane; tz = e.A.z + e.uz * st + e.rz * lane;
+      const B = nodes[b.to], n = nodes[b.next];
+      const dot = ((n.x - B.x) * e.ux + (n.z - B.z) * e.uz) / (Math.hypot(n.x - B.x, n.z - B.z) || 1);
+      if (dot < 0.9 && remain < 24) vT = Math.min(vT, (b.turnV || 5.5) + Math.max(0, remain) * 0.3);
+      // the indicator goes on some 35 m before a turn at a junction
+      b.sig = remain < 35 && dot < 0.9 && B.nb.length > 2 ? (dot < -0.9 || (n.x - B.x) * e.uz - (n.z - B.z) * e.ux > 0 ? 1 : 2) : 0;
+    } else {
+      const tt = b.t + look / Math.max(6, b.curveLen);
+      if (tt <= 1) { const p = bez(b, tt); tx = p[0]; tz = p[1]; }
+      else { const e2 = edgeFrame(b.to, b.next), ex = (tt - 1) * b.curveLen; tx = b.P2[0] + e2.ux * ex; tz = b.P2[1] + e2.uz * ex; }
+      if (b.turnType !== 0) vT = Math.min(vT, b.turnV || 5.5);
+      b.sig = b.turnDir || 0;
+    }
+    // (blue lights and the army don't bother with indicators)
+    c.blink = onBlueLights(c) || c.military || c.getaway ? 0 : b.sig || 0;
+
+    // look for anything in the way: cars, the player, pedestrians
+    let gap = Infinity, blocker = null;
+    // cars parked at the kerb are not in the way of a car keeping to its lane, however it happens to be angled
+    const ef = b.phase === 'edge' ? edgeFrame(b.from, b.to) : null, myLane = ef ? ef.lane : 0;
+    const atKerb = (o) => {
+      if (!ef || !ef.park || o.bot || o === driving || Math.hypot(o.vx, o.vz) > 0.5) return false;
+      const lat = (o.x - ef.A.x) * ef.rx + (o.z - ef.A.z) * ef.rz;
+      return Math.abs(Math.abs(lat) - ef.park) < 1.0 && Math.abs(lat - myLane) > 1.5;
+    };
+    if (b.ignoreT <= 0) {
+      for (const o of cars) {
+        if (o === c || (c.police && o.bot && o.bot.yielding)) continue;
+        const dx = o.x - c.x, dz = o.z - c.z, ah = dx * fx + dz * fz;
+        if (ah <= 0 || ah > 32 || atKerb(o)) continue;
+        const lat = dx * lxv + dz * lzv;
+        const dh = o.h - c.h, cs = Math.abs(Math.cos(dh)), sn = Math.abs(Math.sin(dh));
+        if (Math.abs(lat) > M.W / 2 + cs * o.M.W / 2 + sn * o.M.L / 2 + 0.15) continue;
+        if (b.passT > 0 && lat < -0.3 && Math.hypot(o.vx, o.vz) < 0.5) continue;
+        const g = ah - M.L / 2 - (sn * o.M.W / 2 + cs * o.M.L / 2);
+        if (g < gap) { gap = g; blocker = o; }
+      }
+      for (const p of persons) {
+        if (p.asleep || (p === player && driving)) continue;
+        const dx = p.x - c.x, dz = p.z - c.z, ah = dx * fx + dz * fz;
+        if (ah <= 0 || ah > 26) continue;
+        const lat = dx * lxv + dz * lzv;
+        if (Math.abs(lat) > M.W / 2 + 0.7) continue;
+        if (b.passT > 0 && lat < -0.2) continue;
+        const g = ah - M.L / 2 - 0.4;
+        if (g < gap) { gap = g; blocker = p; }
+      }
+      if (blocker) vT = Math.min(vT, Math.max(0, (gap - 2.2) * 0.9));
+      b.blocker = blocker; // what it is waiting for (the tests read it)
+    }
+    // with blue lights on the police go round whatever is in the way at once, oncoming traffic pulls over for them
+    const urgent = (c.police && c.police.state !== 'patrol' && c.siren) || !!c.getaway;
+    if (b.passT > 0 && !urgent && blocker && blocker.M && Math.cos(blocker.h - c.h) < -0.3) b.passT = 0;
+    const slow = Math.abs(vf) < 0.7;
+    if (blocker && slow) b.waitT += dt; else b.waitT = Math.max(0, b.waitT - dt * 2);
+    if (blocker === player && slow && b.waitT > 1.2 && b.honkT <= 0) { honkAt(c.x, c.z); b.honkT = 3.5; }
+    // police closing in on you stay behind you instead of overtaking or pushing through
+    // (from two stars they don't wait behind you any more)
+    const holdBehind = c.police && c.police.state === 'chase' && stars() < 2 && (blocker === driving || blocker === player);
+    const urgentPass = urgent && !holdBehind && blocker && b.phase === 'edge' && gap < 40 && b.passT <= 0 && (!blocker.M || Math.hypot(blocker.vx, blocker.vz) < vf - 2 || slow);
+    if (urgentPass) { b.passT = 5; if (gap < 4.5 && slow) b.revT = 0.8; }
+    else if (blocker && slow && b.waitT > 2.5 && b.passT <= 0 && b.phase === 'edge' && !holdBehind) {
+      if (!blocker.M || Math.hypot(blocker.vx, blocker.vz) < 0.5) {
+        b.passT = 7;
+        if (gap < 4.5) b.revT = 1.1; // back up a little first so there is room to swing out
+      }
+    }
+    if (b.passT > 0) vT = Math.min(vT, urgent ? 16 : 6);
+    if (b.waitT > 9 && !holdBehind) { b.ignoreT = 2.5; b.waitT = 0; }
+
+    const dx = tx - c.x, dz = tz - c.z, lz = dx * fx + dz * fz, lx = dx * lxv + dz * lzv;
+    const maxSteer = 0.6 / (1 + Math.abs(vf) * 0.03);
+    const delta = lz < 0.3 ? Math.sign(lx || 1) * maxSteer : Math.atan((2 * M.wb * lx) / (lx * lx + lz * lz));
+    const right = -clamp(delta / maxSteer, -1, 1);
+    const fwd = vT < 0.3 ? (vf > 0.3 ? -1 : 0) : clamp((vT - vf) * 0.45, -1, 1);
+    if (b.revT > 0) { b.revT -= dt; return { fwd: -0.7, right: -right, brake: false }; }
+    if (!blocker && fwd > 0.3 && Math.abs(vf) < 0.4) { b.stuckT += dt; b.stuckTotal += dt; }
+    else { b.stuckT = 0; if (Math.abs(vf) > 2) b.stuckTotal = Math.max(0, b.stuckTotal - dt); }
+    if (b.stuckT > 1.8) { b.revT = 1.4; b.stuckT = 0; }
+    return { fwd, right, brake: false };
+  }
+  // traffic lives within a few hundred metres of you: new cars appear out of sight, distant ones are cleared away
+  const TRAFFIC_RANGE = 340;
+  function spawnBot(minDist, forceM, maxDist = TRAFFIC_RANGE) {
+    const pool = edges.filter((e) => e.drive && e.len > 40 && edgeDist(e, player.x, player.z) < maxDist);
+    for (let tries = 0; tries < 25 && pool.length; tries++) {
+      const e = rpick(pool);
+      const fwd = Math.random() < 0.5, from = fwd ? e.a : e.b, to = fwd ? e.b : e.a, f = edgeFrame(from, to);
+      const s = nodes[from].r + 6 + Math.random() * (f.len - nodes[from].r - nodes[to].r - 12);
+      const x = f.A.x + f.ux * s + f.rx * f.lane, z = f.A.z + f.uz * s + f.rz * f.lane;
+      const d = Math.hypot(x - player.x, z - player.z);
+      if (d < minDist || d > maxDist) continue;
+      const roll = Math.random();
+      const M = forceM || (roll < 0.07 ? MODEL.buss : roll < 0.25 ? rpick(SPORTS) : rpick(REGULARS));
+      const h = Math.atan2(f.ux, f.uz);
+      if (!spotFree(M, x, z, h)) continue;
+      const c = makeCar(M, rpick(M.colors));
+      c.x = x; c.z = z; c.h = h; c.vx = f.ux * 6; c.vz = f.uz * 6;
+      c.bot = { from, to, next: chooseNext(from, to), phase: 'edge', t: 0, passT: 0, waitT: 0, ignoreT: 0, revT: 0, stuckT: 0, stuckTotal: 0, honkT: 0, turnAge: 0, cruise: M.bus ? 11.5 : M.sport ? 18.5 : 14 + Math.random() * 3 };
+      setOccupant(c, makeIdentity());
+      return c;
+    }
+    return null;
+  }
+  function spawnParked(M, color, x, z, h, keep) {
+    const c = makeCar(M, color);
+    c.x = x; c.z = z; c.h = h; c.keep = !!keep;
+    return c;
+  }
+
+  /* ---------- pedestrians ---------- */
+  function npcThink(p, dt) {
+    if (p.ai.state === 'cop') return copThink(p, dt);
+    // a fare or a bus passenger walking up to the car to get in
+    if (p.ai.state === 'board') { const c = p.ai.car, d = c.M.bus ? doorSpot(c, -1, false) : doorNear(c, p.x, p.z, true); return seek(p, walkWaypoint(p.ai.nav || (p.ai.nav = {}), p.x, p.z, d.x, d.z, dt), 2.6, 0.2); }
+    if (p.ai.state === 'idle') { if (p.ai.face !== undefined) p.rot = lerpAngle(p.rot, p.ai.face, 0.1); return { mx: 0, mz: 0, speed: 0, jump: false }; }
+    const ai = p.ai, out = { mx: 0, mz: 0, speed: 0, jump: false };
+    if (ai.dodgeT > 0) { ai.dodgeT -= dt; out.mx = ai.dx; out.mz = ai.dz; out.speed = 6.5; return out; }
+    if (p.grounded && p.knockT <= 0) {
+      for (const c of cars) {
+        const sp = Math.hypot(c.vx, c.vz);
+        if (sp < 5) continue;
+        const dx = p.x - c.x, dz = p.z - c.z;
+        if (dx * dx + dz * dz > 400) continue;
+        const ux = c.vx / sp, uz = c.vz / sp, ahead = dx * ux + dz * uz, lat = dx * -uz + dz * ux;
+        if (ahead > 0 && ahead < 4 + sp * 0.6 && Math.abs(lat) < c.M.W / 2 + 1.2) {
+          const s = lat >= 0 ? 1 : -1;
+          ai.dx = -uz * s; ai.dz = ux * s; ai.dodgeT = 0.55;
+          out.mx = ai.dx; out.mz = ai.dz; out.speed = 6.5; out.jump = true;
+          return out;
+        }
+      }
+    }
+    if (ai.state === 'walk') {
+      // along the pavement; at the corner, on along another street (crossing over at the junction)
+      let e = edges[ai.e], f = ai.dir > 0 ? edgeFrame(e.a, e.b) : edgeFrame(e.b, e.a);
+      const s = (p.x - f.A.x) * f.ux + (p.z - f.A.z) * f.uz;
+      if (s > f.len - f.B.r - 1.5) {
+        const q = ai.dir > 0 ? e.b : e.a, onward = nodes[q].all.filter((i) => i !== ai.e);
+        ai.e = onward.length ? rpick(onward) : ai.e;
+        e = edges[ai.e]; ai.dir = e.a === q ? 1 : -1;
+        if (Math.random() < 0.3) ai.side = -ai.side;
+        ai.off = walkOffset(e);
+        f = ai.dir > 0 ? edgeFrame(e.a, e.b) : edgeFrame(e.b, e.a);
+      }
+      const st = Math.max((p.x - f.A.x) * f.ux + (p.z - f.A.z) * f.uz, f.A.r + 1) + 3, lat = ai.off * ai.side;
+      const dx = f.A.x + f.ux * st + f.rx * lat - p.x, dz = f.A.z + f.uz * st + f.rz * lat - p.z, d = Math.hypot(dx, dz) || 1;
+      out.mx = dx / d; out.mz = dz / d; out.speed = ai.speed;
+    } else if (ai.state === 'flee') {
+      const dx = p.x - player.x, dz = p.z - player.z, d = Math.hypot(dx, dz) || 1;
+      out.mx = dx / d; out.mz = dz / d; out.speed = 6.2;
+      ai.t -= dt;
+      if (ai.t <= 0) { if (ai.post) ai.state = 'guard'; else { ai.state = 'wander'; ai.wx = out.mx; ai.wz = out.mz; ai.t = 25; } }
+    } else if (ai.state === 'guard') {
+      const g = guardTarget(ai.post, clock), dx = g.x - p.x, dz = g.z - p.z, d = Math.hypot(dx, dz);
+      if (d > 0.15) { out.mx = dx / d; out.mz = dz / d; out.speed = Math.min(1.25, d * 2.5); }
+      else p.rot = lerpAngle(p.rot, g.face, 0.2);
+    } else if (ai.state === 'vendor') {
+      // a balloon seller: back to the spot after stepping out of the way, turned towards you when you come up on foot
+      const P = ai.post, dx = P.x - p.x, dz = P.z - p.z, d = Math.hypot(dx, dz);
+      if (d > 0.3) { out.mx = dx / d; out.mz = dz / d; out.speed = Math.min(1.4, d * 2); }
+      else p.rot = lerpAngle(p.rot, !driving && Math.hypot(player.x - p.x, player.z - p.z) < 7 ? Math.atan2(player.x - p.x, player.z - p.z) : P.face, 0.08);
+    } else {
+      if (p.blocked) { const a = Math.atan2(ai.wx, ai.wz) + (Math.random() < 0.5 ? 1 : -1) * (Math.PI / 2); ai.wx = Math.sin(a); ai.wz = Math.cos(a); }
+      out.mx = ai.wx; out.mz = ai.wz; out.speed = 1.5;
+      ai.t -= dt;
+    }
+    return out;
+  }
+  // how far from the middle of a street people walk: on the pavement, or anywhere on a pedestrian street or lane
+  const walkOffset = (e) => (e.kind === 'ped' ? rr(-0.75, 0.75) * e.hw : e.kind === 'lane' ? e.hw * 0.55 : e.hw + Math.max(1, e.walk * 0.5));
+  function spawnWalker(minD, maxD, cx = camTarget.x, cz = camTarget.z) {
+    const pool = edges.filter((e) => { const d = edgeDist(e, cx, cz); return d < maxD && d + e.len / 2 > minD; });
+    for (let tries = 0; tries < 12 && pool.length; tries++) {
+      const e = rpick(pool), dir = Math.random() < 0.5 ? 1 : -1, side = Math.random() < 0.5 ? 1 : -1, off = walkOffset(e);
+      const f = dir > 0 ? edgeFrame(e.a, e.b) : edgeFrame(e.b, e.a), s = rr(f.A.r + 2, Math.max(f.A.r + 3, f.len - f.B.r - 2));
+      const x = f.A.x + f.ux * s + f.rx * off * side, z = f.A.z + f.uz * s + f.rz * off * side, d = Math.hypot(x - cx, z - cz);
+      if (d < minD || d > maxD || !personFits(x, z) || blockedAt(x, z, 0.45)) continue;
+      return makePerson(makeIdentity(), x, z, { state: 'walk', e: e.i, dir, side, off, speed: 1.15 + Math.random() * 0.55, dodgeT: 0 });
+    }
+    return null;
+  }
+
+  /* ---------- police ---------- */
+  // Patrol cars drive with the traffic and watch you. Speeding where they can see you, ramming them, stealing a car in
+  // front of them or running someone over starts a chase: blue lights and siren, other cars pull over, and the police
+  // follow the streets towards you, then drive straight at you once they have you in sight. Stop the car next to
+  // them and you get a fine. Get out of sight for long enough and they give up.
+  // TOLERANCE: how far over the limit you can go before a patrol bothers; SPEED_EYE: how far a patrol notices it
+  const POLICE_TARGET = 4, CHASE_SPEED = 33, PATROL_SPEED = 14, TOLERANCE = 15, SPEED_EYE = 55;
+  const OFFICER = { shirt: 0x1f3a6e, pants: 0x1c2333, hat: 'cap', hatColor: 0x1b2b4f, police: true, sleeves: true };
+  const SOLDIER = { shirt: 0x5b6b45, pants: 0x55643f, hat: 'combat', soldier: true, sleeves: true };
+  let sirenCars = [], wanted = null, fines = 0, policeCool = 0, policeSpawnT = 0;
+  // The limit where you are. With a heading (the sign by the speedometer) it is the street you are driving along. Without
+  // one (what the police go by) it is the fastest street there, so crossing a slower street at a junction is never
+  // speeding. Off the streets (squares, quays, parks) 50 in Gamla stan and 70 elsewhere
+  function limitAt(x, z, h) {
+    let top = 0, along = 0, bs = -Infinity;
+    // every street within 30 m of a point is listed in that point's cell
+    for (const e of egCells.get(egKey(Math.floor(x / EG), Math.floor(z / EG))) || []) {
+      const d = edgeDist(e, x, z);
+      if (d >= e.hw + e.walk + 2) continue;
+      top = Math.max(top, e.limit);
+      if (h === undefined) continue;
+      const A = nodes[e.a], B = nodes[e.b], s = Math.abs(((B.x - A.x) * Math.sin(h) + (B.z - A.z) * Math.cos(h)) / e.len) - d / 40;
+      if (s > bs) { bs = s; along = e.limit; }
+    }
+    return (h === undefined ? top : along) || (districtAt(x, z) === 'Gamla stan' ? 50 : 70);
+  }
+  const fmtKr = (n) => n.toLocaleString('sv-SE') + ' kr';
+  // the registration number on the car's plates (ABC 12D)
+  const plateOf = (c) => c.reg || (c.reg = PLATE_REGS[c.plateSlot]);
+  function makePolice(c) {
+    c.police = { state: 'patrol', direct: false, goalNode: -1, callIn: 15 + Math.random() * 40 };
+    c.siren = false; c.yelp = false;
+    c.bot.cruise = PATROL_SPEED;
+    setOccupant(c, makeIdentity(OFFICER));
+    return c;
+  }
+  // the army: driven like the police in a chase, but with soldiers aboard, no blue lights, and it rams
+  let armySpawnT = 0;
+  // at five stars the army comes in force: two tanks, two trucks full of soldiers and five armoured cars on the streets
+  const armyTarget = () => (wanted && wanted.stars >= 5 && !stop ? 9 : 0);
+  function makeArmy(c) {
+    makePolice(c);
+    c.military = true; c.police.callIn = Infinity; c.aim = 0; c.fireT = 4 + Math.random() * 4;
+    setOccupant(c, makeIdentity(SOLDIER));
+    if (wanted) setChase(c, true);
+    c.siren = false;
+    return c;
+  }
+  // The tank's gun. The army only fires warning shots, over your head, with a blast you feel in your chest; take the tank
+  // yourself and F fires a real round: it flies along the barrel to the first thing in its way, and the blast dents and
+  // shoves the cars near by and knocks people off their feet (they get up again)
+  function fireCannon(c, live) {
+    const a = c.h + (c.aim || 0), fx = Math.sin(a), fz = Math.cos(a), co = Math.cos(c.h), si = Math.sin(c.h), hd = c.geo.head;
+    const px = c.x + hd[0] * co + hd[2] * si, pz = c.z - hd[0] * si + hd[2] * co, my = hd[1] + 0.46;
+    const mx = px + fx * 7.3, mz = pz + fz * 7.3;
+    for (let i = 0; i < 16; i++) smokeFx.spawn({ x: mx, y: my, z: mz, vx: fx * (3 + Math.random() * 7) + (Math.random() - 0.5) * 3, vy: Math.random() * 1.5, vz: fz * (3 + Math.random() * 7) + (Math.random() - 0.5) * 3, life: 1.6 + Math.random(), size: [0.8, 4.5], alpha: 0.45, c: SMOKE_COL.grey, drag: 1.5, fadeIn: 0.02 });
+    for (let i = 0; i < 24; i++) sparkFx.spawn({ x: mx, y: my, z: mz, vx: fx * (10 + Math.random() * 14) + (Math.random() - 0.5) * 6, vy: (Math.random() - 0.3) * 4, vz: fz * (10 + Math.random() * 14) + (Math.random() - 0.5) * 6, life: 0.12 + Math.random() * 0.1, size: [0.9, 0.3], alpha: 1, c: SPARK_COL, drag: 2 });
+    // the whole tank rocks back, and the blast is felt close by
+    c.pitch -= 0.05;
+    cannonSound(mx, mz, 1);
+    const dc = Math.hypot(mx - camera.position.x, mz - camera.position.z);
+    if (dc < 120) bump(Math.max(4, 20 - dc * 0.15));
+    if (!live) return;
+    let hx = mx + fx * 160, hz = mz + fz * 160;
+    for (let d = 1; d <= 160; d += 1.5) {
+      const x = mx + fx * d, z = mz + fz * d;
+      // (a friend's shell can hit you, on foot)
+      const you = (p) => p === player && !(c.remote && !driving && !MP.ride && !(stop && stop.riding));
+      if (blockedAt(x, z, 0.3) || cars.some((o) => o !== c && Math.hypot(o.x - x, o.z - z) < Math.min(o.M.W, o.M.L) / 2 + 0.3) || persons.some((p) => !you(p) && !p.asleep && Math.hypot(p.x - x, p.z - z) < 0.7)) { hx = x; hz = z; break; }
+    }
+    explode(hx, hz, walkable(hx, hz) ? 0.6 : WATER_Y + 0.3);
+    // (a cannon going off in town: every police car hears it, unless it was a friend's tank: then they are after them)
+    if (!c.remote) offense('skott', 0, c.x, c.z, true);
+  }
+  function explode(x, z, y) {
+    for (let i = 0; i < 30; i++) {
+      const a = Math.random() * TAU, sp = 2 + Math.random() * 7;
+      smokeFx.spawn({ x, y: y + 0.5, z, vx: Math.cos(a) * sp, vy: 1 + Math.random() * 4, vz: Math.sin(a) * sp, life: 2.5 + Math.random() * 2, size: [1.2, 6], alpha: 0.5, c: i % 3 ? SMOKE_COL.black : SMOKE_COL.grey, drag: 1.2, fadeIn: 0.05 });
+      fireFx.spawn({ x, y: y + 0.6, z, vx: Math.cos(a) * sp * 0.7, vy: 2 + Math.random() * 5, vz: Math.sin(a) * sp * 0.7, life: 0.35 + Math.random() * 0.3, size: [2.4, 0.6], alpha: 1, color: i % 2 ? 0xffb347 : 0xff6a1a, drag: 2.2, grav: -1 });
+    }
+    sparkBurst(x, y + 0.4, z, 0, 0, 22);
+    cannonSound(x, z, 1.3);
+    if (Math.hypot(x - camera.position.x, z - camera.position.z) < 90) bump(14);
+    for (const o of cars) {
+      const dx = o.x - x, dz = o.z - z, d = Math.hypot(dx, dz) || 0.1;
+      if (d > 9 || o.M.mil === 'tank') continue;
+      const k = (9 - d) / 9, ux = dx / d, uz = dz / d;
+      crash(o, x + ux * 0.5, z + uz * 0.5, ux, uz, 6 + k * 22, null);
+      o.vx += (ux * k * 9) / Math.sqrt(o.M.mass); o.vz += (uz * k * 9) / Math.sqrt(o.M.mass);
+    }
+    for (const p of persons) {
+      if (p.asleep || p.remote || (p === player && driving)) continue;
+      const dx = p.x - x, dz = p.z - z, d = Math.hypot(dx, dz) || 0.1;
+      if (d > 8) continue;
+      p.vx = (dx / d) * (8 - d) * 1.2; p.vz = (dz / d) * (8 - d) * 1.2; p.vy = 5; p.grounded = false; p.knockT = 1.6;
+      if (p.ai && p.ai.state !== 'cop' && p.ai.state !== 'idle' && p.ai.state !== 'vendor') { p.ai.state = 'flee'; p.ai.t = 5; }
+    }
+  }
+  function tankFire() {
+    const c = driving;
+    if (!c || c.M.mil !== 'tank' || paused()) return false;
+    if ((c.reloadT || 0) > 0) { toast('Kanonen laddas om …'); return true; }
+    c.reloadT = 2.5;
+    fireCannon(c, true);
+    MP.event('fire', { a: c.aim || 0 });
+    return true;
+  }
+  // the turret (or the weapon station) turns to its target: you, when the army is after you, or where the camera looks
+  // while you drive it yourself. An army tank in range fires a warning shot now and then
+  function aimTurret(c, dt) {
+    let want = 0;
+    if (c === driving) want = wrapAngle(camYaw - c.h);
+    else if (c.remote) want = c.aimWant || 0;
+    else if (c.military && c.police && c.police.state === 'chase') { const T = playerTarget(); want = wrapAngle(Math.atan2(T.x - c.x, T.z - c.z) - c.h); }
+    c.aim = (c.aim || 0) + clamp(wrapAngle(want - (c.aim || 0)), -0.9 * dt, 0.9 * dt);
+    c.steerGroup.rotation.y = c.aim;
+    if (c.reloadT > 0) c.reloadT -= dt;
+    if (c.M.mil === 'tank' && c.military && c.police && c.police.state === 'chase' && wanted) {
+      const T = playerTarget(), d = Math.hypot(T.x - c.x, T.z - c.z);
+      if ((c.fireT -= dt) <= 0 && d < 140 && Math.abs(wrapAngle(want - c.aim)) < 0.08 && clearView(c.x, c.z, T.x, T.z)) {
+        c.fireT = 7 + Math.random() * 6;
+        fireCannon(c, false);
+        if (!wanted.warned) { wanted.warned = true; toast('Stridsvagnen skjuter varningsskott! Stanna, eller kör för livet.'); }
+      }
+    }
+  }
+  function playerTarget() {
+    return driving ? { x: driving.x, z: driving.z, vx: driving.vx, vz: driving.vz } : { x: player.x, z: player.z, vx: player.vx, vz: player.vz };
+  }
+  // nothing taller than a person between two points
+  function clearView(ax, az, bx, bz) {
+    const dx = bx - ax, dz = bz - az;
+    let clear = true;
+    forNear(Math.min(ax, bx) - 1, Math.min(az, bz) - 1, Math.max(ax, bx) + 1, Math.max(az, bz) + 1, (o) => {
+      if (!clear || o.t === 1 || o.h < 2.5) return;
+      if (rayBox(o, ax, az, dx, dz) < 1) clear = false;
+    });
+    return clear;
+  }
+  const sees = (c, x, z, range) => Math.hypot(x - c.x, z - c.z) < range && clearView(c.x, c.z, x, z);
+  // a patrol only clocks your speed if you are in front of it (within 75° of where it is heading) or right beside it
+  const clocks = (c, x, z) => {
+    const dx = x - c.x, dz = z - c.z, d = Math.hypot(dx, dz);
+    return (d < 15 || (dx * Math.sin(c.h) + dz * Math.cos(c.h)) / (d || 1) > 0.26) && sees(c, x, z, SPEED_EYE);
+  };
+  // can a car drive in a straight line from a to b: land all the way, no lamp posts, trees or other cars in the way
+  const landAround = (x, z) => walkable(x - 1, z - 1) && walkable(x + 1, z - 1) && walkable(x - 1, z + 1) && walkable(x + 1, z + 1);
+  function drivableLine(ax, az, bx, bz, skipA, skipB) {
+    const len = Math.hypot(bx - ax, bz - az), n = Math.ceil(len / 2.5);
+    for (let i = 1; i < n; i++) {
+      const x = lerp(ax, bx, i / n), z = lerp(az, bz, i / n);
+      if (!landAround(x, z) || blockedAt(x, z, 1.1)) return false;
+    }
+    const ux = (bx - ax) / (len || 1), uz = (bz - az) / (len || 1);
+    for (const o of cars) {
+      if (o === skipA || o === skipB) continue;
+      const ox = o.x - ax, oz = o.z - az, along = ox * ux + oz * uz;
+      if (along < 2 || along > len - 2) continue;
+      if (Math.abs(-ox * uz + oz * ux) < o.M.W / 2 + 1.4) return false;
+    }
+    return true;
+  }
+  // something the police might care about happened at x, z; seenBy is a police car that certainly saw it
+  function offense(kind, over, x, z, seenBy) {
+    if (policeCool > 0 && !seenBy) return;
+    let seen = !!seenBy;
+    if (!seen) for (const c of cars) if (c.police && !c.dead && sees(c, x, z, 70)) { seen = true; break; }
+    if (seen) startChase(kind, over);
+  }
+  function startChase(kind, over) {
+    if (!wanted) {
+      wanted = { kinds: new Set(), counts: {}, bonus: 0, stars: 1, starT: 0, over: 0, lostT: 0, searchT: 0, stopT: 0, t: 0, fleeT: 0, seen: playerTarget(), inSight: true };
+      toast(kind === 'fart' ? 'Polisen såg dig köra för fort. Stanna bilen!' : 'Polisen är efter dig!');
+    }
+    wanted.kinds.add(kind);
+    wanted.over = Math.max(wanted.over, over || 0);
+    // the same thing again (another police car rammed, someone else run over, another car stolen) is one more star
+    // (one crash can come in as a few hits in a row: a repeat counts once it is a few seconds after the last)
+    const last = wanted.counts[kind];
+    if (last === undefined || wanted.t - last > 3) {
+      if (last !== undefined && kind !== 'fart' && kind !== 'smitning') wanted.bonus++;
+      wanted.counts[kind] = wanted.t;
+    }
+    updateStars(wanted);
+    for (const c of cars) if (c.police && !c.dead && (c.police.state === 'patrol' || c.police.state === 'call') && Math.hypot(c.x - player.x, c.z - player.z) < chaseRadius()) setChase(c, true);
+  }
+  // Efterlyst: one to five stars. A chase starts at one star. Driving 30 over the limit, ramming a police car, stealing a
+  // car in front of them or running someone over makes it two; 50 over or running from a stop three. Every time it
+  // happens again, and every STAR_FLEE seconds on the run, adds one more. Stars never go down while the chase lasts.
+  // From three stars the police helicopter comes, and every star brings more and faster patrols (the piket van from four).
+  const STAR_FLEE = 15;
+  function updateStars(w) {
+    let s = w.over >= 30 || w.kinds.has('krock') || w.kinds.has('stöld') || w.kinds.has('påkörning') ? 2 : 1;
+    if (w.over >= ARREST_OVER || w.kinds.has('smitning')) s = 3;
+    if (w.kinds.has('skott')) s = 4;
+    s = clamp(s + w.bonus + Math.floor((w.fleeT || 0) / STAR_FLEE), 1, 5);
+    if (s <= w.stars) return;
+    const was = w.stars;
+    w.stars = s; w.starT = 0;
+    if (s >= 3 && was < 3) toast(s === 3 ? 'Tre stjärnor! Polishelikoptern är på väg.' : 'Polishelikoptern är på väg, och fler polisbilar kallas in.');
+    else if (s === 4) toast('Fyra stjärnor! Piketen och fler polisbilar kallas in.');
+    else if (s === 5) toast('Fem stjärnor! Militären rycker ut med stridsvagnar, pansarbilar och soldater.');
+  }
+  const stars = () => (wanted ? wanted.stars : 0);
+  // with more stars the police drive faster, come from further away, are more of them and search longer
+  const chaseSpeed = () => CHASE_SPEED + Math.max(0, stars() - 1) * 2;
+  const chaseRadius = () => 400 + Math.max(0, stars() - 1) * 120;
+  const policeTarget = () => POLICE_TARGET + (wanted && !stop ? [0, 0, 1, 3, 5, 7][wanted.stars] : 0);
+  function setChase(c, on) {
+    const P = c.police, b = c.bot;
+    // a car whose crew is out on foot, or which is busy with a stop or a prisoner, stays as it is
+    if (!P || !b || P.out || P.state === 'wait' || P.state === 'stop' || P.state === 'transport') return;
+    P.state = on ? 'chase' : 'patrol';
+    c.siren = on && !c.military; c.yelp = false;
+    b.cruise = on ? chaseSpeed() : PATROL_SPEED; b.turnV = on ? 11 : 5.5; b.goal = null; b.passT = 0; P.goalNode = -1; P.cut = null;
+    if (P.direct) { P.direct = false; resyncBot(c); }
+    if (!on) b.next = chooseNext(b.from, b.to, null);
+  }
+  // the fine, line by line as it goes on the ticket (rough Swedish ordningsbot amounts)
+  function fineFor(w) {
+    const rows = [];
+    if (w.kinds.has('fart')) {
+      const o = Math.max(1, Math.round(w.over));
+      rows.push({ why: o + ' km/h för fort', text: 'Hastighetsöverträdelse, ' + o + ' km/h över ' + (w.limit || 50) + ' km/h', kr: o <= 20 ? 1500 : o <= 25 ? 2000 : o <= 30 ? 2400 : o <= 40 ? 3200 : 4000 });
+    }
+    if (w.kinds.has('krock')) rows.push({ why: 'krock med polisbil', text: 'Vårdslöshet i trafik, krock med polisfordon', kr: 3000 });
+    if (w.kinds.has('stöld')) rows.push({ why: 'bilstöld', text: 'Olovligt brukande av fordon', kr: 5000 });
+    if (w.kinds.has('påkörning')) rows.push({ why: 'påkörning', text: 'Påkörning av fotgängare', kr: 4000 });
+    if ((w.fleeT || 0) > FLEE_ARREST) rows.push({ why: 'du stannade inte', text: 'Underlåtenhet att stanna på polisens tecken', kr: 1500 });
+    if (w.over >= ARREST_OVER) rows.push({ why: 'grov hastighetsöverträdelse', text: 'Grov hastighetsöverträdelse, körkortet dras in', kr: 2000 });
+    if (w.kinds.has('skott')) rows.push({ why: 'skottlossning', text: 'Skottlossning med stridsvagn i tätort', kr: 25000 });
+    if (w.kinds.has('smitning')) rows.push({ why: 'du smet från kontrollen', text: 'Avvikande från poliskontroll', kr: 3000 });
+    if (!rows.length) rows.push({ why: 'ordningsstörning', text: 'Ordningsstörning', kr: 800 });
+    return { f: rows.reduce((a, r) => a + r.kr, 0), why: rows.map((r) => r.why), rows };
+  }
+  function endChase(caught) {
+    if (caught) {
+      const { f, why } = fineFor(wanted);
+      fines += f;
+      toast('Polisen stoppade dig: ' + why.join(', ') + '. Böter ' + fmtKr(f) + '.' + (wanted.over >= ARREST_OVER ? ' Körkortet dras in.' : ''));
+    } else toast('Du kom undan polisen.');
+    for (const fc of footCops) fc.mode = 'return';
+    wanted = null;
+    policeCool = caught ? 30 : 15;
+    for (const c of cars) if (c.police && c.police.state === 'chase') setChase(c, false);
+  }
+  // put a bot back on the street it is closest to, facing the way it points
+  function resyncBot(c) {
+    const b = c.bot, ne = nearestEdge(c.x, c.z, c.police ? (e) => e.emerg : (e) => e.drive);
+    if (!b || !ne.e) return;
+    const A = nodes[ne.e.a], B = nodes[ne.e.b], fwd = (B.x - A.x) * Math.sin(c.h) + (B.z - A.z) * Math.cos(c.h) >= 0;
+    b.from = fwd ? ne.e.a : ne.e.b; b.to = fwd ? ne.e.b : ne.e.a;
+    b.next = chooseNext(b.from, b.to, b.goal, onBlueLights(c)); b.phase = 'edge'; b.t = 0;
+  }
+  // now and then a patrol gets a call somewhere in town and goes there on blue lights (utryckning), then back to patrol
+  function setCall(c, on) {
+    const P = c.police, b = c.bot;
+    P.state = on ? 'call' : 'patrol';
+    c.siren = on; c.yelp = false;
+    b.cruise = on ? CHASE_SPEED * 0.85 : PATROL_SPEED; b.turnV = on ? 8.5 : 5.5; b.passT = 0;
+    if (on) {
+      const far = nodes.map((n, i) => i).filter((i) => { const d = Math.hypot(nodes[i].x - c.x, nodes[i].z - c.z); return d > 250 && d < 700 && nodes[i].nbE.length; });
+      const n = far.length ? rpick(far) : nearestNode(c.x, c.z);
+      b.goal = { node: n, x: nodes[n].x, z: nodes[n].z };
+      P.callT = 45; P.goalNode = -1;
+    } else { b.goal = null; P.callIn = 40 + Math.random() * 60; }
+    if (b.phase === 'edge') b.next = chooseNext(b.from, b.to, b.goal, on);
+  }
+  function policeThink(c, dt) {
+    const P = c.police;
+    if (P.state === 'stop') return stopDrive(c, dt);
+    if (P.state === 'wait') return parkDrive(c, null);
+    if (P.state === 'transport') return transportDrive(c, dt);
+    if (P.state === 'patrol' && !wanted && !c.military && (P.callIn -= dt) <= 0) setCall(c, true);
+    if (P.state === 'call') {
+      const g = c.bot.goal;
+      if ((P.callT -= dt) <= 0 || !g || Math.hypot(g.x - c.x, g.z - c.z) < 30) setCall(c, false);
+    }
+    if (P.state !== 'chase') return botThink(c, dt);
+    const T = playerTarget(), d = Math.hypot(T.x - c.x, T.z - c.z);
+    c.yelp = d < 70;
+    if (P.banT > 0) P.banT -= dt;
+    // (banT: how long they keep to the streets after getting stuck going straight; nothing set means no ban)
+    const free = !(P.banT > 0);
+    // in sight and nothing in the way: straight for you, across pavements, squares and the wrong side of the road
+    if (d < 140 && free && clearView(c.x, c.z, T.x, T.z) && drivableLine(c.x, c.z, T.x, T.z, c, driving)) { P.cut = null; P.direct = true; return policeDirect(c, dt, T, d); }
+    // out of sight they head for where you were last seen; while any of them can see you, the radio keeps them updated
+    const G = wanted && !wanted.inSight ? wanted.seen : T, gn = nearestNode(G.x, G.z);
+    c.bot.goal = { node: gn, x: G.x, z: G.z };
+    // On the way they cut every corner they can: the furthest point of the way ahead that can be reached in a straight
+    // line, over a square, a park, the pavement or the wrong side of the road, and they go straight for it flat out
+    if (P.cut && (Math.hypot(P.cut.x - c.x, P.cut.z - c.z) < 9 || !free)) P.cut = null;
+    if (!P.cut && free && (P.cutT = (P.cutT || 0) - dt) <= 0) { P.cutT = 0.5; P.cut = shortcut(c, c.bot.goal); }
+    // (stuck on the way: back to the streets for a few seconds)
+    if (P.cut && c.bot.revT > 0) { P.cut = null; P.cutT = 4; }
+    if (P.cut) { P.direct = true; return rush(c, dt, P.cut.x, P.cut.z, chaseSpeed()); }
+    if (P.direct) { P.direct = false; resyncBot(c); }
+    // along the streets: full speed while far away, easing off to pull up a few metres from you
+    c.bot.cruise = d < 45 ? clamp((d - 10) * 0.9, 0, chaseSpeed()) : chaseSpeed();
+    if (gn !== P.goalNode && c.bot.phase === 'edge') { c.bot.next = chooseNext(c.bot.from, c.bot.to, c.bot.goal, true); P.goalNode = gn; }
+    return botThink(c, dt);
+  }
+  // the next junctions on the way to the goal for blue lights, about 250 m of them
+  function aheadPath(c, goal) {
+    const b = c.bot, D = distTo(goal.node, true), pts = [nodes[b.to]];
+    let prev = b.from, n = b.to, len = Math.hypot(nodes[n].x - c.x, nodes[n].z - c.z);
+    for (let k = 0; k < 8 && n !== goal.node && len < 260; k++) {
+      let best = -1, bv = Infinity;
+      for (const m of nodes[n].nbE) {
+        if (m === prev) continue;
+        const v = D[m] + Math.hypot(nodes[m].x - nodes[n].x, nodes[m].z - nodes[n].z);
+        if (v < bv) { bv = v; best = m; }
+      }
+      if (best < 0) break;
+      len += Math.hypot(nodes[best].x - nodes[n].x, nodes[best].z - nodes[n].z);
+      prev = n; n = best; pts.push(nodes[n]);
+    }
+    if (n === goal.node) pts.push({ x: goal.x, z: goal.z });
+    return pts;
+  }
+  // the furthest of them (past the next junction at least) there is a clear straight line to, or nothing
+  function shortcut(c, goal) {
+    if (c.bot.phase !== 'edge') return null;
+    const pts = aheadPath(c, goal);
+    for (let i = pts.length - 1; i >= 1; i--) {
+      // (only somewhere more or less ahead: a sharp turn would sweep the car into whatever is beside the line)
+      const p = pts[i], d = Math.hypot(p.x - c.x, p.z - c.z);
+      if (d > 25 && d < 240 && Math.abs(wrapAngle(Math.atan2(p.x - c.x, p.z - c.z) - c.h)) < 0.6 && drivableLine(c.x, c.z, p.x, p.z, c, driving)) return { x: p.x, z: p.z };
+    }
+    return null;
+  }
+  // in sight: drive straight for the target, aiming a little ahead of it, and stop beside it once it stops. From three
+  // stars (and the army always) they don't pull up alongside while you are on the move: they ram you
+  function policeDirect(c, dt, T, d) {
+    const tsp = Math.hypot(T.vx, T.vz), ram = (c.military || stars() >= 3) && tsp > 5, lead = Math.min(1.2, d / 20) * (ram ? 0.6 : 1);
+    let vT = ram ? chaseSpeed() : clamp((d - 8) * 1.1 + tsp * 1.1, 0, chaseSpeed());
+    if (d < 11 && tsp < 2) vT = c.military ? Math.min(chaseSpeed(), 9) : 0;
+    return rush(c, dt, T.x + T.vx * lead, T.z + T.vz * lead, vT);
+  }
+  // straight for (tx, tz) at vT, whatever is in between; backs off and tries again when stuck, and after two goes takes
+  // the streets for a while
+  function rush(c, dt, tx, tz, vT) {
+    const M = c.M, b = c.bot, fx = Math.sin(c.h), fz = Math.cos(c.h), lxv = Math.cos(c.h), lzv = -Math.sin(c.h);
+    const vf = c.vx * fx + c.vz * fz;
+    const dx = tx - c.x, dz = tz - c.z, lz = dx * fx + dz * fz, lx = dx * lxv + dz * lzv;
+    const maxSteer = 0.6 / (1 + Math.abs(vf) * 0.03);
+    const delta = lz < 0.3 ? Math.sign(lx || 1) * maxSteer : Math.atan((2 * M.wb * lx) / (lx * lx + lz * lz));
+    const right = -clamp(delta / maxSteer, -1, 1);
+    let fwd = vT < 0.3 ? (vf > 0.3 ? -1 : 0) : clamp((vT - vf) * 0.5, -1, 1);
+    if (Math.abs(right) > 0.85 && vf > 13) fwd = Math.min(fwd, -0.4);
+    if (b.revT > 0) { b.revT -= dt; return { fwd: -0.8, right: -right, brake: false }; }
+    if (fwd > 0.3 && Math.abs(vf) < 0.5) {
+      b.stuckT += dt;
+      // backed off twice and still stuck: take the streets for a while instead
+      if (b.stuckT > 1.2) { b.revT = 1.1; b.stuckT = 0; c.police.fails = (c.police.fails || 0) + 1; if (c.police.fails >= 2) { c.police.banT = 5; c.police.fails = 0; } }
+    } else b.stuckT = 0;
+    return { fwd, right, brake: false };
+  }
+  function policeUpdate(dt) {
+    if (policeCool > 0) policeCool -= dt;
+    sirenCars = cars.filter((c) => c.siren || (c.military && c.police && c.police.state === 'chase'));
+    updateFootCops(dt);
+    if (stop) { stopUpdate(dt); return; }
+    const T = playerTarget();
+    // speeding where a patrol can see it
+    if (driving && !driving.M.boat && !wanted && policeCool <= 0 && !driving.siren) {
+      const kmh = Math.hypot(driving.vx, driving.vz) * 3.6, over = kmh - limitAt(driving.x, driving.z);
+      if (over > TOLERANCE) for (const c of cars) if (c.police && !c.dead && clocks(c, T.x, T.z)) { startChase('fart', over); wanted.limit = limitAt(driving.x, driving.z); break; }
+    }
+    if (!wanted) return;
+    wanted.t += dt;
+    let nearest = Infinity, inSight = false, chasers = 0, nearCop = null;
+    // on foot somewhere a car can't follow (a park, the stairs, a lane too narrow, indoors)?
+    const ne = driving ? null : nearestEdge(T.x, T.z, (e) => e.emerg), offRoad = !driving && (!ne.e || ne.d > ne.e.hw + 1.5);
+    for (const c of cars) {
+      if (!c.police || c.dead) continue;
+      const st = c.police.state, d = Math.hypot(T.x - c.x, T.z - c.z);
+      // (the boats on the water are steered by WATER: here they only count for keeping you in sight)
+      if (c.water) {
+        if (c.water.leave) continue;
+        chasers++;
+        if (d < nearest && !c.military) nearest = d;
+        if (!inSight && d < 160 && clearView(c.x, c.z, T.x, T.z)) inSight = true;
+        continue;
+      }
+      if (st === 'wait' || st === 'transport' || st === 'stop') continue;
+      if (st !== 'chase') { if (d < chaseRadius()) setChase(c, true); else continue; }
+      chasers++;
+      if (d < nearest && !c.military) { nearest = d; nearCop = c; }
+      if (!inSight && d < 130 && clearView(c.x, c.z, T.x, T.z)) inSight = true;
+      // you are on foot close by, or out of reach of a car: pull up and send the constable after you
+      if (!driving && c.M.mil !== 'tank' && (d < 24 || (d < 90 && (offRoad || c.bot.stuckT > 1.5 || c.bot.stuckTotal > 5)))) { c.police.state = 'wait'; c.siren = false; c.beacon = !c.military; c.police.direct = false; }
+    }
+    for (const fc of footCops) {
+      if (fc.mode !== 'chase') continue;
+      const d = Math.hypot(T.x - fc.p.x, T.z - fc.p.z);
+      chasers++;
+      if (!inSight && d < 90 && clearView(fc.p.x, fc.p.z, T.x, T.z)) inSight = true;
+    }
+    // the helicopter sees you from above, where nothing on the ground is in the way (but not indoors or deep in a lane)
+    if (heli && heli.state !== 'leave') { chasers++; if (heli.sees) inSight = true; }
+    // speeding in front of them during the chase goes on the ticket too
+    if (driving && inSight) {
+      const lim = limitAt(driving.x, driving.z), over = Math.hypot(driving.vx, driving.vz) * 3.6 - lim;
+      if (over > wanted.over) { wanted.over = over; wanted.limit = lim; }
+      if (over > TOLERANCE) wanted.kinds.add('fart');
+    }
+    wanted.inSight = inSight;
+    // running from them: on the move, fast, with the police on your tail
+    const sp = driving ? Math.hypot(driving.vx, driving.vz) : Math.hypot(player.vx, player.vz);
+    if ((driving ? sp > 6 : sp > 5.5) && (nearest < 130 || (heli && heli.sees) || footCops.some((fc) => fc.mode === 'chase' && Math.hypot(fc.p.x - T.x, fc.p.z - T.z) < 60))) wanted.fleeT += dt;
+    updateStars(wanted);
+    wanted.starT += dt;
+    if (inSight) { wanted.seen = { x: T.x, z: T.z, vx: 0, vz: 0 }; wanted.lostT = 0; wanted.searchT = 0; }
+    else {
+      // they give up after searching where they last saw you without finding you, or after a long while without a trace
+      wanted.lostT += dt;
+      if (cars.some((c) => c.police && c.police.state === 'chase' && Math.hypot(c.x - wanted.seen.x, c.z - wanted.seen.z) < 40) || footCops.some((fc) => Math.hypot(fc.p.x - wanted.seen.x, fc.p.z - wanted.seen.z) < 12)
+        || (heli && heli.state !== 'leave' && Math.hypot(heli.x - wanted.seen.x, heli.z - wanted.seen.z) < 60)) wanted.searchT += dt;
+      // (with more stars they search for longer)
+      const more = wanted.stars - 1;
+      if (wanted.searchT > 8 + more * 4 || wanted.lostT > 45 + more * 15 || (!chasers && wanted.lostT > 6)) { endChase(false); return; }
+    }
+    // pull over (stop, ideally by the kerb) with a patrol close behind and in sight, and they pull in by you
+    if (driving && !driving.M.boat && nearCop && nearest < 70 && inSight && sp < 2) {
+      wanted.stopT += dt;
+      if (wanted.stopT > 0.9) beginStop(nearCop);
+    } else wanted.stopT = Math.max(0, wanted.stopT - dt);
+    // on foot: caught when a constable reaches you
+    if (!driving) for (const fc of footCops) if (fc.mode === 'chase' && Math.hypot(fc.p.x - player.x, fc.p.z - player.z) < 1.1 && Math.abs(fc.p.y - player.y) < 1.2) { caughtOnFoot(fc); return; }
+  }
+  // blue lights flash left and right in double bursts
+  function policeLights(c, dt) {
+    const g = c.mat.userData.glow;
+    if (c.flashSeed === undefined) c.flashSeed = Math.random();
+    if (!(c.siren || c.beacon) || c.dead) {
+      g.z = g.w = 0.05;
+      if (c.flashers) for (const s of c.flashers) s.material.opacity = 0;
+      return;
+    }
+    const ph = (clock * 1.9 + c.flashSeed) % 1;
+    const L = ph < 0.1 || (ph > 0.18 && ph < 0.28), R = (ph > 0.5 && ph < 0.6) || (ph > 0.68 && ph < 0.78);
+    g.z = L ? 9 : 0.05; g.w = R ? 9 : 0.05;
+    if (c.flashers) { c.flashers[0].material.opacity = L ? 0.95 : 0; c.flashers[1].material.opacity = R ? 0.95 : 0; }
+  }
+  // only your fault if you were the one going faster; a police car ramming you to stop you doesn't count
+  function policeRammed(c) { if (Math.hypot(driving.vx, driving.vz) > Math.hypot(c.vx, c.vz) + 1) offense('krock', 0, c.x, c.z, c); }
+  // you drive a police car yourself: L switches the blue lights and siren
+  function toggleSiren() {
+    if (!driving || !driving.M.police) return;
+    driving.siren = !driving.siren; driving.yelp = false;
+    toast(driving.siren ? 'Blåljus och siren på. Trafiken väjer för dig.' : 'Blåljus av.');
+  }
+
+  /* ---------- the sjöpolis and the navy ---------- */
+  // Run from the police out on the water and the sjöpolis comes after you: patrol boats from one star, a jet ski too from
+  // three, and at five stars the navy's Stridsbåt 90, which fires warning bursts from its machine gun. They find their way
+  // round the islands and under the bridges by a map of the water in 10-metre squares: from where you are, how many
+  // squares away every square of water is (worked out again as you move), and each boat heads downhill along it, cutting
+  // straight across to the furthest square it can see over open water. Stop with a police boat alongside and you are
+  // caught: a fine, or, if it is bad enough to be arrested for, a trip to the cell. Once the chase is over, or you have
+  // been ashore for a while, they go back where they came from.
+  const WATER = (() => {
+    const CELL = 10, GX = Math.ceil((BOUNDS.x1 - BOUNDS.x0) / CELL), GZ = Math.ceil((BOUNDS.z1 - BOUNDS.z0) / CELL), FAR = 65535;
+    let wet = null, dist = null, queue = null, fieldCell = -1, fieldT = 0;
+    let spawnT = 0, offT = 99, said = { police: false, army: false, fire: false };
+    const cellOf = (x, z) => clamp(Math.floor((z - BOUNDS.z0) / CELL), 0, GZ - 1) * GX + clamp(Math.floor((x - BOUNDS.x0) / CELL), 0, GX - 1);
+    const centre = (k) => ({ x: BOUNDS.x0 + ((k % GX) + 0.5) * CELL, z: BOUNDS.z0 + (Math.floor(k / GX) + 0.5) * CELL });
+    const water = (x, z) => !(groundAt(x, z) & 1);
+    // the squares a boat can be in: open water at the middle and 3 m round it, not too near the edge of the map
+    function grid() {
+      if (wet) return;
+      wet = new Uint8Array(GX * GZ); dist = new Uint16Array(GX * GZ); queue = new Int32Array(GX * GZ);
+      for (let j = 3; j < GZ - 3; j++) for (let i = 3; i < GX - 3; i++) {
+        const x = BOUNDS.x0 + (i + 0.5) * CELL, z = BOUNDS.z0 + (j + 0.5) * CELL;
+        wet[j * GX + i] = water(x, z) && water(x - 3, z) && water(x + 3, z) && water(x, z - 3) && water(x, z + 3) ? 1 : 0;
+      }
+    }
+    // how far, in squares, every square of water is from the one nearest (x, z)
+    function flood(x, z) {
+      let s = cellOf(x, z);
+      if (!wet[s]) {
+        let best = -1, bd = Infinity;
+        const ci = s % GX, cj = Math.floor(s / GX);
+        for (let dj = -8; dj <= 8; dj++) for (let di = -8; di <= 8; di++) {
+          const i = ci + di, j = cj + dj;
+          if (i < 0 || j < 0 || i >= GX || j >= GZ || !wet[j * GX + i]) continue;
+          const d = di * di + dj * dj;
+          if (d < bd) { bd = d; best = j * GX + i; }
+        }
+        if (best < 0) return false;
+        s = best;
+      }
+      if (s === fieldCell) return true;
+      fieldCell = s;
+      dist.fill(FAR);
+      let head = 0, tail = 0;
+      dist[s] = 0; queue[tail++] = s;
+      while (head < tail) {
+        const k = queue[head++], d = dist[k] + 1, i = k % GX;
+        if (i > 0 && wet[k - 1] && dist[k - 1] === FAR) { dist[k - 1] = d; queue[tail++] = k - 1; }
+        if (i < GX - 1 && wet[k + 1] && dist[k + 1] === FAR) { dist[k + 1] = d; queue[tail++] = k + 1; }
+        if (k >= GX && wet[k - GX] && dist[k - GX] === FAR) { dist[k - GX] = d; queue[tail++] = k - GX; }
+        if (k < GX * (GZ - 1) && wet[k + GX] && dist[k + GX] === FAR) { dist[k + GX] = d; queue[tail++] = k + GX; }
+      }
+      return true;
+    }
+    // open water all the way from a to b, r metres either side, and nothing in the way at the waterline (bridge piers)
+    function waterLine(ax, az, bx, bz, r) {
+      const len = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(len / 3)), ux = (bx - ax) / (len || 1), uz = (bz - az) / (len || 1);
+      for (let i = 1; i <= n; i++) {
+        const x = lerp(ax, bx, i / n), z = lerp(az, bz, i / n);
+        if (!water(x, z) || !water(x - uz * r, z + ux * r) || !water(x + uz * r, z - ux * r)) return false;
+        if (i % 2 === 0 && resolveWorld(x, z, r * 0.6, WATER_Y).hit) return false;
+      }
+      return true;
+    }
+    // the way towards you: downhill on the map of the water, as far along it as there is open water in a straight line
+    function waypoint(c) {
+      let k = cellOf(c.x, c.z);
+      if (dist[k] === FAR) {
+        // (not on a square of the map: the nearest one that is)
+        let best = -1, bd = FAR;
+        for (const o of [-1, 1, -GX, GX, -GX - 1, -GX + 1, GX - 1, GX + 1]) if (dist[k + o] < bd) { bd = dist[k + o]; best = k + o; }
+        if (best < 0) return null;
+        return centre(best);
+      }
+      const path = [];
+      for (let n = 0; n < 18 && dist[k] > 0; n++) {
+        let best = -1, bd = dist[k];
+        for (const o of [-1, 1, -GX, GX, -GX - 1, -GX + 1, GX - 1, GX + 1]) { const m = k + o; if (m >= 0 && m < dist.length && dist[m] < bd) { bd = dist[m]; best = m; } }
+        if (best < 0) break;
+        k = best; path.push(k);
+      }
+      const r = c.M.W / 2 + 0.6;
+      for (let i = path.length - 1; i >= 0; i--) { const p = centre(path[i]); if (waterLine(c.x, c.z, p.x, p.z, r)) return p; }
+      return path.length ? centre(path[0]) : null;
+    }
+    // where you are: in your boat, in a friend's, or on foot by the water
+    const onWater = () => !!(driving && driving.M.boat) || !!(MP.ride && MP.ride.M.boat);
+    function target() {
+      const b = driving || MP.ride;
+      return b ? { x: b.x, z: b.z, vx: b.vx, vz: b.vz, L: b.M.L } : { x: player.x, z: player.z, vx: player.vx, vz: player.vz, L: 1 };
+    }
+    const units = () => cars.filter((c) => c.water);
+    function spawn(M, role) {
+      const T = target();
+      for (let tries = 0; tries < 80; tries++) {
+        const a = Math.random() * TAU, r = 160 + Math.random() * 240, x = T.x + Math.sin(a) * r, z = T.z + Math.cos(a) * r, k = cellOf(x, z);
+        if (!wet[k] || dist[k] === FAR || dist[k] * CELL > 700) continue;
+        // (out of sight where possible: behind the camera, or far off)
+        const cx = x - camera.position.x, cz = z - camera.position.z, fw = new THREE.Vector3(); camera.getWorldDirection(fw);
+        if (tries < 50 && (cx * fw.x + cz * fw.z) / (Math.hypot(cx, cz) || 1) > 0.5 && r < 300) continue;
+        const p = centre(k), h = Math.atan2(T.x - p.x, T.z - p.z);
+        if (!boatFree(M, p.x, p.z, h)) continue;
+        const c = makeCar(M, M.colors[0]);
+        Object.assign(c, { x: p.x, z: p.z, h, keep: true, vx: Math.sin(h) * 8, vz: Math.cos(h) * 8 });
+        c.water = { role, stuckT: 0, revT: 0, fireT: 4 + Math.random() * 3, caughtT: 0, leave: false, leaveT: 0, home: { x: p.x, z: p.z } };
+        c.police = { state: 'chase', direct: false, goalNode: -1, callIn: Infinity };
+        if (role === 'army') { c.military = true; setOccupant(c, makeIdentity(SOLDIER)); c.siren = false; }
+        else { setOccupant(c, makeIdentity(OFFICER)); c.siren = true; c.yelp = false; }
+        return c;
+      }
+      return null;
+    }
+    function think(c, dt) {
+      const W = c.water, M = c.M, T = target(), fx = Math.sin(c.h), fz = Math.cos(c.h), lxv = Math.cos(c.h), lzv = -Math.sin(c.h);
+      const vf = c.vx * fx + c.vz * fz, d = Math.hypot(T.x - c.x, T.z - c.z), tsp = Math.hypot(T.vx, T.vz), wet = onWater();
+      let gx = T.x, gz = T.z, vT = M.max * 0.95;
+      if (W.leave) {
+        // going home: back where it came from, out of your way
+        gx = W.home.x; gz = W.home.z;
+        if (!waterLine(c.x, c.z, gx, gz, M.W / 2 + 0.6)) { const a = Math.atan2(c.x - T.x, c.z - T.z); gx = c.x + Math.sin(a) * 60; gz = c.z + Math.cos(a) * 60; }
+        vT = M.max * 0.7;
+      } else {
+        const r = M.W / 2 + 0.6, ram = W.role === 'police' && stars() >= 3 && tsp > 5;
+        if (d < 240 && waterLine(c.x, c.z, T.x, T.z, r)) {
+          const lead = Math.min(1.2, d / 25) * (ram ? 0.5 : 1);
+          gx = T.x + T.vx * lead; gz = T.z + T.vz * lead;
+        } else { const p = waypoint(c); if (p) { gx = p.x; gz = p.z; } }
+        // the police come alongside and keep pace (from three stars they ram you), the navy stays off at gun range
+        if (!wet) vT = d > 30 ? M.max : 0;
+        else if (W.role === 'army') vT = d > 60 ? M.max : clamp(tsp * 1.05 + (d - 35) * 0.3, 1.5, M.max);
+        else vT = ram ? M.max : d > 35 ? M.max : clamp(tsp * 1.15 + (d - (T.L + M.L) / 2 - 2) * 0.7, 0, M.max);
+      }
+      const dx = gx - c.x, dz = gz - c.z, err = Math.atan2(dx * lxv + dz * lzv, dx * fx + dz * fz);
+      const right = -clamp(err * 2.2, -1, 1);
+      let fwd = clamp((vT - vf) * 0.35, -1, 1);
+      if (Math.abs(err) > 1.3 && vf > 6) fwd = Math.min(fwd, 0.15);
+      if (W.revT > 0) { W.revT -= dt; return { fwd: -0.8, right: -right, brake: false }; }
+      if (fwd > 0.3 && Math.abs(vf) < 0.6) { if ((W.stuckT += dt) > 1.5) { W.revT = 1.6; W.stuckT = 0; } } else W.stuckT = 0;
+      return { fwd, right, brake: false };
+    }
+    // the navy's warning: a burst from the machine gun into the water just short of you
+    function burst(c, T) {
+      const co = Math.cos(c.h), si = Math.sin(c.h), hd = c.geo.head, gx = c.x + hd[0] * co + hd[2] * si, gz = c.z - hd[0] * si + hd[2] * co, gy = c.body.position.y + hd[1] + 0.4;
+      const a = Math.atan2(T.x - gx, T.z - gz), short = 9 + Math.random() * 6;
+      for (let i = 0; i < 8; i++) {
+        const sa = a + (Math.random() - 0.5) * 0.12, dd = Math.max(8, Math.hypot(T.x - gx, T.z - gz) - short + (Math.random() - 0.5) * 8);
+        const hx = gx + Math.sin(sa) * dd, hz = gz + Math.cos(sa) * dd, tt = 0.25 + i * 0.03;
+        sparkFx.spawn({ x: gx, y: gy, z: gz, vx: (hx - gx) / tt, vy: (WATER_Y - gy) / tt, vz: (hz - gz) / tt, life: tt, size: [0.5, 0.25], alpha: 1, c: SPARK_COL, drag: 0 });
+        for (let k = 0; k < 6; k++) foamFx.spawn({ x: hx + (Math.random() - 0.5) * 0.6, y: WATER_Y + 0.1, z: hz + (Math.random() - 0.5) * 0.6, vx: (Math.random() - 0.5) * 2, vy: 3 + Math.random() * 4, vz: (Math.random() - 0.5) * 2, life: 0.8 + Math.random() * 0.5, size: [0.3, 0.9], alpha: 0.85, c: FOAM_COL, grav: 9, drag: 0.6 });
+      }
+      if (audio && !muted) {
+        const s = placeSound(gx, gz, 400), t = audio.ctx.currentTime;
+        for (let k = 0; k < 9; k++) noiseBurst(t + k * 0.085, 0.07, 0.28 * s.level + 0.01, 'bandpass', 700 + Math.random() * 300, 1.1, s.pan, 0.002);
+      }
+      if (c.aim !== undefined) c.pitch -= 0.01;
+    }
+    // caught on the water by the sjöpolis
+    function caught() {
+      if (!arrestable(wanted)) { endChase(true); return; }
+      // arrested: the boat is left where it lies, and they take you to the station
+      const boat = driving;
+      if (boat) { setOccupant(boat, null); boat.vx = boat.vz = 0; driving = null; }
+      if (MP.ride) MP.unride();
+      player.model.group.visible = false; player.vx = player.vz = 0;
+      stop = { car: null, mode: 'arrest', phase: 'water', t: 0, at: { x: player.x, z: player.z }, officer: null, crew: null, name: rpick(CONSTABLES), title: 'Konstapel',
+        ticket: null, nav: {}, pnav: {}, locked: true, spot: null, door: null, vehicle: boat ? boat.M.name : 'Gående' };
+      toast('Sjöpolisen griper dig. Du förs till polisstationen.');
+      fadeThen(jailDirect);
+    }
+    function update(dt) {
+      const list = units(), wet = onWater();
+      offT = wet ? 0 : offT + dt;
+      const hunting = !!wanted && !stop && offT < 25;
+      if (!list.length && !(hunting && wet)) return;
+      grid();
+      const T = target();
+      if ((fieldT -= dt) <= 0 || !list.length) { fieldT = 0.7; flood(T.x, T.z); }
+      // how many of each: more police boats with more stars, the jet ski from three, the navy at five
+      const n = (id) => list.filter((c) => c.M.id === id && !c.water.leave).length, s = stars();
+      if (hunting && wet && (spawnT -= dt) <= 0) {
+        spawnT = 2.5;
+        const want = [['polisbat', [0, 1, 2, 2, 3, 3][s], 'police'], ['polisjet', [0, 0, 0, 1, 1, 2][s], 'police'], ['strb90', s >= 5 ? 2 : 0, 'army']];
+        for (const [id, k, role] of want) if (n(id) < k && spawn(MODEL[id], role)) {
+          if (role === 'army' && !said.army) { said.army = true; toast('Marinen skickar stridsbåtar efter dig!'); }
+          else if (role === 'police' && !said.police) { said.police = true; toast('Sjöpolisen är på väg!'); }
+          break;
+        }
+      }
+      if (!wanted) said = { police: false, army: false, fire: false };
+      for (const c of list) {
+        const W = c.water, d = Math.hypot(T.x - c.x, T.z - c.z);
+        if (!hunting || c.dead) W.leave = true;
+        if (W.leave) {
+          c.siren = false;
+          if ((W.leaveT += dt) > 40 || d > 320) removeCar(c);
+          continue;
+        }
+        // stuck somewhere far off (a pier, a narrow sound): gone, and another comes in its place
+        if (Math.hypot(c.vx, c.vz) < 1.2 && d > 80) { if ((W.stuckTotal = (W.stuckTotal || 0) + dt) > 8) { removeCar(c); continue; } }
+        else W.stuckTotal = 0;
+        // caught: you stopped with a police boat alongside, in plain view
+        if (W.role === 'police' && driving && driving.M.boat) {
+          const sp = Math.hypot(driving.vx, driving.vz);
+          if (d < (c.M.L + driving.M.L) / 2 + 3 && sp < 2.2 && clearView(c.x, c.z, T.x, T.z)) {
+            if ((W.caughtT += dt) > 1.4) { caught(); return; }
+          } else W.caughtT = Math.max(0, W.caughtT - dt);
+        }
+        // the navy: warning bursts from the gun when it has you in its sights
+        if (W.role === 'army' && wet && d < 160 && (W.fireT -= dt) <= 0 && Math.abs(wrapAngle(Math.atan2(T.x - c.x, T.z - c.z) - c.h - (c.aim || 0))) < 0.15 && clearView(c.x, c.z, T.x, T.z)) {
+          W.fireT = 6 + Math.random() * 4;
+          burst(c, T);
+          if (!said.fire) { said.fire = true; toast('Stridsbåten skjuter varningsskott! Stanna, eller kör för livet.'); }
+        }
+      }
+    }
+    return { update, think, units, get wet() { return wet; }, flood, waypoint };
+  })();
+
+  /* ---------- the police helicopter ---------- */
+  // From three stars Polisflyget's helicopter joins the chase: a Bell 429, blue on top and white underneath, with the
+  // blue and yellow checks along the cabin and POLIS on the tail boom and the belly. It flies in, then circles over you
+  // with its searchlight on you. While it sees you the patrols always know where you are. It can't see you indoors, nor
+  // deep in a narrow lane of Gamla stan unless it is right overhead, and it can't keep up with the fastest cars on a
+  // straight. Lose it and it searches where it saw you last; when the chase is over it climbs away.
+  const HELI = { speed: 46, alt: 36, radius: 52, eye: 120 };
+  let heli = null, heliModel = null;
+  function buildHeli() {
+    const BLUE = 0x163d8c, WHITE = 0xf1f2ef, YEL = 0xf2c200, DARK = 0x24272b, ROTOR = 0x2b2e33;
+    const m = new Merger(), gl = new Merger(), lamp = new Merger();
+    // one triangle at a time, coloured by where its middle is (so the checks stay sharp) or sent to the glass
+    const put = (geo, colOf, glassOf) => {
+      const g = geo.index ? geo.toNonIndexed() : geo, P = g.attributes.position.array, N = g.attributes.normal.array;
+      for (let i = 0; i < P.length; i += 9) {
+        const cx = (P[i] + P[i + 3] + P[i + 6]) / 3, cy = (P[i + 1] + P[i + 4] + P[i + 7]) / 3, cz = (P[i + 2] + P[i + 5] + P[i + 8]) / 3;
+        const toGlass = glassOf && glassOf(cx, cy, cz), tgt = toGlass ? gl : m;
+        _c.set(toGlass ? 0xffffff : colOf(cx, cy, cz));
+        for (let k = 0; k < 9; k += 3) { tgt.p.push(P[i + k], P[i + k + 1], P[i + k + 2]); tgt.n.push(N[i + k], N[i + k + 1], N[i + k + 2]); tgt.c.push(_c.r, _c.g, _c.b); }
+      }
+      g.dispose(); geo.dispose();
+    };
+    // a tube from a to b
+    const tube = (M, a, b, r, col, n = 8) => {
+      const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), len = d.length(), g = new THREE.CylinderGeometry(r, r, len, n);
+      g.applyMatrix4(_m4.makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize())));
+      g.translate((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
+      M.add(g, col);
+    };
+    // the cabin: turned from a profile along the length, oval in section, nose forwards (+z), skids at y = 0
+    const prof = [[0.0, -1.75], [0.3, -1.68], [0.58, -1.42], [0.78, -0.85], [0.86, -0.2], [0.87, 0.7], [0.84, 1.5], [0.76, 2.15], [0.6, 2.65], [0.4, 2.98], [0.18, 3.18], [0.0, 3.24]];
+    const cab = new THREE.LatheGeometry(prof.map(([r, y]) => new THREE.Vector2(r, y)), 28);
+    cab.rotateX(Math.PI / 2); cab.scale(0.92, 1.12, 1); cab.translate(0, 1.42, 0);
+    const checks = (y, z) => (Math.floor((z + 20) / 0.42) + (y > 1.06 ? 1 : 0)) % 2 ? BLUE : YEL;
+    put(cab, (x, y, z) => (y > 1.5 ? BLUE : y > 0.86 && y < 1.26 && z < 2.55 && z > -1.45 ? checks(y, z) : WHITE), (x, y, z) =>
+      // windscreen over the nose, and the side windows of the cockpit and the cabin with a pillar between the doors
+      (z > 1.55 && y > 1.38 && Math.abs(x) < 0.82 && !(Math.abs(x) < 0.04 && z > 2.2)) || (Math.abs(x) > 0.55 && y > 1.38 && y < 2.12 && z > -1.05 && z < 1.55 && Math.abs(z - 0.32) > 0.07));
+    // the engine fairing on the roof and the two exhausts at its back
+    const fair = new THREE.SphereGeometry(1, 18, 10); fair.scale(0.6, 0.36, 1.55); fair.translate(0, 2.26, -0.35);
+    put(fair, () => BLUE);
+    for (const s of [1, -1]) tube(m, [s * 0.28, 2.38, -1.55], [s * 0.36, 2.48, -1.95], 0.11, DARK);
+    // tail boom, the fin with the tail rotor on its left, the stabiliser with end plates, a skid under the tail
+    const boom = new THREE.CylinderGeometry(0.2, 0.42, 5.2, 14); boom.rotateX(-Math.PI / 2 + 0.035); boom.translate(0, 1.82, -4.05);
+    put(boom, (x, y) => (y > 2.02 ? BLUE : WHITE));
+    m.hexa([[-0.06, 1.55, -6.95], [0.06, 1.55, -6.95], [0.06, 1.62, -6.3], [-0.06, 1.62, -6.3], [-0.05, 3.15, -7.35], [0.05, 3.15, -7.35], [0.05, 3.1, -6.95], [-0.05, 3.1, -6.95]], BLUE);
+    m.hexa([[-1.35, 1.78, -5.25], [1.35, 1.78, -5.25], [1.35, 1.8, -4.75], [-1.35, 1.8, -4.75], [-1.35, 1.84, -5.25], [1.35, 1.84, -5.25], [1.35, 1.86, -4.75], [-1.35, 1.86, -4.75]], WHITE);
+    for (const s of [1, -1]) m.box(0.04, 0.55, 0.5, BLUE, s * 1.37, 1.85, -5.0);
+    tube(m, [0, 1.6, -6.6], [0, 1.25, -6.9], 0.03, DARK);
+    tube(m, [0.12, 2.45, -6.9], [0.0, 2.45, -6.9], 0.09, DARK);
+    // skids on their cross tubes
+    for (const s of [1, -1]) {
+      tube(m, [s * 1.12, 0.07, -1.25], [s * 1.12, 0.07, 1.7], 0.05, DARK);
+      tube(m, [s * 1.12, 0.07, 1.7], [s * 1.12, 0.26, 2.05], 0.05, DARK);
+      for (const z of [1.15, -0.75]) tube(m, [s * 1.12, 0.07, z], [s * 0.55, 0.78, z], 0.045, DARK);
+    }
+    // mast and hub; under the nose the searchlight and the camera ball
+    tube(m, [0, 2.5, 0.15], [0, 3.05, 0.15], 0.11, 0x6a6f75);
+    m.add(new THREE.CylinderGeometry(0.24, 0.24, 0.16, 12), 0x6a6f75, 0, 3.08, 0.15);
+    tube(m, [0.42, 0.62, 2.35], [0.42, 0.62, 2.7], 0.13, DARK, 12);
+    m.add(new THREE.SphereGeometry(0.19, 12, 8), 0x3a3e44, -0.38, 0.62, 2.55);
+    lamp.add(new THREE.CylinderGeometry(0.11, 0.11, 0.02, 12), 0xfff6dc, 0.42, 0.62, 2.71, Math.PI / 2, 0, 0);
+    // navigation lights: red to the left (+x, the nose being +z), green to the right, white at the tail
+    lamp.box(0.07, 0.07, 0.1, 0xff2a2a, 1.4, 1.95, -5.0); lamp.box(0.07, 0.07, 0.1, 0x2aff6a, -1.4, 1.95, -5.0); lamp.box(0.06, 0.06, 0.06, 0xffffff, 0, 3.18, -7.36);
+    // POLIS along both sides of the tail boom and big on the belly, the word from the police cars' decal
+    const db = new Builder(), POL = [[0, 0.5], [1, 0.5], [1, 1], [0, 1]];
+    for (const s of [1, -1]) {
+      const x = s * 0.4, z0 = -2.0, z1 = -3.7, y0 = 1.66, y1 = 2.0;
+      if (s > 0) db.quad([x, y0, z0], [x - 0.07, y0, z1], [x - 0.07, y1, z1], [x, y1, z0], 0xffffff, POL, [1, 0, 0]);
+      else db.quad([x + 0.07, y0, z1], [x, y0, z0], [x, y1, z0], [x + 0.07, y1, z1], 0xffffff, POL, [-1, 0, 0]);
+    }
+    db.quad([0.55, 0.37, 1.6], [0.55, 0.37, -0.9], [-0.55, 0.37, -0.9], [-0.55, 0.37, 1.6], 0xffffff, [[0, 0.5], [0, 1], [1, 1], [1, 0.5]], [0, -1, 0]);
+    const group = new THREE.Group(), body = new THREE.Group();
+    group.add(body);
+    body.rotation.order = 'YXZ';
+    // (plain standard materials like the rest of the city's, so nothing new has to be compiled when it turns up)
+    const mat = std({ vertexColors: true, roughness: 0.3, metalness: 0.15, envMapIntensity: 1.2 });
+    const shell = new THREE.Mesh(m.build(), mat); shell.castShadow = true;
+    body.add(shell, new THREE.Mesh(gl.build(), glassMat), new THREE.Mesh(lamp.build(), new THREE.MeshBasicMaterial({ vertexColors: true })), new THREE.Mesh(db.build(), decalMat));
+    // the rotors spin in their own groups; a faint disc stands for the blur of the blades
+    const blades = new Merger();
+    for (let k = 0; k < 4; k++) {
+      const a = (k / 4) * TAU, g = new THREE.BoxGeometry(0.3, 0.035, 5.3);
+      g.translate(0, 0, 2.85); g.rotateY(a); blades.add(g, ROTOR);
+      const t = new THREE.BoxGeometry(0.31, 0.04, 0.35); t.translate(0, 0, 5.35); t.rotateY(a); blades.add(t, YEL);
+    }
+    const rotor = new THREE.Mesh(blades.build(), mat);
+    rotor.position.set(0, 3.13, 0.15); rotor.castShadow = true;
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(5.6, 40), new THREE.MeshBasicMaterial({ color: 0x3a3f46, transparent: true, opacity: 0.085, depthWrite: false, side: THREE.DoubleSide }));
+    disc.rotation.x = -Math.PI / 2; disc.position.set(0, 3.12, 0.15);
+    const tb = new Merger();
+    for (let k = 0; k < 4; k++) { const g = new THREE.BoxGeometry(0.02, 0.86, 0.13); g.translate(0, 0.43, 0); g.rotateX((k / 4) * TAU + (k % 2) * 0.35); tb.add(g, ROTOR); }
+    const tail = new THREE.Mesh(tb.build(), rotor.material);
+    tail.position.set(0.16, 2.45, -6.9);
+    // the red beacon on top flashes
+    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff2020 }));
+    beacon.position.set(0, 2.66, -0.9);
+    body.add(rotor, disc, tail, beacon);
+    // the searchlight: a faint beam down to a bright patch on the ground
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 3.2, 1, 24, 1, true), new THREE.MeshBasicMaterial({ color: 0xfff3d2, transparent: true, opacity: 0.03, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    beam.geometry.translate(0, -0.5, 0);
+    const patch = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: glowTex, color: 0xfff1cc, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false }));
+    patch.rotation.x = -Math.PI / 2; patch.scale.setScalar(9); patch.renderOrder = 2;
+    group.visible = beam.visible = patch.visible = false;
+    scene.add(group, beam, patch);
+    return { group, body, rotor, tail, beacon, beam, patch };
+  }
+  // can it see you: close enough, not indoors, and not hidden between the houses of a narrow lane unless right overhead
+  function heliSees(H, T) {
+    const hd = Math.hypot(T.x - H.x, T.z - H.z);
+    if (hd > HELI.eye) return false;
+    if (!driving && (indoorSpan(player.x, player.z, player.y) || STATION.inside(player.x, player.z))) return false;
+    const ne = nearestEdge(T.x, T.z);
+    if (hd > 22 && ne.e && ne.e.kind === 'lane' && ne.e.hw < 2.3 && ne.d < ne.e.hw + 1.2) return false;
+    return true;
+  }
+  // the tallest thing under a point, so the helicopter keeps clear of towers and spires
+  function roofAt(x, z, r) {
+    let top = 0;
+    forNear(x - r, z - r, x + r, z + r, (o) => { if (o.h < 300 && o.h > top) top = o.h; });
+    return top;
+  }
+  function spawnHeli() {
+    if (!heliModel) heliModel = buildHeli();
+    const T = playerTarget(), a = Math.random() * TAU, d = 480;
+    const x = T.x + Math.cos(a) * d, z = T.z + Math.sin(a) * d;
+    heli = { x, y: 95, z, vx: 0, vy: 0, vz: 0, h: Math.atan2(T.x - x, T.z - z), pitch: 0, roll: 0, spin: 0, state: 'in', sees: false, seen: { x: T.x, z: T.z }, orbit: a, spot: { x: T.x, z: T.z }, lostT: 0, t: 0, ax: 0, az: 0 };
+    heliModel.group.visible = true;
+  }
+  function updateHeli(dt) {
+    const want = !!wanted && wanted.stars >= 3 && !(stop && stop.locked);
+    if (!heli) { if (want) spawnHeli(); else return; }
+    const H = heli, T = playerTarget();
+    H.t += dt;
+    if (!want && H.state !== 'leave') { H.state = 'leave'; H.sees = false; const a = Math.atan2(H.x - T.x, H.z - T.z); H.away = [Math.sin(a), Math.cos(a)]; }
+    let gx, gz, gy, tvx = 0, tvz = 0;
+    if (H.state === 'leave') {
+      gx = H.x + H.away[0] * 300; gz = H.z + H.away[1] * 300; gy = 140;
+      if (Math.hypot(H.x - T.x, H.z - T.z) > 900) { heli = null; heliModel.group.visible = heliModel.beam.visible = heliModel.patch.visible = false; return; }
+    } else {
+      H.sees = heliSees(H, T);
+      if (H.sees) { H.seen = { x: T.x, z: T.z }; H.lostT = 0; if (H.state === 'in' && Math.hypot(T.x - H.x, T.z - H.z) < 140) { H.state = 'track'; toast('Polishelikoptern har dig i strålkastaren!'); } }
+      else H.lostT += dt;
+      // circle over you a little ahead of where you are going; lost, circle tighter over where you were last seen
+      const focus = H.sees ? T : wanted && !wanted.inSight ? wanted.seen : H.seen, lead = H.sees ? 1.2 : 0;
+      const fx = focus.x + (T.vx || 0) * lead * (H.sees ? 1 : 0), fz = focus.z + (T.vz || 0) * lead * (H.sees ? 1 : 0);
+      const R = H.sees ? HELI.radius : 26 + 10 * Math.sin(H.t * 0.3);
+      H.orbit += dt * (H.sees ? 0.22 : 0.4);
+      const far = Math.hypot(fx - H.x, fz - H.z) > R + 90;
+      gx = far ? fx : fx + Math.cos(H.orbit) * R; gz = far ? fz : fz + Math.sin(H.orbit) * R;
+      if (H.sees && !far) { tvx = T.vx || 0; tvz = T.vz || 0; }
+      gy = far ? 70 : HELI.alt;
+    }
+    // keep well above whatever is underneath and just ahead
+    const ahead = 1.5;
+    gy = Math.max(gy, roofAt(H.x, H.z, 14) + 16, roofAt(H.x + H.vx * ahead, H.z + H.vz * ahead, 18) + 16);
+    // fly: a speed towards the goal (plus the target's own speed when circling it), reached with a limited push
+    const dx = gx - H.x, dz = gz - H.z, d = Math.hypot(dx, dz) || 1, v = Math.min(HELI.speed, d * 0.7);
+    let wx = (dx / d) * v + tvx, wz = (dz / d) * v + tvz;
+    const wl = Math.hypot(wx, wz);
+    if (wl > HELI.speed) { wx *= HELI.speed / wl; wz *= HELI.speed / wl; }
+    const acc = 9, ax = clamp((wx - H.vx) * 1.6, -acc, acc), az = clamp((wz - H.vz) * 1.6, -acc, acc);
+    H.vx += ax * dt; H.vz += az * dt;
+    H.vy += (clamp((gy - H.y) * 0.7, -6, 9) - H.vy) * Math.min(1, 2 * dt);
+    H.x += H.vx * dt; H.y += H.vy * dt; H.z += H.vz * dt;
+    H.ax += (ax - H.ax) * Math.min(1, 3 * dt); H.az += (az - H.az) * Math.min(1, 3 * dt);
+    // nose: towards you while it circles (the camera and the light are in front), along its way when it travels
+    const sp = Math.hypot(H.vx, H.vz), faceYou = H.state !== 'leave' && Math.hypot(T.x - H.x, T.z - H.z) < 160;
+    const hw = faceYou ? Math.atan2(T.x - H.x, T.z - H.z) : sp > 3 ? Math.atan2(H.vx, H.vz) : H.h;
+    H.h += clamp(wrapAngle(hw - H.h), -1.2 * dt, 1.2 * dt);
+    // tilted into the push: nose down to speed up or to fly forwards, a bank to the side it pushes towards
+    const fwx = Math.sin(H.h), fwz = Math.cos(H.h), rgx = Math.cos(H.h), rgz = -Math.sin(H.h);
+    const vf = H.vx * fwx + H.vz * fwz, af = H.ax * fwx + H.az * fwz, al = H.ax * rgx + H.az * rgz;
+    H.pitch += (clamp(vf * 0.005 + af * 0.025, -0.22, 0.3) - H.pitch) * Math.min(1, 3 * dt);
+    H.roll += (clamp(-al * 0.03 - (H.vx * rgx + H.vz * rgz) * 0.004, -0.4, 0.4) - H.roll) * Math.min(1, 3 * dt);
+    // the patch of light follows you (where it last saw you, sweeping, when it has lost you)
+    const st = H.sees ? T : { x: H.seen.x + Math.sin(H.t * 0.9) * 9, z: H.seen.z + Math.cos(H.t * 0.7) * 9 };
+    H.spot.x += (st.x - H.spot.x) * Math.min(1, (H.sees ? 4 : 1) * dt); H.spot.z += (st.z - H.spot.z) * Math.min(1, (H.sees ? 4 : 1) * dt);
+    // the model
+    const G = heliModel;
+    G.group.position.set(H.x, H.y, H.z);
+    G.body.rotation.set(H.pitch, H.h, H.roll);
+    H.spin += dt * 41;
+    G.rotor.rotation.y = H.spin; G.tail.rotation.x = H.spin * 5.3;
+    G.beacon.visible = H.t % 1.2 < 0.12;
+    const on = H.state !== 'leave' && Math.hypot(H.spot.x - H.x, H.spot.z - H.z) < 140;
+    G.beam.visible = G.patch.visible = on;
+    if (on) {
+      const lx = H.x + Math.sin(H.h) * 2.5, ly = H.y + 0.6, lz = H.z + Math.cos(H.h) * 2.5, gy0 = 0.08;
+      const bx = H.spot.x - lx, by = gy0 - ly, bz = H.spot.z - lz, bl = Math.hypot(bx, by, bz);
+      G.beam.position.set(lx, ly, lz);
+      G.beam.scale.set(1, bl, 1);
+      G.beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), new THREE.Vector3(bx / bl, by / bl, bz / bl));
+      G.patch.position.set(H.spot.x, gy0, H.spot.z);
+      G.patch.material.opacity = H.sees ? 0.42 : 0.28;
+    }
+  }
+
+  /* ---------- police on the ground: stops, constables on foot, arrests and the cells ---------- */
+  // Pull over and the nearest patrol turns its siren off (blue lights stay on) and parks right behind you, or in front
+  // of you facing you if it is already ahead, lined up with your car and just as far out from the kerb. A constable
+  // gets out and walks up to your window. For an ordinary offence that means an ordningsbot (E signs it). Drive far
+  // too fast (50 km/h or more over the limit) or run from them, and it is an arrest instead: out of the car, handcuffs,
+  // the back seat of the police car and a ride to the station on Stora Nygatan, where you are put in a cell.
+  // On foot the patrols pull up and the constables get out and run after you, along the streets, through the lanes,
+  // up the stairs and into buildings. Get into a car and they run back to theirs and chase you by car again.
+  let stop = null;
+  const footCops = [];
+  const CONSTABLES = ['Andersson', 'Lindqvist', 'Nyström', 'Berg', 'Holm', 'Karlsson', 'Ek', 'Sandberg', 'Öberg', 'Lundin'];
+  const COP_RUN = 9.7, ARREST_OVER = 50, FLEE_ARREST = 20, IDLE = () => ({ mx: 0, mz: 0, speed: 0, jump: false });
+  const arrestable = (w) => w.over >= ARREST_OVER || w.kinds.has('smitning') || (w.fleeT || 0) > FLEE_ARREST || w.stars >= 3;
+  const stopTarget = () => (driving ? { x: driving.x, z: driving.z, h: driving.h, L: driving.M.L } : { x: player.x, z: player.z, h: player.rot, L: 1 });
+  // the phases in which you have no say in where you go
+  const inCustody = () => !!(stop && stop.locked && stop.phase !== 'jail');
+
+  /* walking routes for people: straight there when nothing is in the way, through the station's rooms, or along the
+     streets, lanes and stairs (every street a person can walk) */
+  function walkLine(ax, az, bx, bz) {
+    const len = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(len / 0.8));
+    for (let i = 1; i <= n; i++) {
+      const x = lerp(ax, bx, i / n), z = lerp(az, bz, i / n);
+      if (!walkable(x, z) || blockedAt(x, z, 0.26)) return false;
+    }
+    return true;
+  }
+  const SP = STATION.P, CELL_GUARD = [STATION.P.C2[0] + 1.8, 223.2]; // where the constable waits while you go into cell 2
+  function stationPath(ka, kb) {
+    const dist = { [ka]: 0 }, prev = {}, todo = new Set(Object.keys(SP));
+    while (todo.size) {
+      let u = null;
+      for (const k of todo) if (dist[k] !== undefined && (u === null || dist[k] < dist[u])) u = k;
+      if (u === null || u === kb) break;
+      todo.delete(u);
+      for (const [a, b] of STATION.LINKS) {
+        const v = a === u ? b : b === u ? a : null;
+        if (!v || !todo.has(v)) continue;
+        const nd = dist[u] + Math.hypot(SP[u][0] - SP[v][0], SP[u][1] - SP[v][1]);
+        if (dist[v] === undefined || nd < dist[v]) { dist[v] = nd; prev[v] = u; }
+      }
+    }
+    const path = [kb];
+    while (path[0] !== ka && prev[path[0]]) path.unshift(prev[path[0]]);
+    return path;
+  }
+  function nearestRoomPoint(x, z) {
+    let best = null, bd = Infinity;
+    for (const k in SP) {
+      const d = Math.hypot(SP[k][0] - x, SP[k][1] - z) + (walkLine(x, z, SP[k][0], SP[k][1]) ? 0 : 50);
+      if (d < bd) { bd = d; best = k; }
+    }
+    return best;
+  }
+  let walkNode = null;
+  function streetWaypoint(x, z, tx, tz) {
+    if (!walkNode) walkNode = (px, pz) => { let b = 0, bd = Infinity; nodes.forEach((n, i) => { const d = Math.hypot(n.x - px, n.z - pz); if (d < bd && n.nbW.length) { bd = d; b = i; } }); return b; };
+    const goal = walkNode(tx, tz), D = distTo(goal, 'nbW'), ne = nearestEdge(x, z);
+    if (!ne.e) return { x: tx, z: tz };
+    const e = ne.e, A = nodes[e.a], B = nodes[e.b];
+    const t = clamp(((x - A.x) * (B.x - A.x) + (z - A.z) * (B.z - A.z)) / (e.len * e.len), 0, 1);
+    let n = t * e.len + D[e.a] <= (1 - t) * e.len + D[e.b] ? e.a : e.b;
+    if (n === goal && Math.hypot(nodes[n].x - x, nodes[n].z - z) < 4) return { x: tx, z: tz };
+    if (Math.hypot(nodes[n].x - x, nodes[n].z - z) < 2.5) {
+      let best = n, bv = Infinity;
+      for (const m of nodes[n].nbW) { const v = D[m] + Math.hypot(nodes[m].x - nodes[n].x, nodes[m].z - nodes[n].z); if (v < bv) { bv = v; best = m; } }
+      n = best;
+    }
+    return { x: nodes[n].x, z: nodes[n].z };
+  }
+  // Cars standing in the way of someone on foot (your car after an arrest, the patrol car, cars parked at the kerb):
+  // the walk goes round the nearest one the straight line would run into, by the shorter way round its corners.
+  // Each car is a box as big as the car plus room for a person; the corners are a little further out still.
+  const CAR_ROOM = 0.6, CORNER = 0.35;
+  function carBox(c) {
+    return { c, co: Math.cos(c.h), si: Math.sin(c.h), hx: c.M.W / 2 + CAR_ROOM, hz: c.M.L / 2 + CAR_ROOM };
+  }
+  const toLocal = (b, x, z) => { const dx = x - b.c.x, dz = z - b.c.z; return [dx * b.co - dz * b.si, dx * b.si + dz * b.co]; };
+  const toWorld = (b, lx, lz) => ({ x: b.c.x + lx * b.co + lz * b.si, z: b.c.z - lx * b.si + lz * b.co });
+  // where (0..1) a segment in the box's own frame first enters the box, or Infinity if it never does
+  function segEntersBox(ax, az, bx, bz, hx, hz) {
+    let t0 = 0, t1 = 1;
+    for (const [p, d, h] of [[ax, bx - ax, hx], [az, bz - az, hz]]) {
+      if (Math.abs(d) < 1e-9) { if (p <= -h || p >= h) return Infinity; continue; }
+      let ta = (-h - p) / d, tb = (h - p) / d;
+      if (ta > tb) { const t = ta; ta = tb; tb = t; }
+      t0 = Math.max(t0, ta); t1 = Math.min(t1, tb);
+      if (t0 >= t1) return Infinity;
+    }
+    return t0;
+  }
+  const insideBox = (b, x, z) => { const [lx, lz] = toLocal(b, x, z); return Math.abs(lx) < b.hx && Math.abs(lz) < b.hz; };
+  // is (x, z) within pad metres of the body of car c
+  const byCar = (c, x, z, pad) => { const dx = x - c.x, dz = z - c.z, co = Math.cos(c.h), si = Math.sin(c.h); return Math.abs(dx * co - dz * si) < c.M.W / 2 + pad && Math.abs(dx * si + dz * co) < c.M.L / 2 + pad; };
+  function aroundCars(x, z, wp) {
+    const len = Math.hypot(wp.x - x, wp.z - z);
+    if (len < 0.3) return wp;
+    // only cars standing still: one rolling past is gone again before anyone could walk round it
+    const boxes = [];
+    for (const c of cars) {
+      if (Math.hypot(c.vx, c.vz) > 0.5 || Math.abs(c.x - x) > len + c.M.L + 2 || Math.abs(c.z - z) > len + c.M.L + 2) continue;
+      if (stop && stop.riding && c === stop.car) continue;
+      boxes.push(carBox(c));
+    }
+    const S0 = { x, z }, d0 = (p, q) => Math.hypot(p.x - q.x, p.z - q.z);
+    const free = (p, b) => personFits(p.x, p.z) && !blockedAt(p.x, p.z, 0.3) && !boxes.some((o) => o !== b && insideBox(o, p.x, p.z));
+    // squeezed in close beside a car: first step out of the room kept round it, along its side (never through it)
+    for (const b of boxes) {
+      if (!insideBox(b, x, z) || insideBox(b, wp.x, wp.z)) continue;
+      const [lx, lz] = toLocal(b, x, z), sx = Math.sign(lx) || 1, sz = Math.sign(lz) || 1;
+      const outs = [[sx * (b.hx + 0.15), lz], [lx, sz * (b.hz + 0.15)], [lx, -sz * (b.hz + 0.15)]].map(([a, c]) => toWorld(b, a, c)).filter((p) => free(p, b));
+      if (!outs.length) continue;
+      outs.sort((p, q) => d0(S0, p) + d0(p, wp) * 0.5 - d0(S0, q) - d0(q, wp) * 0.5);
+      return outs[0];
+    }
+    let hit = null, ht = Infinity;
+    for (const b of boxes) {
+      // already inside the box (being pushed out of it) or going to a spot inside it: nothing to go round
+      if (insideBox(b, x, z) || insideBox(b, wp.x, wp.z)) continue;
+      const [ax, az] = toLocal(b, x, z), [bx, bz] = toLocal(b, wp.x, wp.z), t = segEntersBox(ax, az, bx, bz, b.hx, b.hz);
+      if (t < ht) { ht = t; hit = b; }
+    }
+    if (!hit) return wp;
+    const b = hit, X = b.hx + CORNER, Z = b.hz + CORNER;
+    const C = [[-X, -Z], [X, -Z], [X, Z], [-X, Z]].map(([lx, lz]) => toWorld(b, lx, lz));
+    // a corner is no good in a wall, in the water or inside another car
+    const ok = C.map((p) => free(p, b));
+    const sees = (p, q) => { const [ax, az] = toLocal(b, p.x, p.z), [bx, bz] = toLocal(b, q.x, q.z); return segEntersBox(ax, az, bx, bz, b.hx, b.hz) === Infinity; };
+    const S = { x, z }, dist = (p, q) => Math.hypot(p.x - q.x, p.z - q.z);
+    let best = null, bl = Infinity;
+    for (let i = 0; i < 4; i++) {
+      if (!ok[i] || !sees(S, C[i])) continue;
+      for (const d of [1, 3]) {
+        const path = [i];
+        let j = i, L = dist(S, C[i]), good = true;
+        while (good && !sees(C[j], wp)) {
+          const n = (j + d) % 4;
+          if (path.length >= 4 || !ok[n]) good = false;
+          else { L += dist(C[j], C[n]); j = n; path.push(n); }
+        }
+        if (!good) continue;
+        L += dist(C[j], wp);
+        // (a corner you are already standing at is passed: the next one along, or the goal, is where to go)
+        if (L < bl) { bl = L; const k = path.find((q) => dist(S, C[q]) > 0.5); best = k === undefined ? wp : C[k]; }
+      }
+    }
+    return best || wp;
+  }
+  function walkWaypoint(nav, x, z, tx, tz, dt) {
+    if ((nav.t = (nav.t || 0) - dt) > 0 && nav.wp && Math.hypot(nav.wp.x - x, nav.wp.z - z) > 0.6) return nav.wp;
+    nav.t = 0.25;
+    const d = Math.hypot(tx - x, tz - z), aIn = STATION.inside(x, z), bIn = STATION.inside(tx, tz);
+    let wp;
+    if (d < 1 || (d < 80 && walkLine(x, z, tx, tz))) wp = { x: tx, z: tz };
+    else if (aIn || bIn) {
+      const E0 = SP.E0;
+      if (!aIn && Math.hypot(E0[0] - x, E0[1] - z) > 1.5) wp = walkLine(x, z, E0[0], E0[1]) ? { x: E0[0], z: E0[1] } : streetWaypoint(x, z, E0[0], E0[1]);
+      else {
+        // head for the furthest room point along the way that can be walked to in a straight line
+        const ka = aIn ? nearestRoomPoint(x, z) : 'E0', kb = bIn ? nearestRoomPoint(tx, tz) : 'E0', path = stationPath(ka, kb);
+        let k = path.length - 1;
+        while (k > 0 && !walkLine(x, z, SP[path[k]][0], SP[path[k]][1])) k--;
+        const P = SP[path[k]];
+        wp = k === path.length - 1 && Math.hypot(P[0] - x, P[1] - z) < 0.7 ? (bIn ? { x: tx, z: tz } : streetWaypoint(x, z, tx, tz)) : { x: P[0], z: P[1] };
+      }
+    } else wp = streetWaypoint(x, z, tx, tz);
+    wp = aroundCars(x, z, wp);
+    // a waypoint on the way (a corner, a junction, a room) is walked through, not stopped at
+    wp.via = Math.hypot(wp.x - tx, wp.z - tz) > 0.05;
+    nav.wp = wp;
+    return wp;
+  }
+  function seek(p, wp, speed, stopAt = 0.15) {
+    const dx = wp.x - p.x, dz = wp.z - p.z, d = Math.hypot(dx, dz);
+    if (wp.via) return d < 0.02 ? IDLE() : { mx: dx / d, mz: dz / d, speed, jump: false };
+    if (d <= stopAt) return IDLE();
+    return { mx: dx / d, mz: dz / d, speed: Math.min(speed, (d - stopAt) * 3 + 0.4), jump: false };
+  }
+  function face(p, x, z) { if (p) p.rot = lerpAngle(p.rot, Math.atan2(x - p.x, z - p.z), 0.25); }
+  // a door of a car: the driver's (+1) or the passenger side (-1), at the front or the back seat
+  function doorSpot(c, side, rear) {
+    const co = Math.cos(c.h), si = Math.sin(c.h), lx = side * (c.M.W / 2 + 0.75), lz = rear && c.geo.rear ? c.geo.rear.z : c.driver.position.z;
+    return { x: c.x + lx * co + lz * si, z: c.z - lx * si + lz * co };
+  }
+  // the door on the side nearest a point, unless that side is up against something
+  function doorNear(c, x, z, rear) {
+    const a = doorSpot(c, 1, rear), b = doorSpot(c, -1, rear), free = (q) => personFits(q.x, q.z) && !blockedAt(q.x, q.z, 0.3);
+    const [first, second] = Math.hypot(a.x - x, a.z - z) <= Math.hypot(b.x - x, b.z - z) ? [a, b] : [b, a];
+    return free(first) || !free(second) ? first : second;
+  }
+
+  /* the stop itself */
+  function stopSpot(pc, T) {
+    const fx = Math.sin(T.h), fz = Math.cos(T.h), ahead = (pc.x - T.x) * fx + (pc.z - T.z) * fz > 4;
+    const gap = T.L / 2 + 2.2 + pc.M.L / 2, sg = ahead ? 1 : -1, h = ahead ? T.h + Math.PI : T.h;
+    for (const k of [1, 1.35, 1.8]) {
+      const x = T.x + fx * gap * k * sg, z = T.z + fz * gap * k * sg;
+      if (spotFree(pc.M, x, z, h, pc)) return { x, z, h, fx: Math.sin(h), fz: Math.cos(h), ahead };
+    }
+    return null;
+  }
+  // where the constable stands to talk to you: by the driver's window, or a step from you if you are on foot
+  function windowSpot(o) {
+    if (driving) {
+      const c = driving, co = Math.cos(c.h), si = Math.sin(c.h), lz = c.driver.position.z + 0.35;
+      const at = (s) => { const lx = s * (c.M.W / 2 + 0.75); return { x: c.x + lx * co + lz * si, z: c.z - lx * si + lz * co, fx: c.x, fz: c.z }; };
+      // the driver's window, unless a wall or another car is in the way there: then the passenger's
+      const free = (p) => personFits(p.x, p.z) && !blockedAt(p.x, p.z, 0.35) && !cars.some((q) => q !== c && byCar(q, p.x, p.z, 0.4));
+      if (stop && stop.winSide === undefined) stop.winSide = free(at(1)) || !free(at(-1)) ? 1 : -1;
+      return at(stop ? stop.winSide : 1);
+    }
+    const dx = o.x - player.x, dz = o.z - player.z, d = Math.hypot(dx, dz) || 1;
+    return { x: player.x + (dx / d) * 1.0, z: player.z + (dz / d) * 1.0, fx: player.x, fz: player.z };
+  }
+  function newStop(c, mode, phase, officer) {
+    const T = stopTarget();
+    stop = {
+      car: c, mode, phase, t: 0, at: { x: T.x, z: T.z }, officer: officer || null, crew: c.occupant || makeIdentity(OFFICER), name: rpick(CONSTABLES), title: 'Konstapel',
+      ticket: null, nav: {}, pnav: {}, locked: false, spot: phase === 'approach' && driving ? stopSpot(c, T) : null, door: null,
+      vehicle: driving ? driving.M.name + ', ' + plateOf(driving) : 'Gående'
+    };
+    // (a constable of this car who was out on foot is the one dealing with you now)
+    c.police.state = 'stop'; c.police.out = null; c.siren = false; c.yelp = false; c.beacon = true; c.police.direct = false;
+    for (const o of cars) if (o !== c && o.police && o.police.state === 'chase') setChase(o, false);
+    for (const fc of footCops) fc.mode = 'return';
+    return stop;
+  }
+  function beginStop(c) {
+    newStop(c, arrestable(wanted) ? 'arrest' : 'ticket', 'approach');
+    toast(stop.spot && stop.spot.ahead ? 'Polisen stannar framför dig. Sitt kvar i bilen.' : 'Polisen kör in bakom dig. Sitt kvar i bilen.');
+  }
+  // a constable on foot has reached you
+  function caughtOnFoot(fc) {
+    footCops.splice(footCops.indexOf(fc), 1);
+    // their own car, or (if it was taken from them) the nearest other patrol
+    let car = fc.car && fc.car.police && !fc.car.military && cars.indexOf(fc.car) >= 0 && !fc.car.dead ? fc.car : null;
+    // (a soldier hands you over to the police: the nearest patrol is called up)
+    if (!car && fc.car && fc.car.military) { const pc = spawnBot(25, MODEL.polis, 140); if (pc) { makePolice(pc); pc.vx = pc.vz = 0; } }
+    if (!car) {
+      let bd = Infinity;
+      for (const c of cars) if (c.police && !c.military && c.bot && !c.dead && (c.police.state === 'patrol' || c.police.state === 'chase' || c.police.state === 'call')) { const d = Math.hypot(c.x - fc.p.x, c.z - fc.p.z); if (d < bd) { bd = d; car = c; } }
+      if (car) fc.door = doorNear(car, fc.p.x, fc.p.z, false);
+    }
+    if (!car) {
+      // no patrol anywhere: the fine there and then, and the constable goes on their way
+      const { f } = fineFor(wanted);
+      fines += f;
+      toast('Konstapeln skriver ut böter på plats: ' + fmtKr(f) + '.');
+      removePerson(fc.p);
+      for (const o of footCops) o.mode = 'return';
+      wanted = null; policeCool = 30;
+      return;
+    }
+    if (car !== fc.car) { car.vx = car.vz = 0; fc.crew = fc.crew || car.occupant; setOccupant(car, null); }
+    const S = newStop(car, arrestable(wanted) ? 'arrest' : 'ticket', 'talk', fc.p);
+    S.crew = fc.crew; S.door = fc.door;
+    if (fc.car && fc.car.military) S.title = 'Soldat';
+    fc.p.ai.role = 'stop';
+    if (S.mode === 'arrest') { S.phase = 'cuff'; S.locked = true; toast(S.title + ' ' + S.name + ': Stå still! Du är gripen.'); }
+    else showTicket();
+  }
+  // the patrol's driving while it pulls in: line up a few metres short of the spot, then roll into it and stop
+  function parkDrive(c, sp, slow) {
+    const fx = Math.sin(c.h), fz = Math.cos(c.h), lxv = Math.cos(c.h), lzv = -Math.sin(c.h), vf = c.vx * fx + c.vz * fz;
+    const halt = { fwd: vf > 0.3 ? -1 : vf < -0.3 ? 1 : 0, right: 0, brake: Math.abs(vf) < 0.3 };
+    if (!sp) return halt;
+    const sfx = Math.sin(sp.h), sfz = Math.cos(sp.h), along = (c.x - sp.x) * sfx + (c.z - sp.z) * sfz, d = Math.hypot(sp.x - c.x, sp.z - c.z);
+    const tx = along < -8 ? sp.x - sfx * 6 : sp.x + sfx * 2, tz = along < -8 ? sp.z - sfz * 6 : sp.z + sfz * 2;
+    if (d < 1.4 || along > 0.5) return halt;
+    const dx = tx - c.x, dz = tz - c.z, lz = dx * fx + dz * fz, lx = dx * lxv + dz * lzv;
+    const maxSteer = 0.6 / (1 + Math.abs(vf) * 0.03);
+    const delta = lz < 0.3 ? Math.sign(lx || 1) * maxSteer : Math.atan((2 * c.M.wb * lx) / (lx * lx + lz * lz));
+    const vT = clamp(d * 0.7, 1.5, slow || 11);
+    return { fwd: clamp((vT - vf) * 0.5, -1, 1), right: -clamp(delta / maxSteer, -1, 1), brake: false };
+  }
+  function stopDrive(c) { return parkDrive(c, stop && stop.car === c && stop.phase === 'approach' ? stop.spot : null); }
+  // the ride to the station: along the streets at the limit, then into the kerb outside the door
+  const STATION_NODE = (() => { let b = -1, bd = Infinity; nodes.forEach((n, i) => { const d = Math.hypot(n.x - STATION.X1, n.z - 222); if (n.nb.length && d < bd) { bd = d; b = i; } }); return b; })();
+  function transportDrive(c, dt) {
+    const S = stop;
+    if (!S || S.car !== c || S.phase !== 'transport') return parkDrive(c, S && S.car === c && S.phase === 'park' ? S.curb : null, 6);
+    const curb = STATION.curb(c.h), d = Math.hypot(curb.x - c.x, curb.z - c.z);
+    if (d < 40 && clearView(c.x, c.z, curb.x, curb.z)) { S.curb = STATION.curb(c.h); S.phase = 'park'; S.t = 0; return parkDrive(c, S.curb, 6); }
+    c.bot.goal = { node: STATION_NODE, x: curb.x, z: curb.z };
+    return botThink(c, dt);
+  }
+  function showTicket() {
+    const S = stop, { f, rows } = fineFor(wanted), now = new Date();
+    S.ticket = { f, rows };
+    const place = (el.locStreet.textContent ? el.locStreet.textContent + ', ' : '') + el.locDistrict.textContent;
+    $('tkPlace').textContent = place;
+    $('tkTime').textContent = now.toLocaleDateString('sv-SE') + ' ' + now.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+    $('tkCar').textContent = S.vehicle;
+    const ul = $('tkRows');
+    ul.textContent = '';
+    for (const r of rows) {
+      const li = document.createElement('li'), a = document.createElement('span'), b = document.createElement('b');
+      a.textContent = r.text; b.textContent = fmtKr(r.kr); li.append(a, b); ul.append(li);
+    }
+    $('tkSum').textContent = fmtKr(f);
+    $('tkOfficer').textContent = S.title + ' ' + S.name;
+    $('tkTitle').textContent = S.mode === 'arrest' ? 'Gripen: anmälan om brott' : 'Föreläggande av ordningsbot';
+    $('tkSignText').textContent = S.mode === 'arrest' ? 'Tagen del' : 'Skriv under';
+    $('ticket').hidden = false;
+    if (S.mode !== 'arrest') toast(S.title + ' ' + S.name + ': ' + (wanted.kinds.has('fart') ? 'Hej, polisen här. Vet du hur fort du körde?' : 'Hej, polisen här. Det där gick inte bra.'));
+  }
+  // E: sign the ticket. The fine is yours, and the constable walks back to the car
+  function signTicket() {
+    if (!stop || stop.phase !== 'talk' || !stop.ticket) return;
+    fines += stop.ticket.f;
+    $('ticket').hidden = true;
+    toast('Du skrev under. Böter ' + fmtKr(stop.ticket.f) + '.' + (wanted.over > 35 ? ' Körkortet dras in.' : ' Kör försiktigt nu!'));
+    stop.phase = 'back'; stop.t = 0;
+  }
+  // E during a stop or an arrest
+  function useKey() {
+    const S = stop;
+    if (S && S.phase === 'talk') { signTicket(); return true; }
+    if (S && (S.phase === 'transport' || S.phase === 'park') && !S.fade) { skipRide(); return true; }
+    if (S && S.phase === 'jail') { S.wait = !S.wait; toast(S.wait ? 'Du sover på britsen. Tiden går fortare.' : 'Du vaknar.'); return true; }
+    return inCustody();
+  }
+  // fade to black, do something, fade back
+  function fadeThen(fn) { if (stop) stop.fade = { t: 0, fn, done: false }; $('fade').classList.add('on'); }
+  function skipRide() {
+    fadeThen(() => {
+      const c = stop.car, curb = STATION.curb(0);
+      c.x = curb.x; c.z = curb.z - 4; c.h = curb.h; c.vx = c.vz = 0;
+      stop.curb = curb; stop.phase = 'park'; stop.t = 0;
+      camTarget.set(c.x, 1.7, c.z);
+    });
+  }
+  // the police car you are put in, or the cell, if the car was lost on the way
+  function jailDirect() {
+    const S = stop;
+    if (S.officer) { removePerson(S.officer); S.officer = null; }
+    const c = S.car;
+    if (driving) exitCar();
+    S.riding = false;
+    if (c && c.rearSeat) c.rearSeat.visible = false;
+    if (c && c.police && cars.indexOf(c) >= 0) { setOccupant(c, S.crew); c.beacon = false; c.police.state = 'patrol'; resyncBot(c); setChase(c, false); }
+    const cell = STATION.doors[1], [x0, z0, x1, z1] = cell.inside;
+    player.x = (x0 + x1) / 2; player.z = (z0 + z1) / 2; player.y = 0; player.vx = player.vz = 0;
+    player.model.group.visible = true; player.cuffed = false;
+    cell.want = 0;
+    camTarget.set(player.x, 1.6, player.z);
+    startJail();
+  }
+  function startJail() {
+    const S = stop, w = wanted || { over: 0, kinds: new Set(), fleeT: 0 };
+    S.jailT = Math.min(90, 30 + Math.max(0, Math.round((w.over - ARREST_OVER) / 10)) * 10 + (w.kinds.has('smitning') || (w.fleeT || 0) > FLEE_ARREST ? 15 : 0));
+    S.phase = 'jail'; S.t = 0; S.wait = false; S.locked = true;
+    if (!S.ticket) S.ticket = fineFor(w);
+    wanted = null;
+    toast('Du sitter i häktet på polisstationen i Gamla stan. Tryck E för att sova så går tiden fortare.');
+  }
+  function stopUpdate(dt) {
+    const S = stop, c = S.car, T = stopTarget();
+    S.t += dt;
+    if (S.fade) {
+      S.fade.t += dt;
+      if (!S.fade.done && S.fade.t > 0.45) { S.fade.done = true; S.fade.fn(); }
+      if (S.fade.t > 0.6) { $('fade').classList.remove('on'); S.fade = null; }
+      if (stop !== S) return;
+    }
+    const carOk = c && c.police && cars.indexOf(c) >= 0 && !c.dead;
+    if (!carOk && ['approach', 'parked', 'walk', 'talk', 'back', 'flee'].includes(S.phase)) { endStop(false); return; }
+    if (!carOk && ['order', 'cuff', 'escort', 'board', 'transport', 'park'].includes(S.phase)) { if (!S.fade) fadeThen(jailDirect); return; }
+    // driving off (or running off) before the paperwork is done turns it back into a chase
+    if (!S.locked && ['approach', 'parked', 'walk', 'talk'].includes(S.phase)) {
+      const away = Math.hypot(T.x - S.at.x, T.z - S.at.z);
+      if (driving ? away > 8 && Math.hypot(driving.vx, driving.vz) > 3 : away > 6) {
+        $('ticket').hidden = true;
+        if (wanted) wanted.kinds.add('smitning');
+        toast('Du smet från poliskontrollen! Nu blir du gripen om de får tag i dig.');
+        if (!S.officer) { endStop(true); return; }
+        if (driving) { S.phase = 'flee'; S.t = 0; }
+        else {
+          // you ran: the constable runs after you, the car waits for them
+          const fc = { p: S.officer, car: c, crew: S.crew, door: S.door || doorNear(c, S.officer.x, S.officer.z, false), mode: 'chase', retT: 0 };
+          S.officer.ai = { state: 'cop', role: 'foot', fc, nav: {}, dodgeT: 0 };
+          footCops.push(fc);
+          stop = null;
+          c.police.state = 'wait'; c.police.out = fc; c.beacon = true;
+          if (wanted) { wanted.lostT = 0; wanted.stopT = 0; wanted.seen = playerTarget(); }
+          return;
+        }
+      }
+    }
+    const o = S.officer, arrived = o && o.arrived;
+    switch (S.phase) {
+      case 'approach': {
+        const vs = Math.hypot(c.vx, c.vz);
+        if (S.spot ? (Math.hypot(S.spot.x - c.x, S.spot.z - c.z) < 1.6 || (S.spot.x - c.x) * S.spot.fx + (S.spot.z - c.z) * S.spot.fz < -0.5) && vs < 0.4 : vs < 0.4) S.phase = 'parked', S.t = 0;
+        else if (S.t > 14 && vs < 0.6) S.phase = 'parked', S.t = 0;
+        break;
+      }
+      case 'parked':
+        if (S.t > 0.9) {
+          const ex = exitSpot(c) || doorSpot(c, 1, false);
+          S.door = ex;
+          setOccupant(c, null);
+          S.officer = makePerson(S.crew, ex.x, ex.z, { state: 'cop', role: 'stop', nav: {}, dodgeT: 0 });
+          S.officer.keep = true; S.officer.rot = c.h;
+          S.phase = 'walk'; S.t = 0;
+        }
+        break;
+      case 'walk':
+        if (S.t > 16) { const w = windowSpot(o); if (personFits(w.x, w.z)) { o.x = w.x; o.z = w.z; } o.arrived = true; }
+        if (o.arrived) {
+          S.t = 0;
+          if (S.mode === 'arrest') { S.phase = 'order'; S.locked = true; toast(S.title + ' ' + S.name + ': Kliv ur bilen! Du är gripen' + (wanted.over >= ARREST_OVER ? ' för grov hastighetsöverträdelse.' : ' för att du försökte köra ifrån oss.')); }
+          else { S.phase = 'talk'; showTicket(); }
+        }
+        break;
+      case 'talk': {
+        const w = windowSpot(o);
+        face(o, w.fx, w.fz);
+        if (S.t > 12) signTicket();
+        break;
+      }
+      case 'order': {
+        const w = windowSpot(o);
+        face(o, w.fx, w.fz);
+        if (S.t > 1.8 && driving) exitCar();
+        if (S.t > 2.0) { S.phase = 'cuff'; S.t = 0; }
+        break;
+      }
+      case 'cuff':
+        if (Math.hypot(o.x - player.x, o.z - player.z) < 1.05 || S.t > 8) {
+          face(o, player.x, player.z);
+          S.cuffT = (S.cuffT || 0) + dt;
+          if (S.cuffT > 1.1) {
+            player.cuffed = true;
+            if (!S.ticket) showTicket();
+            S.rearDoor = doorNear(c, player.x, player.z, true);
+            S.phase = 'escort'; S.t = 0;
+            toast(S.title + ' ' + S.name + ': Följ med till bilen.');
+            // a long way to the car: the patrol comes round instead (a short fade and you are both beside it)
+            if (Math.hypot(S.rearDoor.x - player.x, S.rearDoor.z - player.z) > 30) fadeThen(() => {
+              const rd = S.rearDoor;
+              player.x = rd.x; player.z = rd.z; player.vx = player.vz = 0;
+              if (S.officer) { S.officer.x = rd.x + Math.sin(c.h) * 1.3; S.officer.z = rd.z + Math.cos(c.h) * 1.3; }
+              camTarget.set(player.x, 1.6, player.z);
+            });
+          }
+        }
+        break;
+      case 'escort':
+        $('ticket').hidden = S.t > 6;
+        // held up and left behind (traffic, a crowd): a short fade and you are both at the car
+        S.lagT = Math.hypot(o.x - player.x, o.z - player.z) > 6 ? (S.lagT || 0) + dt : 0;
+        if (S.lagT > 4 && !S.fade) {
+          S.lagT = 0;
+          fadeThen(() => {
+            const rd = S.rearDoor;
+            player.x = rd.x; player.z = rd.z; player.vx = player.vz = 0;
+            if (S.officer) { S.officer.x = rd.x + Math.sin(c.h) * 1.3; S.officer.z = rd.z + Math.cos(c.h) * 1.3; }
+          });
+        }
+        if ((Math.hypot(o.x - S.rearDoor.x, o.z - S.rearDoor.z) < 1.4 && Math.hypot(player.x - S.rearDoor.x, player.z - S.rearDoor.z) < 1.6) || S.t > 40) {
+          $('ticket').hidden = true;
+          player.model.group.visible = false; player.vx = player.vz = 0;
+          if (c.rearSeat) { c.rearSeat.geometry = playerId.driverGeo; c.rearSeat.visible = true; }
+          S.riding = true;
+          S.door = doorNear(c, o.x, o.z, false);
+          S.phase = 'board'; S.t = 0;
+        }
+        break;
+      case 'board':
+        if (arrived || S.t > 8) {
+          removePerson(o); S.officer = null;
+          setOccupant(c, S.crew);
+          c.beacon = false; c.police.state = 'transport';
+          resyncBot(c);
+          c.bot.cruise = 17; c.bot.turnV = 6; c.bot.passT = 5; c.bot.revT = 0.8; c.bot.waitT = 0;
+          S.phase = 'transport'; S.t = 0;
+          toast('Du sitter i baksätet på väg till polisstationen i Gamla stan. Tryck E för att hoppa fram.');
+        }
+        break;
+      case 'transport':
+        if ((S.t > 55 || (c.bot && c.bot.stuckTotal > 8)) && !S.fade) skipRide();
+        break;
+      case 'park':
+        if (Math.hypot(c.vx, c.vz) < 0.4 && (Math.hypot(S.curb.x - c.x, S.curb.z - c.z) < 3.5 || S.t > 10)) {
+          // out of the car: you from the back seat, the constable from the front, both on the side of the door
+          const E0 = { x: SP.E0[0], z: SP.E0[1] }, pd = doorNear(c, E0.x, E0.z, true), od = doorNear(c, E0.x, E0.z, false);
+          if (c.rearSeat) c.rearSeat.visible = false;
+          player.x = pd.x; player.z = pd.z; player.y = 0; player.rot = c.h; player.model.group.visible = true;
+          setOccupant(c, null);
+          S.door = od;
+          S.officer = makePerson(S.crew, od.x, od.z, { state: 'cop', role: 'stop', nav: {}, dodgeT: 0 });
+          S.officer.keep = true;
+          S.riding = false;
+          S.phase = 'walkin'; S.t = 0;
+        }
+        break;
+      case 'walkin': {
+        const C2 = CELL_GUARD;
+        if (Math.hypot(o.x - C2[0], o.z - C2[1]) < 0.9 || S.t > 45) {
+          if (S.t > 45) { o.x = C2[0]; o.z = C2[1]; }
+          STATION.doors[1].want = 1;
+          S.phase = 'incell'; S.t = 0;
+          toast(S.title + ' ' + S.name + ': In i cellen.');
+        }
+        break;
+      }
+      case 'incell': {
+        face(o, SP.D2[0], SP.D2[1]);
+        const [x0, z0, x1, z1] = STATION.doors[1].inside;
+        if ((player.x > x0 && player.x < x1 && player.z > z0 && player.z < z1 - 0.6) || S.t > 25) {
+          if (S.t > 25) { player.x = (x0 + x1) / 2; player.z = (z0 + z1) / 2; }
+          STATION.doors[1].want = 0;
+          player.cuffed = false;
+          S.copLeaving = true;
+          startJail();
+        }
+        break;
+      }
+      case 'jail': {
+        S.jailT -= dt * (S.wait ? 8 : 1);
+        if (S.copLeaving && S.officer && (S.officer.arrived || S.t > 40)) {
+          removePerson(S.officer); S.officer = null; S.copLeaving = false;
+          if (c && c.police && cars.indexOf(c) >= 0) { setOccupant(c, S.crew); c.beacon = false; c.police.state = 'patrol'; resyncBot(c); setChase(c, false); }
+        }
+        if (S.jailT <= 0) {
+          STATION.doors[1].want = 1;
+          const f = S.ticket ? S.ticket.f : 0;
+          fines += f;
+          toast('Du är fri att gå. Böter ' + fmtKr(f) + ' har lagts till. Gå ut genom receptionen.');
+          if (S.officer) { removePerson(S.officer); if (c && c.police && cars.indexOf(c) >= 0) { setOccupant(c, S.crew); c.police.state = 'patrol'; resyncBot(c); setChase(c, false); } }
+          stop = null; wanted = null; policeCool = 60;
+        }
+        break;
+      }
+      case 'back':
+      case 'flee': {
+        const near = S.door && Math.hypot(S.door.x - o.x, S.door.z - o.z) < 2.5;
+        if (arrived || (near && S.t > 3) || S.t > 12) endStop(S.phase === 'flee');
+        break;
+      }
+    }
+  }
+  // what the constable of the stop does, phase by phase
+  function stopOfficerIntent(S, p, dt) {
+    switch (S.phase) {
+      case 'walk': { const w = windowSpot(p), it = seek(p, walkWaypoint(S.nav, p.x, p.z, w.x, w.z, dt), 1.8, 0.1); p.arrived = Math.hypot(w.x - p.x, w.z - p.z) < 0.6; return it; }
+      case 'cuff': return seek(p, walkWaypoint(S.nav, p.x, p.z, player.x, player.z, dt), 2.2, 0.85);
+      case 'escort': { p.arrived = Math.hypot(S.rearDoor.x - p.x, S.rearDoor.z - p.z) < 0.6; return seek(p, walkWaypoint(S.nav, p.x, p.z, S.rearDoor.x, S.rearDoor.z, dt), 2.2, 0.1); }
+      case 'walkin': return seek(p, walkWaypoint(S.nav, p.x, p.z, CELL_GUARD[0], CELL_GUARD[1], dt), 2.0, 0.1);
+      case 'board': case 'back': case 'flee': {
+        const d = S.door || doorSpot(S.car, 1, false);
+        p.arrived = Math.hypot(d.x - p.x, d.z - p.z) < 0.6;
+        return seek(p, walkWaypoint(S.nav, p.x, p.z, d.x, d.z, dt), S.phase === 'flee' ? 5.8 : 1.7, 0.1);
+      }
+      case 'jail': {
+        if (!S.copLeaving) return IDLE();
+        const d = S.door;
+        p.arrived = Math.hypot(d.x - p.x, d.z - p.z) < 0.7;
+        return seek(p, walkWaypoint(S.nav, p.x, p.z, d.x, d.z, dt), 1.7, 0.1);
+      }
+      default: return IDLE();
+    }
+  }
+  // where you go while in custody: beside the constable, then into the cell
+  function custodyIntent(dt) {
+    const S = stop;
+    if (!S || !S.locked || S.phase === 'jail') return null;
+    const o = S.officer;
+    if (S.phase === 'escort' || S.phase === 'walkin') {
+      if (!o) return IDLE();
+      const d = Math.hypot(o.x - player.x, o.z - player.z);
+      return d < 1.5 ? IDLE() : seek(player, walkWaypoint(S.pnav, player.x, player.z, o.x, o.z, dt), d > 3 ? 3.4 : 2.3, 1.3);
+    }
+    if (S.phase === 'incell') {
+      const [x0, z0, x1, z1] = STATION.doors[1].inside;
+      return STATION.doors[1].open > 0.7 ? seek(player, walkWaypoint(S.pnav, player.x, player.z, (x0 + x1) / 2, (z0 + z1) / 2 - 1, dt), 1.7, 0.2) : IDLE();
+    }
+    return IDLE();
+  }
+  // the constable is back in the car: drive on (or, if you ran, give chase again)
+  function endStop(chase) {
+    const S = stop, c = S.car;
+    stop = null;
+    $('ticket').hidden = true;
+    if (S.officer) removePerson(S.officer);
+    if (c && c.police && cars.indexOf(c) >= 0) {
+      setOccupant(c, S.crew);
+      c.beacon = false;
+      c.police.state = 'patrol';
+      resyncBot(c);
+      setChase(c, !!chase);
+    }
+    if (chase) { if (wanted) { wanted.lostT = 0; wanted.stopT = 0; wanted.seen = playerTarget(); } }
+    else { wanted = null; policeCool = 30; }
+  }
+
+  /* constables on foot */
+  // a constable already out of the car becomes one running after you
+  function footCop(p, car, crew, door) {
+    const fc = { p, car, crew, door: door || { x: p.x, z: p.z }, mode: 'chase', retT: 0 };
+    p.ai = { state: 'cop', role: 'foot', fc, nav: {}, dodgeT: 0 };
+    p.keep = true;
+    footCops.push(fc);
+    return fc;
+  }
+  // you take a police car: that is theft, and its crew, whether in the car or out on foot, come after you on foot
+  function policeCarTaken(c) {
+    if (stop && stop.car === c && !stop.locked) {
+      const S = stop;
+      stop = null;
+      $('ticket').hidden = true;
+      if (S.officer) footCop(S.officer, null, S.crew);
+    }
+    for (const fc of footCops) if (fc.car === c) fc.car = null;
+    if (c.occupant && c.bot) {
+      const spot = exitSpot(c) || doorSpot(c, -1, false), p = makePerson(c.occupant, spot.x, spot.z, { state: 'cop' });
+      p.rot = c.h;
+      footCop(p, null, c.occupant);
+    }
+    c.police = null; c.siren = false; c.beacon = false; c.yelp = false;
+    offense('stöld', 0, c.x, c.z, c);
+    toast(c.military ? 'Du tog ' + c.M.def + '! Militären är efter dig.' : 'Du tog polisbilen! Det räknas som stöld.');
+  }
+  function deployCop(c) {
+    const ex = exitSpot(c) || doorSpot(c, 1, false);
+    const crew = c.occupant || makeIdentity(c.military ? SOLDIER : OFFICER), fc = { p: null, car: c, crew, door: ex, mode: 'chase', retT: 0 };
+    fc.p = makePerson(crew, ex.x, ex.z, { state: 'cop', role: 'foot', fc, nav: {}, dodgeT: 0 });
+    fc.p.keep = true; fc.p.rot = c.h;
+    setOccupant(c, null);
+    c.police.out = fc; c.beacon = !c.military; c.siren = false; c.yelp = false;
+    footCops.push(fc);
+    // the truck has a squad in the back: they jump down and spread out after you
+    if (c.M.mil === 'truck') for (let i = 0; i < 5; i++) {
+      const co = Math.cos(c.h), si = Math.sin(c.h), lx = ((i % 3) - 1) * 1.1, lz = -c.M.L / 2 - 1.0 - Math.floor(i / 3) * 1.1, x = c.x + lx * co + lz * si, z = c.z - lx * si + lz * co;
+      if (!personFits(x, z)) continue;
+      const sq = { p: null, car: c, crew: makeIdentity(SOLDIER), door: { x, z }, mode: 'chase', retT: 0 };
+      sq.p = makePerson(sq.crew, x, z, { state: 'cop', role: 'foot', fc: sq, nav: {}, dodgeT: 0 });
+      sq.p.keep = true; sq.p.rot = c.h + Math.PI;
+      footCops.push(sq);
+    }
+  }
+  function copBoard(fc) {
+    removePerson(fc.p);
+    footCops.splice(footCops.indexOf(fc), 1);
+    const c = fc.car;
+    if (!c || !c.police || cars.indexOf(c) < 0 || c.dead) return;
+    setOccupant(c, fc.crew);
+    c.police.out = null; c.beacon = false; c.police.state = 'patrol';
+    resyncBot(c);
+    setChase(c, !!wanted && !stop);
+  }
+  function updateFootCops(dt) {
+    for (const c of cars) {
+      if (!c.police || c.police.state !== 'wait') continue;
+      // a constable no longer out on foot (they caught you, or were taken off) leaves the car free to drive again
+      if (c.police.out && footCops.indexOf(c.police.out) < 0) c.police.out = null;
+      if (c.police.out) continue;
+      if (c.dead || driving || !wanted || stop) { c.police.state = 'patrol'; c.beacon = false; if (!c.occupant) setOccupant(c, makeIdentity(OFFICER)); setChase(c, !!wanted && !stop); continue; }
+      if (Math.hypot(c.vx, c.vz) < 1.5) deployCop(c);
+    }
+    for (const fc of footCops.slice()) {
+      if (fc.mode === 'chase' && (driving || !wanted || stop)) fc.mode = 'return';
+      if (fc.mode === 'return') {
+        fc.retT += dt;
+        const gone = !fc.car || cars.indexOf(fc.car) < 0 || fc.car.dead || !fc.car.police;
+        if (gone && (Math.hypot(fc.p.x - camTarget.x, fc.p.z - camTarget.z) > 70 || fc.retT > 30)) { removePerson(fc.p); footCops.splice(footCops.indexOf(fc), 1); continue; }
+        if (!gone && (Math.hypot(fc.door.x - fc.p.x, fc.door.z - fc.p.z) < 1.4 || fc.retT > 45)) copBoard(fc);
+      }
+    }
+  }
+  function footCopIntent(fc, p, dt) {
+    if (fc.mode === 'chase') {
+      const seen = wanted && !wanted.inSight ? wanted.seen : player, d = Math.hypot(seen.x - p.x, seen.z - p.z);
+      return seek(p, walkWaypoint(p.ai.nav, p.x, p.z, seen.x, seen.z, dt), d > 3 ? COP_RUN : 5, 0.05);
+    }
+    if (!fc.car || !fc.car.police || cars.indexOf(fc.car) < 0 || fc.car.dead) return IDLE();
+    fc.door = doorNear(fc.car, p.x, p.z, false);
+    return seek(p, walkWaypoint(p.ai.nav, p.x, p.z, fc.door.x, fc.door.z, dt), 6, 0.1);
+  }
+  // everyone in uniform on foot: the constable of a stop, constables running, the desk officer, the guards' cousin
+  function copThink(p, dt) {
+    const ai = p.ai;
+    if (ai.role === 'foot') return footCopIntent(ai.fc, p, dt);
+    if (ai.role === 'stop' && stop && stop.officer === p) return stopOfficerIntent(stop, p, dt);
+    return IDLE();
+  }
+
+  /* ---------- initial traffic ---------- */
+  const BOT_TARGET = 18, PARKED_TARGET = 14, NPC_COUNT = 30;
+  // a parked car at the kerb of a random street near you
+  function spawnParkedNear(minD, maxD) {
+    const pool = edges.filter((e) => e.park && e.len > 50 && edgeDist(e, player.x, player.z) < maxD);
+    for (let tries = 0; tries < 20 && pool.length; tries++) {
+      const e = rpick(pool), fwd = Math.random() < 0.5, f = edgeFrame(fwd ? e.a : e.b, fwd ? e.b : e.a);
+      const s = f.A.r + 8 + Math.random() * (f.len - f.A.r - f.B.r - 16), M = Math.random() < 0.3 ? rpick(SPORTS) : rpick(REGULARS);
+      const x = f.A.x + f.ux * s + f.rx * f.park, z = f.A.z + f.uz * s + f.rz * f.park, h = Math.atan2(f.ux, f.uz), d = Math.hypot(x - player.x, z - player.z);
+      if (d < minD || d > maxD || !spotFree(M, x, z, h)) continue;
+      return spawnParked(M, rpick(M.colors), x, z, h, false);
+    }
+    return null;
+  }
+  {
+    // the car park where you start: one of every model in the bays nearest you, backed in so they face the aisle,
+    // the bus in its bay at the north end, and here and there another car in the other bays
+    const { f, wx, wz, at, rows, bus } = LOT;
+    const inBay = (M, color, b, faceAisle) => {
+      const r = rows[b.row], d = b.row === 0 ? r.d0 + 0.3 + M.L / 2 : r.d1 - 0.3 - M.L / 2, out = (b.row === 0) === faceAisle ? 1 : -1;
+      spawnParked(M, color, ...at(b.s, d), Math.atan2(wx * out, wz * out), true);
+    };
+    const bays = LOT.bays.slice().sort((a, b) => Math.abs(a.s - SPAWN.s + 8) - Math.abs(b.s - SPAWN.s + 8));
+    const first = ['f40', 'chiron', 'x5', 'laferrari', 'mg5', 'stalker', 'countach', 'jesko', 'cobra', 'superbil', 'gt3rs', 'sport', 'muskel', 'halvkombi', 'sedan', 'polestar', 'kombi', 'v240', 'saab', 'taxi', 'suv', 'skapbil'];
+    const show = first.concat(PICKABLE.filter((M) => !M.bus && !M.boat && !first.includes(M.id)).map((M) => M.id));
+    show.forEach((id, i) => inBay(MODEL[id], MODEL[id].colors[0], bays[i], true));
+    for (const b of bays.slice(show.length)) {
+      if (Math.random() > 0.27) continue;
+      const M = Math.random() < 0.2 ? rpick(SPORTS) : rpick(REGULARS);
+      inBay(M, rpick(M.colors), b, Math.random() < 0.4);
+    }
+    spawnParked(MODEL.buss, MODEL.buss.colors[0], ...at((bus.s0 + bus.s1) / 2, (bus.d0 + bus.d1) / 2), Math.atan2(-f.ux, -f.uz), true);
+    for (let i = 0; i < PARKED_TARGET; i++) spawnParkedNear(30, 260);
+    for (let i = 0; i < BOT_TARGET; i++) spawnBot(25, null, 260);
+    for (let i = 0; i < POLICE_TARGET; i++) { const c = spawnBot(80, MODEL.polis, 600); if (c) makePolice(c); }
+    for (let i = 0; i < NPC_COUNT; i++) spawnWalker(4, 130, SPAWN.x, SPAWN.z);
+    // boats moored round town, each by a quay where you can step down into it: by the car park at Skeppsbron, along
+    // Strandvägen, at Gröna Lund, on Hammarby sjö, along Norr Mälarstrand, at Långholmen, out by Marieberg, Nacka and
+    // Lilla Värtan
+    const moor = (id, x, z) => { const M = MODEL[id], b = findBerth(M, x, z, 40); if (b) spawnParked(M, M.colors[0], b.x, b.z, b.h, true); };
+    moor('jetski', ...LOT.at(66, 34)); moor('anytec', ...LOT.at(78, 34)); moor('riva', ...LOT.at(92, 34));
+    moor('jetski', 735, -606); moor('anytec', 820, -598);
+    moor('riva', 1480, 650); moor('jetski', 1600, 645);
+    moor('anytec', 600, 1965); moor('jetski', 400, 1972);
+    moor('jetski', -1250, -45); moor('riva', -1150, -40);
+    moor('anytec', -1560, 695); moor('jetski', -2300, -95);
+    moor('anytec', 2600, 1120); moor('jetski', 3000, -1300);
+  }
+
+  /* ================= Högvakten and the Dalahäst hunt ================= */
+  // The royal guard marches up and down Yttre borggården in two files, turning at either end of the courtyard.
+  const GUARD_ID = makeIdentity({ skin: 0xf0c08a, shirt: 0x1d2c5a, pants: 0x1d2c5a, hat: 'helmet', belts: true });
+  function guardTarget(post, t) {
+    const T = 64, ph = (t % T) / T, hold = 0.09;
+    // a triangle wave with a halt at each end: march north, halt, about turn, march south, halt
+    const s = ph < 0.5 ? clamp((ph - hold) / (0.5 - hold), 0, 1) : 1 - clamp((ph - 0.5 - hold) / (0.5 - hold), 0, 1);
+    const dir = ph < hold || (ph >= 0.5 && ph < 0.5 + hold) ? (ph < 0.5 ? 1 : -1) : ph < 0.5 ? 1 : -1;
+    const lead = lerp(-24, 24, s);
+    return { x: post.x, z: lead - dir * post.rank * 2.3, face: dir > 0 ? 0 : Math.PI };
+  }
+  for (let i = 0; i < 8; i++) {
+    const post = { x: i % 2 ? -73 : -85, rank: Math.floor(i / 2) }, g = guardTarget(post, 0);
+    const p = makePerson(GUARD_ID, g.x, g.z, { state: 'guard', post, dodgeT: 0 });
+    p.keep = true;
+  }
+  mapLabels.push(['Högvakten', -79, 30, 'landmark']);
+  // at the station: the officer behind the counter, and somebody already sitting in the first cell
+  {
+    const desk = makePerson(makeIdentity(OFFICER), STATION.desk[0], STATION.desk[1], { state: 'idle', face: 0, dodgeT: 0 });
+    desk.keep = true;
+    const [x0, z0, x1, z1] = STATION.doors[0].inside, inmate = makePerson(makeIdentity({ shirt: 0xe46f2a, pants: 0x3b3f45 }), (x0 + x1) / 2 + 0.6, z1 - 1.2, { state: 'idle', face: 0, dodgeT: 0 });
+    inmate.keep = true;
+  }
+
+  // Twenty Dalahästar are hidden around town, nine of them in the lanes of Gamla stan. Walk or drive into one to
+  // collect it and learn something about the place. Find them all for fireworks over Strömmen and golden cars.
+  const HORSES = [
+    ['Mårten Trotzigs gränd', -87.5, 371, 'Gamla stans smalaste gränd, bara 90 cm bred på det smalaste stället. Den är en enda lång trappa.'],
+    ['Järnpojken', 59, 124, 'Järnpojken bakom Finska kyrkan är Stockholms minsta staty. På vintern får han stickade mössor och mynt.'],
+    ['Brända tomten', 80, 279, 'Här brann ett hus för länge sedan och tomten fick stå tom. Nu är den ett litet torg med ett träd.'],
+    ['Stortorget', -55, 226, 'Stockholms äldsta torg. Här skedde Stockholms blodbad 1520.'],
+    ['Köpmantorget', 103, 237, 'Sankt Göran och draken på Köpmantorget är en kopia av skulpturen inne i Storkyrkan.'],
+    ['Slottsbacken', 141, 2, 'Obelisken på Slottsbacken restes år 1800 som tack till Stockholms borgare.'],
+    ['Mynttorget', -118, -78, 'Mynttorget har fått sitt namn efter Myntet, där Sveriges mynt präglades.'],
+    ['Gåsgränd', -170, 165, 'Gränderna väster om Västerlånggatan går ner mot Stora Nygatan och vattnet vid Munkbron.'],
+    ['Skeppar Karls gränd', 171, 156, 'Gränderna öster om Österlånggatan ledde förr ner till hamnen där skeppen lade till.'],
+    ['Tyska brinken', 76, 351, 'Tyska kyrkans klockspel spelar flera gånger om dagen över Gamla stans tak.'],
+    ['Evert Taubes terrass', -478, 236, 'Från Evert Taubes terrass på Riddarholmen har man en av Stockholms finaste utsikter över Riddarfjärden.'],
+    ['Kungsträdgården', 29.5, -545, 'Kungsträdgården var från början kungens köksträdgård. På våren blommar körsbärsträden.'],
+    ['Sergels torg', -225, -600, 'Glasobelisken på Sergels torg heter Kristallvertikalaccent och är 37 meter hög.'],
+    ['Skeppsholmen', 780, 5, 'På Skeppsholmen hade flottan sin bas i flera hundra år.'],
+    ['Djurgården', 1220, -90, 'Djurgården var kungens jaktpark. Här finns Skansen och Gröna Lund.'],
+    ['Mariatorget', -520, 1082, 'Fontänen på Mariatorget föreställer Tor som fiskar upp Midgårdsormen.'],
+    ['Humlegården', 150, -1100, 'Humlegården var kungens humleodling. Här ligger Kungliga biblioteket.'],
+    ['Medborgarplatsen', 150, 1422, 'Medborgarplatsen är Södermalms stora torg, uppkallat efter Medborgarhuset.'],
+    ['Stadshuset', -1000, -32, 'Stadshusets torn är 106 meter högt och har tre kronor i toppen.'],
+    ['Slussen', 30, 725, 'Vid Slussen möts Mälaren och Saltsjön. Mälaren ligger lite högre, så båtarna slussas mellan dem.']
+  ];
+  const HORSE_KEY = 'gubbe-dalahastar';
+  let horsesFound = new Set(), goldCars = false, fireworksT = 0, rocketT = 0;
+  const bursts = [];
+  try { horsesFound = new Set(JSON.parse(localStorage.getItem(HORSE_KEY) || '[]')); } catch (e) { /* private window: the hunt just starts over */ }
+  goldCars = horsesFound.size >= HORSES.length;
+  const horseGeo = (() => {
+    const m = new Merger(), red = 0xc8102e, yel = 0xf2c200, blu = 0x1f5fa8, grn = 0x2e8b57, wht = 0xf4f1ea;
+    m.box(0.34, 0.42, 1.0, red, 0, 0.95, 0);
+    m.box(0.32, 0.62, 0.24, red, 0, 0.44, 0.34); m.box(0.32, 0.62, 0.24, red, 0, 0.44, -0.36);
+    m.box(0.3, 0.6, 0.32, red, 0, 1.36, 0.4); m.box(0.28, 0.3, 0.52, red, 0, 1.62, 0.6); m.box(0.24, 0.14, 0.08, red, 0, 1.82, 0.44);
+    m.box(0.36, 0.06, 0.44, blu, 0, 1.18, -0.08); m.box(0.37, 0.04, 0.46, yel, 0, 1.13, -0.08);
+    m.box(0.36, 0.05, 0.5, yel, 0, 1.6, 0.66); m.box(0.32, 0.46, 0.06, 0x1d1d1f, 0, 1.42, 0.24);
+    for (const sx of [1, -1]) {
+      m.box(0.02, 0.16, 0.16, yel, sx * 0.172, 0.98, 0.18); m.box(0.02, 0.08, 0.08, wht, sx * 0.174, 0.98, 0.18);
+      m.box(0.02, 0.06, 0.28, grn, sx * 0.172, 0.84, 0.12); m.box(0.02, 0.12, 0.12, blu, sx * 0.172, 0.98, -0.3);
+      m.box(0.02, 0.05, 0.05, wht, sx * 0.142, 1.66, 0.74);
+    }
+    return m.build();
+  })();
+  const horseMat = std({ vertexColors: true, roughness: 0.32, emissive: 0x2a0606 });
+  const horses = HORSES.map(([name, x, z, fact], i) => {
+    const mesh = new THREE.Mesh(horseGeo, horseMat), glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xffcf5a, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
+    mesh.scale.setScalar(1.45); mesh.castShadow = true; glow.scale.set(3.2, 3.2, 1);
+    const g = new THREE.Group(); g.add(mesh, glow); g.position.set(x, 0, z); glow.position.y = 1.2;
+    const found = horsesFound.has(name);
+    g.visible = !found; scene.add(g);
+    return { name, x, z, fact, g, mesh, found, ph: i * 0.7 };
+  });
+  const fireFx = new Particles(1800, THREE.AdditiveBlending, false);
+  // the white water behind a boat: spray thrown up from the stern, and foam left lying on the water
+  const foamFx = new Particles(700, THREE.NormalBlending, true), FOAM_COL = new THREE.Color(0xf4f8fa);
+  function boatWake(c, dt) {
+    const v = Math.hypot(c.vx, c.vz);
+    if (v < 1.5 || Math.hypot(c.x - camTarget.x, c.z - camTarget.z) > 160) return;
+    const co = Math.cos(c.h), si = Math.sin(c.h), lz = -c.M.L / 2 + 0.2, n = Math.min(4, v * dt * 6);
+    for (let i = 0; i < n; i++) {
+      const lx = (Math.random() - 0.5) * c.M.W * 0.8, x = c.x + lx * co + lz * si, z = c.z - lx * si + lz * co;
+      foamFx.spawn({ x, y: WATER_Y + 0.15, z, vx: -c.vx * 0.15 + (Math.random() - 0.5), vy: 0, vz: -c.vz * 0.15 + (Math.random() - 0.5), life: 2.6 + Math.random(), size: [0.7, 2.6 + v * 0.06], alpha: Math.min(0.65, 0.2 + v * 0.025), c: FOAM_COL, drag: 1.2, floor: WATER_Y + 0.15, fadeIn: 0.05 });
+      if (v > 6 && Math.random() < 0.5) foamFx.spawn({ x, y: WATER_Y + 0.4, z, vx: -c.vx * 0.3 + (Math.random() - 0.5) * 2, vy: 1.5 + Math.random() * 2.5, vz: -c.vz * 0.3 + (Math.random() - 0.5) * 2, life: 0.9, size: [0.3, 1.4], alpha: 0.5, c: FOAM_COL, grav: 9, drag: 0.6, floor: WATER_Y + 0.08 });
+    }
+    // the bow wave, peeling off both sides of the front
+    if (v > 3 && Math.random() < dt * 14) for (const sd of [1, -1]) {
+      const lx = sd * c.M.W * 0.45, bz = c.M.L * 0.25, x = c.x + lx * co + bz * si, z = c.z - lx * si + bz * co;
+      foamFx.spawn({ x, y: WATER_Y + 0.12, z, vx: sd * co * 1.6 + c.vx * 0.2, vy: 0.5, vz: -sd * si * 1.6 + c.vz * 0.2, life: 1.6, size: [0.4, 1.6], alpha: 0.4, c: FOAM_COL, grav: 3, drag: 0.8, floor: WATER_Y + 0.08 });
+    }
+  }
+  const FIRE_COLS = [0x2f7bff, 0xf7c600, 0xe0203a, 0x3fd06a, 0xffffff, 0xff7ad9];
+  function launchRocket() {
+    const x = rr(-60, 320), z = rr(-220, -110), top = rr(55, 85), col = new THREE.Color(rpick(FIRE_COLS));
+    fireFx.spawn({ x, y: 2, z, vx: rr(-1, 1), vy: top / 1.4, vz: rr(-1, 1), life: 1.4, size: [0.9, 0.5], alpha: 1, color: 0xffe0a0, drag: 0.7 });
+    bursts.push({ t: 1.4, fn: () => {
+      for (let i = 0; i < 90; i++) {
+        const u = Math.random() * 2 - 1, a = Math.random() * TAU, r = Math.sqrt(1 - u * u), s = rr(11, 15);
+        fireFx.spawn({ x, y: top, z, vx: r * Math.cos(a) * s, vy: u * s, vz: r * Math.sin(a) * s, life: rr(1.8, 2.6), size: [3.6, 1.0], alpha: 1, c: col, grav: 3.5, drag: 0.9 });
+      }
+      if (audio && !muted) { const ps = placeSound(x, z, 2500); noiseBurst(audio.ctx.currentTime + ps.d / 340, 1.1, 0.5 * Math.max(0.15, ps.level), 'lowpass', 320, 0.7, ps.pan, 0.003); }
+    } });
+  }
+  function collectHorse(h) {
+    h.found = true; h.g.visible = false;
+    horsesFound.add(h.name);
+    try { localStorage.setItem(HORSE_KEY, JSON.stringify([...horsesFound])); } catch (e) { /* not saved, still counted */ }
+    const n = horsesFound.size;
+    for (let i = 0; i < 26; i++) {
+      const a = Math.random() * TAU, s = rr(2, 5);
+      sparkFx.spawn({ x: h.x, y: 1.2, z: h.z, vx: Math.cos(a) * s, vy: rr(2, 6), vz: Math.sin(a) * s, life: rr(0.5, 0.9), size: [0.14, 0.04], alpha: 1, color: rpick([0xf2c200, 0xc8102e, 0xffffff]), grav: 9, drag: 1 });
+    }
+    beep([784, 988, 1319], 0.035, 0.32);
+    if (n >= HORSES.length) {
+      goldCars = true; fireworksT = 60;
+      toast('Alla ' + HORSES.length + ' dalahästar hittade! Fyrverkeri över Strömmen, och nu finns alla bilar i guld (tryck B).');
+    } else toast('Dalahäst ' + n + ' av ' + HORSES.length + ': ' + h.name + '. ' + h.fact + ' Hittelön 50 kr.');
+    // a finder's fee for every one
+    JOBS.reward(50);
+  }
+  function updateSurprises(dt) {
+    const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z, reach = driving ? 3.4 : 1.7;
+    for (const h of horses) {
+      if (h.found) continue;
+      const d = Math.hypot(h.x - px, h.z - pz);
+      if (d > 220) continue;
+      h.mesh.rotation.y = clock * 1.1 + h.ph;
+      h.mesh.position.y = 0.25 + Math.sin(clock * 2.2 + h.ph) * 0.18;
+      if (d < reach && (driving || player.y < 2.5) && !(stop && stop.riding)) collectHorse(h);
+    }
+    if (fireworksT > 0) {
+      fireworksT = Math.max(0, fireworksT - dt);
+      if ((rocketT -= dt) <= 0) { launchRocket(); rocketT = rr(0.25, 0.9); }
+    }
+    for (let i = bursts.length - 1; i >= 0; i--) if ((bursts[i].t -= dt) <= 0) { bursts[i].fn(); bursts.splice(i, 1); }
+  }
+
+  /* ================= jobs and street races ================= */
+  // J starts a job in the car you drive: fares in the taxi, parcels in the Sprinter, a route in the SL bus. At the
+  // yellow pillars of light around town J starts a street race against the clock. A pillar of light marks where to go
+  // and a GPS line on both maps shows the way along the streets. What you earn goes in the Kassa, kept between visits.
+  const JOBS = (() => {
+    // you start with some pocket money, enough for an ice cream and a balloon
+    const CASH_KEY = 'gubbe-kassa', RACE_KEY = 'gubbe-gatlopp', POCKET_MONEY = 100;
+    let earned = POCKET_MONEY, records = {};
+    try { const kept = localStorage.getItem(CASH_KEY); earned = kept === null ? POCKET_MONEY : Math.max(0, +kept || 0); records = JSON.parse(localStorage.getItem(RACE_KEY) || '{}') || {}; } catch (e) { /* a private window: kept for this visit only */ }
+    const save = () => { try { localStorage.setItem(CASH_KEY, String(earned)); localStorage.setItem(RACE_KEY, JSON.stringify(records)); } catch (e) { /* counted anyway */ } };
+    const fmtTime = (t) => Math.floor(t / 60) + ':' + (t % 60).toFixed(1).padStart(4, '0').replace('.', ',');
+    const fmtDist = (m) => (m < 1000 ? Math.round(m / 10) * 10 + ' m' : (m / 1000).toFixed(1).replace('.', ',') + ' km');
+    // places a fare can ask for, in the real spots
+    const PLACES = [
+      ['Stadshuset', -1000, -100], ['Centralstationen', -610, -490], ['Kungliga Operan', -56, -320], ['Grand Hôtel', 200, -295], ['Nationalmuseum', 335, -305],
+      ['Östermalmstorg', 387, -903], ['Stureplan', 130, -968], ['Hötorget', -455, -890], ['Sergels torg', -254, -606], ['Kungliga biblioteket', 155, -1110],
+      ['Vasamuseet', 1029, -265], ['Moderna museet', 600, 135], ['Slussen', 40, 700], ['Medborgarplatsen', 152, 1422], ['Mariatorget', -500, 1080],
+      ['Katarina kyrka', 240, 1262], ['Nytorget', 680, 1263], ['Rådhuset', -1067, -600], ['Polishuset', -1315, -604], ['Riddarholmskyrkan', -435, 125],
+      ['Kungsträdgården', 29, -500], ['Strandvägen', 700, -620], ['Djurgården', 1200, -100], ['Fridhemsplan', -1500, -640],
+      ['Mosebacke torg', 210, 822], ['Skeppsbron', 225, 160], ['Kungsholms strand', -930, -700], ['Hornstull', -950, 1250], ['Tegnérlunden', -816, -1192],
+      ['Gröna Lund', 1330, 410], ['Skansen', 1560, 0], ['Kaknästornet', 2600, -1000], ['Globen', 420, 2520], ['Tele2 Arena', 640, 2525], ['Stadion', 420, -1690],
+      ['Karlaplan', 1100, -1205], ['Sankt Eriksplan', -1560, -1440], ['Norrtull', -870, -2060], ['Roslagstull', -8, -1700], ['Rålambshovsparken', -1880, -100],
+      ['Långholmen', -1440, 640], ['Hammarby sjöstad', 1000, 2195], ['Liljeholmen', -1300, 2200], ['Rosendals slott', 2200, -300], ['Danvikstull', 1900, 1250],
+      ['Skanstull', 125, 1955], ['Odenplan', -795, -1425], ['KTH', 195, -1690], ['DN-skrapan', -2212, -440]
+    ];
+    const SAYS = ['Hej! Till {p}, tack.', 'Till {p}, och gärna lite fort, jag är sen!', 'Kan du köra mig till {p}?', '{p}, tack. Ta det lugnt i kurvorna.', 'Hej hej! {p} blir bra.'];
+    // the moped's food runs: from a restaurant to someone's door
+    const RESTAURANTS = ['Pizzeria Napoli', 'Sushibaren', 'Thaiköket', 'Burgerbaren', 'Falafelkungen', 'Pastabaren', 'Dumplinghuset', 'Kebabhuset', 'Tacobaren', 'Ramen-baren', 'Indiska köket', 'Pokébaren'];
+    // the boat taxi's piers, the quays where the boats lie moored round town
+    const PIER_SPOTS = [['Skeppsbron', ...LOT.at(66, 34)], ['Strandvägen', 735, -606], ['Gröna Lund', 1480, 650], ['Hammarby sjöstad', 600, 1965], ['Norr Mälarstrand', -1250, -45],
+      ['Långholmen', -1560, 695], ['Marieberg', -2300, -95], ['Nacka strand', 2600, 1120], ['Lilla Värtan', 3000, -1300], ['Hammarby kaj', 400, 1972]];
+    // the scrapyard in Hammarby hamn, where cars taken off the street are bought (not the ones you choose with B)
+    const SCRAP = (() => { const k = kerbNear(1000, 2195); return { x: k.x, z: k.z, k, name: 'Bilskroten i Hammarby hamn' }; })();
+    // the street races: a route of named junctions; every junction after the start is a checkpoint
+    const RACES = [
+      { id: 'gamla', name: 'Gamla stan runt', route: 'SK1 SK2 SK3 SK4 SL0 KH MB3 MB2 MB1 RT gRHN MT LB SBs SK1' },
+      { id: 'djurgarden', name: 'Strandvägen–Djurgården', route: 'NP SV1 SV2 SV3 SV4 DJ0 DJ1 DJ2 DJ3' },
+      { id: 'soder', name: 'Söder runt', route: 'SMT GG1 GG2 GG3 GG4 MP GG5 OG3 RG3 RG2 RG1 RG0 KV2 KV1 SL1' },
+      { id: 'city', name: 'Cityslingan', route: 'TB V2 V3 V4 V5 D5 S2 R4 SP BJs BJr NP NT KT2 KT1 KT0 OP GA D0 TB' }
+    ].map((r) => ({ ...r, pts: r.route.split(' ').map((id) => { const n = nodes[nodeIndex.get(id)]; return { x: n.x, z: n.z }; }) }));
+
+    /* pillars of light: where to go (gold), the checkpoint after it (orange), and the race starts (yellow) */
+    const beamTex = canvasTex(4, 128, (g, w, h) => {
+      const gr = g.createLinearGradient(0, h, 0, 0);
+      gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.12, 'rgba(255,255,255,.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    });
+    function beam(color, r, h) {
+      const g = new THREE.Group();
+      const b = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 28, 1, true), new THREE.MeshBasicMaterial({ map: beamTex, color, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+      b.position.y = h / 2;
+      const ring = new THREE.Mesh(new THREE.RingGeometry(r * 1.5, r * 1.85, 48), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
+      ring.rotation.x = -Math.PI / 2; ring.position.y = 0.07;
+      g.add(b, ring); g.visible = false; scene.add(g);
+      return g;
+    }
+    const goalBeam = beam(0xffc21a, 1.7, 70), nextBeam = beam(0xff7a1a, 1.3, 45);
+    const startBeams = RACES.map((r) => { const b = beam(0xffe14a, 2.3, 90); b.position.set(r.pts[0].x, 0, r.pts[0].z); b.visible = true; return b; });
+    // parcels waiting at the kerb, and bus stop poles with the SL sign
+    const parcelGeo = (() => { const m = new Merger(); m.box(0.6, 0.45, 0.5, 0xa77c4f, 0, 0.225, 0); m.box(0.5, 0.4, 0.45, 0xb98d5c, 0.1, 0.65, 0.05); m.box(0.4, 0.3, 0.4, 0x9c7147, -0.05, 1.0, 0); m.box(0.62, 0.04, 0.06, 0xd8c9a0, 0, 0.46, 0); return m.build(); })();
+    const parcels = new THREE.Mesh(parcelGeo, personMat); parcels.visible = false; parcels.castShadow = true; scene.add(parcels);
+    // a paper bag of takeaway on a crate by the kerb
+    const bagGeo = (() => { const m = new Merger(); m.box(0.5, 0.42, 0.4, 0x6b5a45, 0, 0.21, 0); m.box(0.32, 0.38, 0.2, 0xc9a36a, 0, 0.61, 0); m.box(0.33, 0.08, 0.21, 0xc8102e, 0, 0.66, 0); m.box(0.2, 0.06, 0.02, 0xc9a36a, 0, 0.84, 0); return m.build(); })();
+    const bag = new THREE.Mesh(bagGeo, personMat); bag.visible = false; bag.castShadow = true; scene.add(bag);
+    const scrapBeam = beam(0x4cc26a, 2.6, 60);
+    scrapBeam.position.set(SCRAP.x, 0, SCRAP.z); scrapBeam.visible = true;
+    const slTex = canvasTex(128, 128, (g, w) => {
+      g.fillStyle = '#ffffff'; g.fillRect(0, 0, w, w);
+      g.fillStyle = '#1f5fae'; roundRect(g, 8, 8, w - 16, w - 16, 14); g.fill();
+      g.fillStyle = '#ffffff'; g.font = '900 64px Overpass, "Arial Black", Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('SL', w / 2, w / 2 + 4);
+    });
+    const stopGeo = (() => { const m = new Merger(); m.add(new THREE.CylinderGeometry(0.045, 0.045, 2.9, 8), 0x5d646a, 0, 1.45, 0); m.box(0.5, 0.06, 0.06, 0x5d646a, 0, 2.6, 0); return m.build(); })();
+    const stopSignMat = std({ map: slTex, roughness: 0.4, emissive: 0x222222, emissiveMap: slTex });
+    const stopSignGeo = new THREE.PlaneGeometry(0.55, 0.55);
+    const stopMeshes = [];
+    function busStop(k) {
+      const g = new THREE.Group(), pole = new THREE.Mesh(stopGeo, std({ vertexColors: true, roughness: 0.5, metalness: 0.5 }));
+      const s1 = new THREE.Mesh(stopSignGeo, stopSignMat), s2 = new THREE.Mesh(stopSignGeo, stopSignMat);
+      s1.position.set(0, 2.62, 0.04); s2.position.set(0, 2.62, -0.04); s2.rotation.y = Math.PI;
+      g.add(pole, s1, s2); g.position.set(k.walkX, 0, k.walkZ); g.rotation.y = k.h + Math.PI / 2;
+      scene.add(g); stopMeshes.push(g);
+      return g;
+    }
+
+    /* where to stop: the kerb of a street, on one side or the other, and the pavement beside it */
+    function kerbOn(e, t, side) {
+      const A = nodes[e.a], B = nodes[e.b], ux = (B.x - A.x) / e.len, uz = (B.z - A.z) / e.len;
+      const s = clamp(t * e.len, Math.min(e.len / 2, A.r + 7), Math.max(e.len / 2, e.len - B.r - 7)), lat = side * Math.max(1.6, e.hw - 1.3), walk = side * (e.hw + Math.max(0.9, Math.min(2.2, e.walk * 0.55)));
+      return { x: A.x + ux * s - uz * lat, z: A.z + uz * s + ux * lat, walkX: A.x + ux * s - uz * walk, walkZ: A.z + uz * s + ux * walk, h: Math.atan2(ux * side, uz * side), e };
+    }
+    function kerbNear(x, z) {
+      const ne = nearestEdge(x, z, (e) => e.drive && !e.bridge && e.len > 25), e = ne.e, A = nodes[e.a], B = nodes[e.b];
+      const t = ((x - A.x) * (B.x - A.x) + (z - A.z) * (B.z - A.z)) / (e.len * e.len), side = (x - A.x) * -(B.z - A.z) + (z - A.z) * (B.x - A.x) >= 0 ? 1 : -1;
+      return kerbOn(e, t, side);
+    }
+    // only streets that run through the ring between dmin and dmax are tried (picking from the whole map, most tries
+    // would land too far away); if none of them has a free kerb, the ring is widened
+    function randomKerb(cx, cz, dmin, dmax) {
+      for (let wide = 1; wide <= 2; wide++) {
+        const lo = dmin / wide, hi = dmax * wide;
+        const pool = edges.filter((e) => {
+          if (!e.drive || e.bridge || e.len <= 35 || e.hw < 4.5) return false;
+          const A = nodes[e.a], B = nodes[e.b], d = Math.hypot((A.x + B.x) / 2 - cx, (A.z + B.z) / 2 - cz);
+          return d > lo - e.len / 2 && d < hi + e.len / 2;
+        });
+        if (!pool.length) continue;
+        for (let i = 0; i < 80; i++) {
+          const e = rpick(pool), k = kerbOn(e, 0.25 + Math.random() * 0.5, Math.random() < 0.5 ? 1 : -1), d = Math.hypot(k.x - cx, k.z - cz);
+          if (d < lo || d > hi || !personFits(k.walkX, k.walkZ) || blockedAt(k.walkX, k.walkZ, 0.5)) continue;
+          return k;
+        }
+      }
+      return null;
+    }
+
+    /* the way there along the streets, for the maps */
+    let route = null, routeT = 0;
+    const driveNode = (x, z) => { let b = 0, bd = Infinity; nodes.forEach((n, i) => { if (!n.nb.length) return; const d = Math.hypot(n.x - x, n.z - z); if (d < bd) { bd = d; b = i; } }); return b; };
+    function routeTo(x0, z0, x1, z1) {
+      const goal = driveNode(x1, z1), D = distTo(goal, false);
+      let n = driveNode(x0, z0);
+      const path = [[x0, z0], [nodes[n].x, nodes[n].z]];
+      for (let k = 0; k < 500 && n !== goal; k++) {
+        let best = -1, bv = D[n];
+        for (const m of nodes[n].nb) if (D[m] < bv) { bv = D[m]; best = m; }
+        if (best < 0) break;
+        n = best; path.push([nodes[n].x, nodes[n].z]);
+      }
+      path.push([x1, z1]);
+      return path;
+    }
+    const routeLen = (p) => { let L = 0; for (let i = 1; i < p.length; i++) L += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]); return L; };
+
+    /* the job */
+    let job = null, nearRace = null, bigT = 0;
+    const hinted = {};
+    const el2 = { job: $('job'), icon: $('jobIcon'), title: $('jobTitle'), hint: $('jobHint'), clock: $('jobClock'), big: $('bigText'), cash: $('cash'), cashTag: $('cashTag') };
+    function big(text, sub, t = 2.2) { el2.big.textContent = text; if (sub) { const s = document.createElement('small'); s.textContent = sub; el2.big.append(s); } el2.big.hidden = false; bigT = t; }
+    function pay(kr, why) { earned += kr; save(); beep([660, 880, 1320], 0.03, 0.3); toast(why + ' +' + fmtKr(kr)); }
+    const speed = () => (driving ? Math.hypot(driving.vx, driving.vz) : 0);
+    const kindOf = (c) => (!c ? null : c.M.shape.taxi ? 'taxi' : c.M.id === 'skapbil' ? 'paket' : c.M.bus ? 'buss' : c.M.moped ? 'mat'
+      : c.M.police && !c.M.boat ? 'polis' : c.M.boat === 'console' || c.M.boat === 'riva' ? 'battaxi' : null);
+    function target() { return !job ? null : job.kind === 'race' ? job.race.pts[job.i] : job.goal; }
+    function setGoal(k, name) { job.goal = { x: k.x, z: k.z, name, k }; route = routeTo(driving ? driving.x : player.x, driving ? driving.z : player.z, k.x, k.z); routeT = 1.5; }
+    function cleanup() {
+      goalBeam.visible = nextBeam.visible = false; parcels.visible = false; bag.visible = false; route = null;
+      // a robber still out there drives on as ordinary traffic
+      if (job && job.robber && cars.includes(job.robber)) { const r = job.robber; r.getaway = false; r.keep = false; if (r.bot) r.bot.cruise = 14; }
+      if (job && job.npcs) for (const p of job.npcs) { if (persons.includes(p)) { p.keep = false; p.ai = { state: 'wander', wx: Math.random() - 0.5, wz: Math.random() - 0.5, t: 15, dodgeT: 0 }; } }
+      if (job && job.rider && job.car && job.car.rearSeat) job.car.rearSeat.visible = false;
+      while (stopMeshes.length) scene.remove(stopMeshes.pop());
+    }
+    function end(msg) { cleanup(); job = null; if (msg) toast(msg); }
+
+    // a fare: someone waiting on the pavement of a street a little way off
+    function newFare() {
+      const k = randomKerb(driving.x, driving.z, 110, 450);
+      if (!k) { end('Inga kunder här just nu.'); return; }
+      const p = makePerson(makeIdentity(), k.walkX, k.walkZ, { state: 'idle', face: k.h - Math.PI / 2, dodgeT: 0 });
+      p.keep = true; p.rot = k.h - Math.PI / 2;
+      Object.assign(job, { phase: 'find', npcs: [p], who: p, t: 0 });
+      setGoal(k, 'Kund på ' + k.e.name);
+      toast('En kund väntar på ' + k.e.name + '. Kör dit och stanna vid trottoaren.');
+    }
+    function newParcel() {
+      const k = randomKerb(driving.x, driving.z, 120, 500);
+      if (!k) { end('Inga paket att hämta här just nu.'); return; }
+      parcels.position.set(k.walkX, 0, k.walkZ); parcels.rotation.y = k.h; parcels.visible = true;
+      Object.assign(job, { phase: 'find', t: 0 });
+      setGoal(k, 'Paket på ' + k.e.name);
+      toast('Hämta paketen på ' + k.e.name + '.');
+    }
+    function newRoute() {
+      // a run of stops along the streets ahead, about 250 m apart
+      const stops = [];
+      let e0 = nearestEdge(driving.x, driving.z, (e) => e.drive).e, from = Math.hypot(nodes[e0.a].x - driving.x, nodes[e0.a].z - driving.z) < Math.hypot(nodes[e0.b].x - driving.x, nodes[e0.b].z - driving.z) ? e0.a : e0.b;
+      let at = from === e0.a ? e0.b : e0.a, run = 0, prev = from;
+      for (let k = 0; k < 120 && stops.length < 6; k++) {
+        const opts = nodes[at].nb.filter((n) => n !== prev);
+        if (!opts.length) break;
+        const nx = rpick(opts), e = edgeBetween(at, nx) || edgeToward(at, nx);
+        run += e ? e.len : 50;
+        if (e && run > 230 && e.len > 40 && !e.bridge && e.hw >= 4.5) {
+          const side = e.a === at ? 1 : -1, ks = kerbOn(e, e.a === at ? 0.6 : 0.4, side);
+          if (personFits(ks.walkX, ks.walkZ) && !blockedAt(ks.walkX, ks.walkZ, 0.5)) { stops.push(ks); run = 0; }
+        }
+        prev = at; at = nx;
+      }
+      if (stops.length < 2) { end('Ingen busslinje gick att lägga härifrån. Kör ut på en större gata och försök igen.'); return; }
+      job.stops = stops; job.si = 0; job.npcs = []; job.waiting = [];
+      stops.forEach((k, i) => {
+        busStop(k);
+        const n = 1 + Math.floor(Math.random() * 4), list = [];
+        for (let j = 0; j < n; j++) {
+          const p = makePerson(makeIdentity(), k.walkX + (Math.random() - 0.5) * 2.4, k.walkZ + (Math.random() - 0.5) * 1.2, { state: 'idle', face: k.h - Math.PI / 2, dodgeT: 0 });
+          p.keep = true; job.npcs.push(p); list.push(p);
+        }
+        job.waiting.push(list);
+      });
+      job.phase = 'drive';
+      setGoal(stops[0], 'Hållplats 1 av ' + stops.length);
+      toast('Busslinje med ' + stops.length + ' hållplatser. Stanna vid varje så kliver resenärerna på.');
+    }
+    // food on the moped: pick it up at a restaurant, take it to someone's door while it's hot
+    function newFood() {
+      const k = randomKerb(driving.x, driving.z, 80, 350);
+      if (!k) { end('Ingen restaurang har något att köra ut just nu.'); return; }
+      bag.position.set(k.walkX, 0, k.walkZ); bag.rotation.y = k.h; bag.visible = true;
+      Object.assign(job, { phase: 'find', t: 0, place: rpick(RESTAURANTS) });
+      setGoal(k, job.place + ', ' + k.e.name);
+      toast('Maten är klar på ' + job.place + ' på ' + k.e.name + '. Hämta den!');
+    }
+    // the police car's job: a robber getting away in a fast car somewhere near. Catch them: stop their car, or wreck it
+    function newRobber() {
+      const c = spawnBot(170, rpick(SPORTS.filter((M) => !M.police)), 420);
+      if (!c) { end('Inga larm just nu. Försök igen om en stund.'); return; }
+      c.keep = true; c.getaway = true; c.bot.cruise = 24; c.bot.turnV = 9;
+      Object.assign(job, { phase: 'chase', t: 0, robber: c, par: 150, heldT: 0, fleeT: 0 });
+      job.goal = { x: c.x, z: c.z, name: c.M.name };
+      toast('Larm! En rånare flyr i ' + c.M.def + '. Kör ikapp och stoppa bilen. L slår på blåljuset.');
+    }
+    // the boat taxi: someone waiting on a pier, wanting to go to another one
+    let piers = null;
+    function pierList() {
+      if (piers) return piers;
+      piers = PIER_SPOTS.map(([name, x, z]) => {
+        const b = findBerth(MODEL.anytec, x, z, 60);
+        if (!b) return null;
+        // where the passenger waits: the nearest bit of quay to the berth
+        let best = null, bd = Infinity;
+        for (let r = 2; r <= 16 && !best; r += 2) for (let i = 0; i < 16; i++) {
+          const a = (i / 16) * TAU, px = b.x + Math.sin(a) * r, pz = b.z + Math.cos(a) * r;
+          if (personFits(px, pz) && !blockedAt(px, pz, 0.4) && Math.hypot(px - b.x, pz - b.z) < bd) { bd = Math.hypot(px - b.x, pz - b.z); best = { x: px, z: pz }; }
+        }
+        return best ? { name, x: b.x, z: b.z, walk: best } : null;
+      }).filter(Boolean);
+      return piers;
+    }
+    function newBoatFare() {
+      const c = driving, list = pierList().filter((p) => { const d = Math.hypot(p.x - c.x, p.z - c.z); return d > 200 && d < 2200; });
+      if (!list.length) { end('Inga resenärer väntar just nu.'); return; }
+      const pier = rpick(list), w = pier.walk;
+      const p = makePerson(makeIdentity(), w.x, w.z, { state: 'idle', face: Math.atan2(pier.x - w.x, pier.z - w.z), dodgeT: 0 });
+      p.keep = true; p.rot = Math.atan2(pier.x - w.x, pier.z - w.z);
+      Object.assign(job, { phase: 'find', npcs: [p], who: p, t: 0, pier, bt: 0 });
+      job.goal = { x: pier.x, z: pier.z, name: pier.name }; route = null;
+      toast('En resenär väntar på bryggan vid ' + pier.name + '. Lägg till där.');
+    }
+    function start(kind) {
+      job = { kind, car: driving, t: 0, done: 0, offT: 0 };
+      if (kind === 'taxi') newFare(); else if (kind === 'paket') newParcel(); else if (kind === 'mat') newFood();
+      else if (kind === 'polis') newRobber(); else if (kind === 'battaxi') newBoatFare(); else newRoute();
+    }
+    // the scrapyard's price: a sports car is worth a lot, a dented one less
+    function priceOf(c) {
+      const M = c.M, base = M.moped ? 150 : M.sport ? 900 + M.max * 14 : 250 + M.max * 5;
+      return Math.round((base * (M.classic ? 1.4 : 1) * clamp(c.health / 100, 0.2, 1)) / 10) * 10;
+    }
+    let nearScrap = false;
+    function sell() {
+      const c = driving, M = c.M;
+      if (c === spawnedCar) { toast('Bilen du valde med B kan du inte sälja. Ta en bil ute i trafiken och kom tillbaka med den.'); return; }
+      if (M.police || M.mil) { toast('Bilskroten: Den köper vi inte! Ska vi åka fast allihop?'); return; }
+      if (M.bus) { toast('Bilskroten: En SL-buss? Nej tack, den vill SL ha tillbaka.'); return; }
+      if (Math.hypot(c.vx, c.vz) > 1.3) { toast('Stanna bilen först.'); return; }
+      const kr = priceOf(c);
+      if (!exitCar()) return;
+      removeCar(c);
+      pay(kr, 'Bilskroten köpte ' + M.def + '.');
+    }
+    function startRace(r) {
+      job = { kind: 'race', race: r, car: driving, i: 1, t: -3.5, offT: 0 };
+      goalBeam.visible = true;
+      route = null;
+      big('3', r.name);
+    }
+    // J
+    function key() {
+      if (stop && stop.locked) return;
+      if (job) { end(job.kind === 'race' ? 'Gatloppet avbrutet.' : 'Du slutade jobba.'); return; }
+      if (!driving) { toast('Jobben görs med fordon: taxin, Sprintern, bussen, mopeden, polisbilen och motorbåtarna. Gatloppen startar vid de gula ljuspelarna, och bilar säljer du på bilskroten i Hammarby hamn.'); return; }
+      if (nearScrap) { sell(); return; }
+      if (nearRace) { startRace(nearRace); return; }
+      const kind = kindOf(driving);
+      if (kind) start(kind);
+      else toast('Med ' + driving.M.def + ' kan du köra gatlopp vid de gula ljuspelarna, eller sälja den på bilskroten i Hammarby hamn. Taxin, Sprintern, bussen, mopeden, polisbilen och motorbåtarna har egna jobb.');
+    }
+
+    function update(dt) {
+      if (bigT > 0 && (bigT -= dt) <= 0) el2.big.hidden = true;
+      // near a race start in a car, with nothing else on: say so once
+      nearRace = null;
+      if (driving && !job) for (const r of RACES) if (Math.hypot(r.pts[0].x - driving.x, r.pts[0].z - driving.z) < 11) nearRace = r;
+      if (nearRace && nearRace !== update.lastNear) toast('Gatlopp: ' + nearRace.name + (records[nearRace.id] ? ', rekord ' + fmtTime(records[nearRace.id]) : '') + '. Tryck J för att starta.');
+      update.lastNear = nearRace;
+      for (const b of startBeams) b.visible = !job || job.kind !== 'race';
+      // pulled in at the scrapyard: what they would give for this one
+      nearScrap = !!driving && !job && !driving.M.boat && Math.hypot(SCRAP.x - driving.x, SCRAP.z - driving.z) < 12;
+      if (nearScrap && !update.atScrap) toast(driving === spawnedCar || driving.M.police || driving.M.mil || driving.M.bus ? 'Bilskroten: Den här köper vi inte.' : 'Bilskroten: Vi ger ' + fmtKr(priceOf(driving)) + ' för ' + driving.M.def + '. Stanna och tryck J för att sälja.');
+      update.atScrap = nearScrap;
+      if (!job) return;
+      job.t += dt;
+      // the car is gone, wrecked or left behind, or you were arrested
+      if (stop && stop.locked) { end('Uppdraget avbröts, du är gripen.'); return; }
+      if (!cars.includes(job.car) || job.car.dead) { end('Bilen är förstörd. Uppdraget är slut.'); return; }
+      job.offT = driving === job.car ? 0 : job.offT + dt;
+      if (job.offT > (job.kind === 'race' ? 3 : 25)) { end(job.kind === 'race' ? 'Du klev ur bilen. Gatloppet är slut.' : 'Du lämnade bilen. Uppdraget är slut.'); return; }
+      const T = target();
+      if (T) {
+        goalBeam.position.set(T.x, 0, T.z); goalBeam.visible = true;
+        goalBeam.children[1].scale.setScalar(1 + 0.06 * Math.sin(clock * 5));
+      }
+      if (job.kind !== 'race' && job.kind !== 'battaxi' && (routeT -= dt) <= 0 && T && driving) { route = routeTo(driving.x, driving.z, T.x, T.z); routeT = 1.5; }
+      const c = job.car, d = T ? Math.hypot(T.x - c.x, T.z - c.z) : Infinity, still = speed() < 1.3 && driving === c;
+      if (job.kind === 'race') {
+        const R = job.race;
+        if (job.t < 0) {
+          // countdown: the car is held on the line
+          c.vx = c.vz = 0;
+          const n = Math.ceil(-job.t);
+          if (n !== job.shown) { job.shown = n; if (n <= 3) { big(String(n), R.name, 1.1); beep([440], 0.04, 0.25); } }
+          return;
+        }
+        if (job.shown !== 0) { job.shown = 0; big('KÖR!', null, 1); beep([880], 0.05, 0.4); }
+        const nx = R.pts[job.i + 1];
+        nextBeam.visible = !!nx; if (nx) nextBeam.position.set(nx.x, 0, nx.z);
+        if (d < 13) {
+          job.i++;
+          if (job.i >= R.pts.length) {
+            const t = job.t, rec = records[R.id], best = !rec || t < rec;
+            if (best) records[R.id] = t;
+            save();
+            big('MÅL! ' + fmtTime(t), best ? (rec ? 'Nytt rekord! Förra: ' + fmtTime(rec) : 'Första rekordet på ' + R.name) : 'Rekord: ' + fmtTime(rec), 4);
+            pay(best ? 600 : 250, R.name + ' klart.');
+            end();
+            return;
+          }
+          beep([988, 1319], 0.03, 0.18);
+        }
+        return;
+      }
+      if (job.kind === 'taxi') {
+        if (job.phase === 'find') {
+          if (d < 10 && still) {
+            const p = job.who;
+            p.ai = { state: 'board', car: c, dodgeT: 0 };
+            job.phase = 'board'; job.bt = 0;
+          }
+        } else if (job.phase === 'board') {
+          const p = job.who;
+          job.bt += dt;
+          if (!persons.includes(p) || Math.hypot(p.x - c.x, p.z - c.z) < c.M.W / 2 + 1.1 || job.bt > 6) {
+            if (persons.includes(p)) removePerson(p);
+            job.npcs = []; job.rider = p.id;
+            if (c.rearSeat) { c.rearSeat.geometry = p.id.driverGeo; c.rearSeat.visible = true; }
+            // where to: somewhere a fair way off
+            const here = PLACES.filter(([, x, z]) => { const dd = Math.hypot(x - c.x, z - c.z); return dd > 380 && dd < 1700; });
+            const [name, px, pz] = rpick(here.length ? here : PLACES), k = kerbNear(px, pz);
+            setGoal(k, name);
+            const L = routeLen(route);
+            Object.assign(job, { phase: 'ride', t: 0, par: L / 10.5 + 25, len: L, hp: c.health });
+            toast('Kunden: ' + rpick(SAYS).replace('{p}', name));
+          }
+        } else if (job.phase === 'ride' && d < 13 && still) {
+          const late = job.t > job.par, dmg = Math.max(0, job.hp - c.health);
+          let kr = Math.round((75 + job.len * 0.3) * (job.t < job.par * 0.8 ? 1.3 : late ? 0.75 : 1) - dmg * 4);
+          kr = Math.max(20, kr);
+          const exit = exitSpot(c) || { x: c.x, z: c.z };
+          if (c.rearSeat) c.rearSeat.visible = false;
+          const p = makePerson(job.rider, exit.x, exit.z, { state: 'wander', wx: Math.random() - 0.5, wz: Math.random() - 0.5, t: 20, dodgeT: 0 });
+          p.rot = c.h; job.rider = null;
+          job.done++;
+          pay(kr, dmg > 8 ? 'Kunden betalar, men klagar på bucklorna.' : job.t < job.par * 0.8 ? 'Snabbt! Kunden ger dricks.' : late ? 'Kunden betalar, men tyckte det tog för lång tid.' : 'Kunden betalar.');
+          newFare();
+        }
+        return;
+      }
+      if (job.kind === 'paket') {
+        if (job.phase === 'find' && d < 10 && still) {
+          job.lt = (job.lt || 0) + dt;
+          if (job.lt > 1.2) {
+            job.lt = 0; parcels.visible = false;
+            const k = randomKerb(c.x, c.z, 300, 1300);
+            if (!k) { end('Ingen adress att leverera till härifrån.'); return; }
+            const no = 1 + Math.floor(Math.random() * 60);
+            setGoal(k, k.e.name + ' ' + no);
+            const L = routeLen(route);
+            Object.assign(job, { phase: 'deliver', t: 0, par: L / 10 + 30, len: L, hp: c.health });
+            toast('Paketen är lastade. Leverera till ' + job.goal.name + '.');
+          }
+        } else if (job.phase === 'deliver' && d < 13 && still) {
+          job.lt = (job.lt || 0) + dt;
+          if (job.lt > 1.2) {
+            job.lt = 0;
+            const dmg = Math.max(0, job.hp - c.health), late = job.t > job.par;
+            const kr = Math.max(30, Math.round((110 + job.len * 0.25) * (late ? 0.7 : job.t < job.par * 0.75 ? 1.3 : 1) - dmg * 3));
+            job.done++;
+            pay(kr, late ? 'Paketen kom fram, men sent.' : 'Paketen levererade.');
+            newParcel();
+          }
+        } else job.lt = 0;
+        return;
+      }
+      if (job.kind === 'mat') {
+        if (job.phase === 'find' && d < 9 && still) {
+          job.lt = (job.lt || 0) + dt;
+          if (job.lt > 1) {
+            job.lt = 0; bag.visible = false;
+            const k = randomKerb(c.x, c.z, 250, 900);
+            if (!k) { end('Ingen adress att köra till härifrån.'); return; }
+            setGoal(k, k.e.name + ' ' + (1 + Math.floor(Math.random() * 60)));
+            const L = routeLen(route);
+            Object.assign(job, { phase: 'deliver', t: 0, par: L / 9 + 25, len: L });
+            toast('Maten är i boxen. Kör den till ' + job.goal.name + ' medan den är varm!');
+          }
+        } else if (job.phase === 'deliver' && d < 11 && still) {
+          job.lt = (job.lt || 0) + dt;
+          if (job.lt > 1) {
+            job.lt = 0;
+            const late = job.t > job.par, quick = job.t < job.par * 0.75;
+            const kr = Math.max(25, Math.round((60 + job.len * 0.22) * (late ? 0.7 : quick ? 1.35 : 1)));
+            job.done++;
+            pay(kr, late ? 'Maten kom fram, men den hann kallna.' : quick ? 'Varm och god! Kunden ger dricks.' : 'Maten är levererad.');
+            newFood();
+          }
+        } else job.lt = 0;
+        return;
+      }
+      if (job.kind === 'polis') {
+        const r = job.robber;
+        if (!r || !cars.includes(r)) { end('Rånaren kom undan.'); return; }
+        job.goal = { x: r.x, z: r.z, name: r.M.name };
+        // the robber runs from you: now and then a new place to get to, well away from you
+        if (r.bot && (job.fleeT -= dt) <= 0) {
+          job.fleeT = 3;
+          const ax = r.x - c.x, az = r.z - c.z, al = Math.hypot(ax, az) || 1;
+          let best = -1, bv = -Infinity;
+          for (let i = 0; i < 40; i++) {
+            const n = Math.floor(Math.random() * nodes.length), N = nodes[n];
+            if (!N.nb.length) continue;
+            const dd = Math.hypot(N.x - r.x, N.z - r.z), v = ((N.x - r.x) * ax + (N.z - r.z) * az) / al - Math.abs(dd - 450) * 0.3;
+            if (dd > 200 && v > bv) { bv = v; best = n; }
+          }
+          if (best >= 0) { r.bot.goal = { node: best, x: nodes[best].x, z: nodes[best].z }; if (r.bot.phase === 'edge') r.bot.next = chooseNext(r.bot.from, r.bot.to, r.bot.goal, true); }
+        }
+        // caught: the getaway car wrecked, or stopped with you right on it
+        const rs = Math.hypot(r.vx, r.vz), close = Math.hypot(r.x - c.x, r.z - c.z) < (r.M.L + c.M.L) / 2 + 3;
+        job.heldT = rs < 1.5 && close ? job.heldT + dt : 0;
+        if (r.dead || job.heldT > 2) {
+          const kr = Math.round(300 + Math.max(0, job.par - job.t) * 4);
+          const spot = exitSpot(r);
+          if (spot && r.occupant) { const p = makePerson(r.occupant, spot.x, spot.z, { state: 'idle', face: r.h, dodgeT: 0 }); p.cuffed = true; p.rot = r.h; }
+          setOccupant(r, null); r.bot = null; r.getaway = false; r.keep = false; job.robber = null;
+          job.done++;
+          pay(kr, 'Rånaren är gripen!');
+          end();
+          return;
+        }
+        if (job.t > job.par || Math.hypot(r.x - c.x, r.z - c.z) > 700) { end('Rånaren kom undan.'); return; }
+        return;
+      }
+      if (job.kind === 'battaxi') {
+        const P = job.pier;
+        if (job.phase === 'find') {
+          if (d < 16 && still) {
+            job.bt += dt;
+            const p = job.who;
+            if (persons.includes(p)) { p.ai = { state: 'board', car: c, dodgeT: 0 }; }
+            if (job.bt > 1.5 || !persons.includes(p) || Math.hypot(p.x - c.x, p.z - c.z) < c.M.W / 2 + 1.5) {
+              if (persons.includes(p)) removePerson(p);
+              job.npcs = []; job.rider = p.id;
+              const list = pierList().filter((q) => q !== P && Math.hypot(q.x - c.x, q.z - c.z) > 450);
+              if (!list.length) { end('Ingen brygga att åka till härifrån.'); return; }
+              const to = rpick(list), L = Math.hypot(to.x - c.x, to.z - c.z) * 1.35;
+              Object.assign(job, { phase: 'ride', t: 0, pier: to, par: L / 12 + 30, len: L, hp: c.health });
+              job.goal = { x: to.x, z: to.z, name: to.name };
+              toast('Resenären: Till ' + to.name + ', tack!');
+            }
+          } else job.bt = 0;
+        } else if (job.phase === 'ride' && d < 16 && still) {
+          const late = job.t > job.par, dmg = Math.max(0, job.hp - c.health);
+          const kr = Math.max(40, Math.round((140 + job.len * 0.3) * (job.t < job.par * 0.8 ? 1.3 : late ? 0.75 : 1) - dmg * 4));
+          const w = P.walk, p = makePerson(job.rider, w.x, w.z, { state: 'wander', wx: Math.random() - 0.5, wz: Math.random() - 0.5, t: 20, dodgeT: 0 });
+          p.rot = c.h; job.rider = null;
+          job.done++;
+          pay(kr, late ? 'Resenären betalar, men tyckte det tog lång tid.' : job.t < job.par * 0.8 ? 'Snabbt! Resenären ger dricks.' : 'Resenären betalar.');
+          newBoatFare();
+        }
+        return;
+      }
+      if (job.kind === 'buss') {
+        if (d < 12 && still) {
+          job.lt = (job.lt || 0) + dt;
+          const list = job.waiting[job.si];
+          // they walk up to the door and get on, one by one
+          for (const p of list) if (persons.includes(p) && p.ai.state === 'idle') p.ai = { state: 'board', car: c, dodgeT: 0 };
+          for (const p of list) if (persons.includes(p) && (Math.hypot(p.x - c.x, p.z - c.z) < c.M.W / 2 + 1.2 || job.lt > 5)) removePerson(p);
+          if (job.lt > 2.5 && !list.some((p) => persons.includes(p))) {
+            job.lt = 0;
+            const n = list.length, last = job.si === job.stops.length - 1;
+            if (stopMeshes[job.si]) stopMeshes[job.si].visible = false;
+            pay(40 + n * 30 + (last ? 250 : 0), last ? 'Slutstation! ' + (job.done + n) + ' resenärer.' : n + (n === 1 ? ' resenär' : ' resenärer') + ' klev på.');
+            job.done += n;
+            if (last) { end(); return; }
+            job.si++;
+            setGoal(job.stops[job.si], 'Hållplats ' + (job.si + 1) + ' av ' + job.stops.length);
+          }
+        } else job.lt = 0;
+      }
+    }
+
+    // the panel at the top: what to do, how far, the clock
+    let lastHud = '';
+    function hud() {
+      el2.cashTag.hidden = !earned && !job;
+      el2.cash.textContent = fmtKr(earned);
+      document.body.classList.toggle('job', !!job);
+      el2.job.hidden = !job;
+      if (!job) { lastHud = ''; return; }
+      const T = target(), c = job.car, d = T ? Math.hypot(T.x - c.x, T.z - c.z) : 0;
+      let icon, title, hint, clockTxt = '';
+      if (job.kind === 'race') {
+        icon = '⚑'; title = 'Gatlopp: ' + job.race.name;
+        hint = job.t < 0 ? 'Gör dig redo …' : 'Kontroll ' + Math.min(job.i, job.race.pts.length - 1) + ' av ' + (job.race.pts.length - 1) + ' · ' + fmtDist(d) + (records[job.race.id] ? ' · rekord ' + fmtTime(records[job.race.id]) : '');
+        clockTxt = job.t < 0 ? '' : fmtTime(job.t);
+      } else if (job.kind === 'taxi') {
+        icon = 'T'; title = job.phase === 'ride' ? 'Taxi till ' + job.goal.name : 'Taxi: hämta kunden';
+        hint = (job.phase === 'board' ? 'Kunden kliver in …' : fmtDist(d) + (job.phase === 'ride' ? ' · stanna vid trottoaren' : ' · ' + job.goal.name)) + ' · ' + job.done + ' körda';
+        if (job.phase === 'ride') clockTxt = fmtTime(Math.max(0, job.par - job.t));
+      } else if (job.kind === 'paket') {
+        icon = '▣'; title = job.phase === 'deliver' ? 'Leverera till ' + job.goal.name : 'Hämta paketen';
+        hint = fmtDist(d) + ' · ' + (job.phase === 'deliver' ? 'stanna vid adressen' : job.goal.name) + ' · ' + job.done + ' levererade';
+        if (job.phase === 'deliver') clockTxt = fmtTime(Math.max(0, job.par - job.t));
+      } else if (job.kind === 'mat') {
+        icon = 'M'; title = job.phase === 'deliver' ? 'Leverera maten till ' + job.goal.name : 'Hämta maten på ' + job.place;
+        hint = fmtDist(d) + ' · ' + (job.phase === 'deliver' ? 'stanna vid adressen' : 'stanna vid restaurangen') + ' · ' + job.done + ' levererade';
+        if (job.phase === 'deliver') clockTxt = fmtTime(Math.max(0, job.par - job.t));
+      } else if (job.kind === 'polis') {
+        icon = '★'; title = 'Polisuppdrag: stoppa rånaren';
+        hint = fmtDist(d) + ' · ' + job.goal.name + ' · kör ikapp och stoppa bilen';
+        clockTxt = fmtTime(Math.max(0, job.par - job.t));
+      } else if (job.kind === 'battaxi') {
+        icon = '⚓'; title = job.phase === 'ride' ? 'Båttaxi till ' + job.goal.name : 'Båttaxi: hämta vid ' + job.goal.name;
+        hint = fmtDist(d) + ' · lägg till vid bryggan · ' + job.done + ' körda';
+        if (job.phase === 'ride') clockTxt = fmtTime(Math.max(0, job.par - job.t));
+      } else {
+        icon = 'SL'; title = 'Busslinje: ' + job.goal.name;
+        hint = fmtDist(d) + ' · stanna vid hållplatsen · ' + job.done + ' resenärer';
+      }
+      const key = icon + title + hint + clockTxt;
+      if (key === lastHud) return;
+      lastHud = key;
+      el2.icon.textContent = icon; el2.title.textContent = title; el2.hint.textContent = hint; el2.clock.textContent = clockTxt;
+    }
+
+    // on the maps: the GPS line, where to go (an arrow at the edge of the minimap when it is further off) and the races
+    function drawMini(g, px, pz, u) {
+      const T = target();
+      if (route && T) {
+        g.strokeStyle = 'rgba(255,194,26,.9)'; g.lineWidth = 4.2 * u; g.lineJoin = g.lineCap = 'round';
+        g.beginPath(); route.forEach(([x, z], i) => (i ? g.lineTo(x, z) : g.moveTo(x, z))); g.stroke();
+      }
+      const mark = (x, z, col, r) => {
+        const dx = x - px, dz = z - pz, d = Math.hypot(dx, dz), R = 100;
+        if (d < R) { g.fillStyle = col; g.strokeStyle = '#ffffff'; g.lineWidth = 2 * u; g.beginPath(); g.arc(x, z, r * u, 0, TAU); g.fill(); g.stroke(); return; }
+        const ux = dx / d, uz = dz / d, ex = px + ux * R, ez = pz + uz * R;
+        g.fillStyle = col; g.strokeStyle = '#ffffff'; g.lineWidth = 1.5 * u;
+        g.beginPath(); g.moveTo(ex + ux * 9 * u, ez + uz * 9 * u); g.lineTo(ex - uz * 6 * u, ez + ux * 6 * u); g.lineTo(ex + uz * 6 * u, ez - ux * 6 * u); g.closePath(); g.fill(); g.stroke();
+      };
+      if (!job || job.kind !== 'race') for (const r of RACES) if (Math.hypot(r.pts[0].x - px, r.pts[0].z - pz) < 105) mark(r.pts[0].x, r.pts[0].z, '#ffe14a', 4.5);
+      if (Math.hypot(SCRAP.x - px, SCRAP.z - pz) < 105) mark(SCRAP.x, SCRAP.z, '#4cc26a', 5);
+      if (T) mark(T.x, T.z, job.kind === 'race' ? '#ff7a1a' : '#ffc21a', 6);
+    }
+    function drawBig(g, toX, toY, k) {
+      if (route && target()) {
+        g.strokeStyle = 'rgba(240,160,0,.9)'; g.lineWidth = Math.max(3, 5 * k); g.lineJoin = g.lineCap = 'round';
+        g.beginPath(); route.forEach(([x, z], i) => (i ? g.lineTo(toX(x), toY(z)) : g.moveTo(toX(x), toY(z)))); g.stroke();
+      }
+      if (job && job.kind === 'race') {
+        g.strokeStyle = 'rgba(255,122,26,.75)'; g.lineWidth = 3; g.setLineDash([6, 5]);
+        g.beginPath(); job.race.pts.forEach((p, i) => (i ? g.lineTo(toX(p.x), toY(p.z)) : g.moveTo(toX(p.x), toY(p.z)))); g.stroke(); g.setLineDash([]);
+      }
+      for (const r of RACES) {
+        const X = toX(r.pts[0].x), Y = toY(r.pts[0].z);
+        g.fillStyle = '#ffe14a'; g.strokeStyle = '#1b1c1e'; g.lineWidth = 1.5;
+        g.beginPath(); g.moveTo(X, Y + 7); g.lineTo(X, Y - 11); g.lineTo(X + 11, Y - 7); g.lineTo(X, Y - 3); g.stroke(); g.fill();
+        if (k > 0.3) { g.font = '800 11px Overpass, sans-serif'; g.textAlign = 'left'; g.textBaseline = 'middle'; g.lineWidth = 3; g.strokeStyle = 'rgba(255,255,255,.85)'; g.strokeText(r.name, X + 13, Y - 6); g.fillStyle = '#7a5600'; g.fillText(r.name, X + 13, Y - 6); }
+      }
+      {
+        // the scrapyard: a green square with a krona sign
+        const X = toX(SCRAP.x), Y = toY(SCRAP.z);
+        g.fillStyle = '#4cc26a'; g.strokeStyle = '#ffffff'; g.lineWidth = 2; g.fillRect(X - 7, Y - 7, 14, 14); g.strokeRect(X - 7, Y - 7, 14, 14);
+        g.fillStyle = '#ffffff'; g.font = '900 10px Overpass, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('kr', X, Y + 0.5);
+        if (k > 0.3) { g.font = '800 11px Overpass, sans-serif'; g.textAlign = 'left'; g.lineWidth = 3; g.strokeStyle = 'rgba(255,255,255,.85)'; g.strokeText('Bilskroten', X + 11, Y); g.fillStyle = '#1f6b2f'; g.fillText('Bilskroten', X + 11, Y); }
+      }
+      const T = target();
+      if (T) { g.fillStyle = '#ffc21a'; g.strokeStyle = '#ffffff'; g.lineWidth = 2.5; g.beginPath(); g.arc(toX(T.x), toY(T.z), 7, 0, TAU); g.fill(); g.stroke(); }
+    }
+    // say what J does the first time you sit in a car that has a job
+    function entered(c) {
+      const k = kindOf(c);
+      if (k && !job && !(hinted[k])) {
+        hinted[k] = true;
+        setTimeout(() => toast({ taxi: 'Tryck J för att köra taxi.', paket: 'Tryck J för att köra ut paket.', buss: 'Tryck J för att köra en busslinje.', mat: 'Tryck J för att köra ut mat.',
+          polis: 'Tryck J för ett polisuppdrag: stoppa en rånare.', battaxi: 'Tryck J för att köra båttaxi mellan bryggorna.' }[k]), 2600);
+      }
+    }
+    return {
+      key, update, hud, drawMini, drawBig, entered, RACES, PLACES,
+      // paying out of the Kassa: false (and nothing taken) when there is not enough
+      spend(kr) { if (earned < kr) return false; earned -= kr; save(); return true; },
+      // money from elsewhere (the Dalahästar's finder's fee), without a word of its own
+      reward(kr) { earned += kr; save(); },
+      SCRAP, priceOf,
+      get job() { return job; }, get earned() { return earned; }, get route() { return route; },
+      // test hooks: hold the race countdown short, skip to a checkpoint
+      _skipCountdown() { if (job && job.kind === 'race') job.t = 0; }
+    };
+  })();
+
+  /* ================= ice cream kiosks and balloon sellers ================= */
+  // A glasskiosk and a balloon seller at the car park where you start, in Kungsträdgården, on Medborgarplatsen and on
+  // Djurgården. Walk up and press E to buy with what is in the Kassa. You eat the ice cream as you walk, lick by lick,
+  // and the balloons follow you on their strings, out of the car window when you drive. V lets one go, and with
+  // balloons in your hand you fall slowly when you jump.
+  const VENDORS = (() => {
+    const ICE_PRICE = 35, BALLOON_PRICE = 40, MAX_BALLOONS = 6, SELLER_STOCK = 10, BITES = 10;
+    const FLAVORS = [['vanilj', 0xf6e7b8], ['choklad', 0x6b3e26], ['jordgubb', 0xf28bb0], ['päron', 0xdfe68f], ['pistage', 0xa9cf8c],
+      ['lakrits', 0x2c2a2b], ['mango', 0xffb23f], ['blåbär', 0x6d5bc4], ['hallon', 0xd6336c], ['citron', 0xfff27a]];
+    const BALLOONS = [[0xe0203a, 'röd'], [0x2f6fdb, 'blå'], [0xf7c600, 'gul'], [0x2fae5a, 'grön'], [0xff6fb0, 'rosa'], [0x8e44ad, 'lila'], [0xff8a1f, 'orange'], [0x4fc3f7, 'ljusblå']];
+    const PINK = 0xe8457a, CREAM = 0xf6f1e8, STEEL = 0xc5c9ce;
+    // where they stand: x, z and which way the hatch and the seller face
+    const lotFace = Math.atan2(LOT.f.ux, LOT.f.uz);
+    const SPOTS = [
+      { name: 'Skeppsbron', kiosk: [...LOT.at(4, 27), lotFace], seller: [...LOT.at(9, 20.5), lotFace] },
+      { name: 'Kungsträdgården', kiosk: [55, -512.5, 0], seller: [31, -489, 0] },
+      { name: 'Medborgarplatsen', kiosk: [190, 1452, Math.PI], seller: [172, 1446, Math.PI] },
+      { name: 'Djurgården', kiosk: [1252, -112, -Math.PI / 2], seller: [1247, -100, -Math.PI / 2] }
+    ];
+    // a point given in a kiosk's own frame (front towards +z) out in the world
+    const toWorld = (k, lx, lz) => [k.x + lx * Math.cos(k.face) + lz * Math.sin(k.face), k.z - lx * Math.sin(k.face) + lz * Math.cos(k.face)];
+    const toLocal = (k, x, z) => { const dx = x - k.x, dz = z - k.z; return [dx * Math.cos(k.face) - dz * Math.sin(k.face), dx * Math.sin(k.face) + dz * Math.cos(k.face)]; };
+
+    /* textures: the GLASS sign, the waffle of the cones and the chalkboard with the flavours */
+    const drawCone = (g, x, y, s) => {
+      g.fillStyle = '#d9a35f'; g.beginPath(); g.moveTo(x - s * 0.5, y); g.lineTo(x + s * 0.5, y); g.lineTo(x, y + s * 1.25); g.closePath(); g.fill();
+      g.fillStyle = '#f7c8d8'; g.beginPath(); g.arc(x, y - s * 0.12, s * 0.5, 0, TAU); g.fill();
+      g.fillStyle = '#fff6dc'; g.beginPath(); g.arc(x, y - s * 0.62, s * 0.4, 0, TAU); g.fill();
+    };
+    const signTex = canvasTex(512, 112, (g, w, h) => {
+      g.fillStyle = '#e8457a'; g.fillRect(0, 0, w, h);
+      g.strokeStyle = '#ffffff'; g.lineWidth = 5; roundRect(g, 8, 8, w - 16, h - 16, 14); g.stroke();
+      g.fillStyle = '#ffffff'; g.font = '900 74px Overpass, "Arial Black", Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText('G L A S S', w / 2, h / 2 + 5);
+      drawCone(g, 58, 44, 34); drawCone(g, w - 58, 44, 34);
+    });
+    const waffleTex = canvasTex(64, 64, (g, w, h) => {
+      g.fillStyle = '#d9a35f'; g.fillRect(0, 0, w, h);
+      g.strokeStyle = '#a8712f'; g.lineWidth = 3;
+      for (let i = -64; i < 128; i += 16) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i + 64, 64); g.stroke(); g.beginPath(); g.moveTo(i + 64, 0); g.lineTo(i, 64); g.stroke(); }
+    }, true);
+    waffleTex.repeat.set(5, 2);
+    const menuTex = canvasTex(256, 384, (g, w, h) => {
+      g.fillStyle = '#7a5230'; g.fillRect(0, 0, w, h);
+      g.fillStyle = '#24372c'; g.fillRect(10, 10, w - 20, h - 20);
+      g.fillStyle = '#ffffff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.font = '900 44px Overpass, "Arial Black", Arial, sans-serif'; g.fillText('GLASS', w / 2, 46);
+      drawCone(g, 40, 36, 22); drawCone(g, w - 40, 36, 22);
+      g.font = '700 22px Overpass, Arial, sans-serif'; g.fillStyle = '#ffe7a3'; g.fillText('Strut, två kulor', w / 2, 96);
+      g.font = '900 30px Overpass, Arial, sans-serif'; g.fillText(ICE_PRICE + ' kr', w / 2, 128);
+      g.font = '600 20px Overpass, Arial, sans-serif'; g.fillStyle = '#ffffff';
+      FLAVORS.forEach(([n, c], i) => {
+        const x = i % 2 ? w * 0.7 : w * 0.3, y = 178 + Math.floor(i / 2) * 38;
+        g.fillStyle = hex(c); g.beginPath(); g.arc(x - 52, y, 9, 0, TAU); g.fill();
+        g.fillStyle = '#ffffff'; g.fillText(n[0].toUpperCase() + n.slice(1), x + 6, y);
+      });
+    });
+
+    /* an ice cream: a waffle cone with two scoops, in your hand (and the kiosk seller's) */
+    const iceCone = new THREE.ConeGeometry(0.06, 0.18, 12, 1, true).rotateX(Math.PI);
+    const iceScoop = new THREE.SphereGeometry(0.066, 12, 9);
+    function makeIce(cols) {
+      const group = new THREE.Group(), cone = new THREE.Mesh(iceCone, waffleMat), s = [];
+      cone.position.y = -0.03;
+      group.add(cone);
+      cols.forEach((c, i) => { const m = new THREE.Mesh(iceScoop, std({ color: c, roughness: 0.5 })); m.position.y = 0.08 + i * 0.085; m.castShadow = true; group.add(m); s.push(m); });
+      cone.castShadow = true;
+      return { group, cone, scoops: s };
+    }
+    /* the kiosk: a little white hut with a serving hatch, a striped awning, a big cone on the roof and a menu board */
+    const kioskGeo = (() => {
+      const B = new Builder();
+      B.box(-1.4, 0, -1.2, 1.4, 0.06, 1.2, 0x8a8f94);
+      B.box(-1.4, 0.06, -1.2, -1.32, 2.6, 1.2, CREAM); B.box(1.32, 0.06, -1.2, 1.4, 2.6, 1.2, CREAM);
+      B.box(-1.32, 0.06, -1.2, 1.32, 2.6, -1.12, CREAM);
+      B.box(-1.32, 0.06, 1.12, 1.32, 1.0, 1.2, CREAM);
+      B.box(-1.32, 1.0, 1.12, -1.12, 2.0, 1.2, CREAM); B.box(1.12, 1.0, 1.12, 1.32, 2.0, 1.2, CREAM);
+      B.box(-1.32, 2.0, 1.12, 1.32, 2.6, 1.2, PINK);
+      // pink bands round the bottom, a steel counter in the hatch, a back door
+      B.box(-1.44, 0.06, -1.24, 1.44, 0.2, 1.24, 0xb7385f);
+      B.box(-1.42, 0.82, 1.2, 1.42, 0.9, 1.23, PINK); B.box(-1.43, 0.82, -1.2, -1.4, 0.9, 1.2, PINK); B.box(1.4, 0.82, -1.2, 1.43, 0.9, 1.2, PINK);
+      B.box(-1.18, 1.0, 0.98, 1.18, 1.05, 1.42, STEEL);
+      B.box(-0.42, 0.2, -1.24, 0.42, 2.02, -1.2, 0x5f7480); B.box(0.24, 1.0, -1.27, 0.32, 1.06, -1.24, STEEL);
+      // the roof, with a pink edge and the ceiling inside
+      B.box(-1.56, 2.6, -1.36, 1.56, 2.74, 1.36, 0xefe9df);
+      B.box(-1.57, 2.6, 1.35, 1.57, 2.78, 1.39, PINK); B.box(-1.57, 2.6, -1.39, 1.57, 2.78, -1.35, PINK);
+      B.quad([-1.32, 2.59, -1.12], [1.32, 2.59, -1.12], [1.32, 2.59, 1.12], [-1.32, 2.59, 1.12], 0xfdfcf8, null, [0, -1, 0]);
+      // inside: the freezer with the tubs of ice cream under its glass lid
+      B.box(-1.2, 0.06, 0.42, 1.2, 0.92, 1.08, 0xf2f4f6);
+      FLAVORS.slice(0, 7).forEach(([, c], i) => B.box(-1.1 + i * 0.315, 0.92, 0.5, -0.83 + i * 0.315, 0.98, 0.98, c));
+      // a litter bin by the hatch
+      B.prism(1.9, 1.55, 0.24, 0, 0.82, 12, 0x2f6b43); B.prism(1.9, 1.55, 0.26, 0.82, 0.88, 12, 0x24372c);
+      return B.build();
+    })();
+    const kioskMat = std({ vertexColors: true, roughness: 0.65 });
+    // the awning: stripes sloping out over the hatch with a scalloped edge, seen from both sides
+    const awningGeo = (() => {
+      const B = new Builder(), n = 10, x0 = -1.5, x1 = 1.5;
+      for (let i = 0; i < n; i++) {
+        const a = x0 + ((x1 - x0) * i) / n, b = x0 + ((x1 - x0) * (i + 1)) / n, col = i % 2 ? 0xffffff : PINK;
+        B.quad([a, 2.14, 1.22], [b, 2.14, 1.22], [b, 1.96, 1.86], [a, 1.96, 1.86], col, null, [0, 1, 0.3]);
+        B.quad([a, 1.96, 1.86], [b, 1.96, 1.86], [b, 1.84, 1.86], [a, 1.84, 1.86], col, null, [0, 0, 1]);
+        B.tri([a, 1.84, 1.86], [b, 1.84, 1.86], [(a + b) / 2, 1.76, 1.86], col, [0, 0, 1]);
+      }
+      for (const s of [-1, 1]) B.tri([s * 1.5, 2.14, 1.22], [s * 1.5, 1.96, 1.86], [s * 1.5, 1.84, 1.86], PINK, [s, 0, 0]);
+      return B.build();
+    })();
+    const awningMat = std({ vertexColors: true, roughness: 0.8, side: THREE.DoubleSide });
+    const signMat = std({ map: signTex, roughness: 0.5, emissive: 0x331018, emissiveMap: signTex });
+    const menuMat = std({ map: menuTex, roughness: 0.85, side: THREE.DoubleSide });
+    const waffleMat = std({ map: waffleTex, roughness: 0.8, side: THREE.DoubleSide });
+    const scoopMat = std({ vertexColors: true, roughness: 0.45 });
+    // the big cone on the roof
+    const bigConeGeo = new THREE.ConeGeometry(0.44, 1.1, 20, 1, true).rotateX(Math.PI).translate(0, 3.32, 0);
+    const bigScoopGeo = (() => {
+      const m = new Merger();
+      m.add(new THREE.SphereGeometry(0.47, 18, 12), 0xf28bb0, 0, 3.92, 0);
+      m.add(new THREE.SphereGeometry(0.4, 18, 12), 0xfff6dc, 0, 4.48, 0);
+      m.add(new THREE.SphereGeometry(0.1, 10, 8), 0xc8102e, 0, 4.92, 0);
+      m.add(new THREE.CylinderGeometry(0.012, 0.012, 0.16, 5), 0x3f6b22, 0.03, 5.05, 0, 0, 0, -0.3);
+      return m.build();
+    })();
+    const frontSignGeo = new THREE.PlaneGeometry(2.6, 0.57), sideSignGeo = new THREE.PlaneGeometry(2.3, 0.5), menuGeo = new THREE.PlaneGeometry(0.6, 0.9);
+    const kiosks = SPOTS.map((sp) => {
+      const [x, z, face] = sp.kiosk, k = { name: sp.name, x, z, face, serveT: 0 };
+      const g = new THREE.Group();
+      g.position.set(x, 0, z); g.rotation.y = face;
+      const body = new THREE.Mesh(kioskGeo, kioskMat), awning = new THREE.Mesh(awningGeo, awningMat);
+      const cone = new THREE.Mesh(bigConeGeo, waffleMat), scoops = new THREE.Mesh(bigScoopGeo, scoopMat);
+      for (const m of [body, awning, cone, scoops]) { m.castShadow = true; m.receiveShadow = true; g.add(m); }
+      // the GLASS sign on the front and both sides, the menu on both faces of the A-frame
+      const sign = (geo, px, pz, ry) => { const m = new THREE.Mesh(geo, signMat); m.position.set(px, 2.3, pz); m.rotation.y = ry; g.add(m); };
+      sign(frontSignGeo, 0, 1.205, 0); sign(sideSignGeo, 1.405, 0, Math.PI / 2); sign(sideSignGeo, -1.405, 0, -Math.PI / 2);
+      for (const s of [1, -1]) {
+        const m = new THREE.Mesh(menuGeo, menuMat);
+        m.position.set(-1.95, 0.55, 1.73 + s * 0.135); m.rotation.set(-s * 0.29, s > 0 ? 0 : Math.PI, 0); m.castShadow = true;
+        g.add(m);
+      }
+      scene.add(g);
+      // the seller behind the counter: in a white coat and a pink cap, turning to whoever comes up
+      const id = makeIdentity({ shirt: 0xfbfbf8, hat: 'cap', hatColor: PINK, sleeves: true });
+      k.seller = makePersonModel(id);
+      const [sx, sz] = toWorld(k, 0, 0.1);
+      k.seller.group.position.set(sx, 0, sz);
+      k.seller.group.rotation.y = face; k.look = face;
+      const hand = makeIce([FLAVORS[2][1], FLAVORS[0][1]]);
+      hand.group.position.set(0, -0.6, 0.06); hand.group.rotation.x = 1.4; hand.group.visible = false;
+      k.seller.armR.add(hand.group); k.handIce = hand.group;
+      addOBox(x, z, Math.cos(face), -Math.sin(face), 1.46, 1.32, 3);
+      addCircle(...toWorld(k, -1.95, 1.73), 0.42, 1.1);
+      addCircle(...toWorld(k, 1.9, 1.55), 0.3, 0.9);
+      return k;
+    });
+
+    // your ice cream: held up in the right hand, and every few seconds a lick
+    const HOLD = -0.75;
+    let ice = null;
+    function dropIce() { if (ice) { player.model.armR.remove(ice.model.group); for (const s of ice.model.scoops) s.material.dispose(); } ice = null; }
+
+    /* balloons on strings: lift, a little wind, drag through the air, kept apart from each other and held by the string */
+    const balloonGeo = (() => {
+      const m = new Merger();
+      m.add(new THREE.SphereGeometry(0.27, 16, 12).scale(1, 1.17, 1), 0xffffff, 0, 0, 0);
+      m.add(new THREE.ConeGeometry(0.045, 0.07, 8), 0xffffff, 0, -0.33, 0, Math.PI, 0, 0);
+      return m.build();
+    })();
+    const balloonMats = new Map(BALLOONS.map(([c]) => [c, std({ color: c, vertexColors: true, roughness: 0.2, metalness: 0.05 })]));
+    const stringMat = new THREE.LineBasicMaterial({ color: 0xf2f2f2, transparent: true, opacity: 0.85 });
+    const tailGeo = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([0, -0.35, 0, 0.04, -0.9, 0.02, 0.04, -0.9, 0.02, -0.02, -1.45, 0], 3));
+    const UP = new THREE.Vector3(0, 1, 0), _v = new THREE.Vector3(), _q = new THREE.Vector3();
+    const wind = { x: 0, z: 0 };
+    function makeBalloon(col, x, y, z, len) {
+      const mesh = new THREE.Mesh(balloonGeo, balloonMats.get(col));
+      mesh.castShadow = true; mesh.position.set(x, y, z);
+      scene.add(mesh);
+      return { col, mesh, x, y, z, ox: x, oy: y, oz: z, vx: 0, vy: 0, vz: 0, len, want: len, ph: Math.random() * TAU };
+    }
+    function makeBunch(cap) {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(cap * 12), 3));
+      const lines = new THREE.LineSegments(geo, stringMat);
+      lines.frustumCulled = false;
+      scene.add(lines);
+      return { list: [], lines, ax: null, ay: 0, az: 0 };
+    }
+    function stepBunch(B, ax, ay, az, dt) {
+      const L = B.list;
+      // a jump of the hand further than a balloon can follow (a teleport, a ride skipped ahead): they come along
+      if (B.ax !== null && (ax - B.ax) ** 2 + (ay - B.ay) ** 2 + (az - B.az) ** 2 > 64) {
+        for (const b of L) { b.x += ax - B.ax; b.y += ay - B.ay; b.z += az - B.az; b.vx = b.vy = b.vz = 0; }
+      }
+      B.ax = ax; B.ay = ay; B.az = az;
+      const drag = 1 - Math.exp(-2.4 * dt);
+      for (const b of L) {
+        b.ox = b.x; b.oy = b.y; b.oz = b.z;
+        const wx = wind.x + Math.sin(clock * 1.3 + b.ph) * 0.5, wz = wind.z + Math.cos(clock * 1.1 + b.ph * 1.7) * 0.5;
+        b.vx += (wx - b.vx) * drag; b.vz += (wz - b.vz) * drag; b.vy += 5 * dt - b.vy * drag;
+        b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt;
+      }
+      for (let i = 0; i < L.length; i++) for (let j = i + 1; j < L.length; j++) {
+        const p = L[i], q = L[j], dx = p.x - q.x, dy = p.y - q.y, dz = p.z - q.z, d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 > 0.3 || d2 < 1e-8) continue;
+        const d = Math.sqrt(d2), push = (0.55 - d) * 0.25 / d;
+        p.x += dx * push; p.y += dy * push; p.z += dz * push; q.x -= dx * push; q.y -= dy * push; q.z -= dz * push;
+      }
+      const pos = B.lines.geometry.attributes.position.array;
+      L.forEach((b, i) => {
+        if (b.len > b.want) b.len = Math.max(b.want, b.len - 2.2 * dt);
+        const dx = b.x - ax, dy = b.y - ay, dz = b.z - az, d = Math.hypot(dx, dy, dz) || 1e-4;
+        if (d > b.len) { const k = b.len / d; b.x = ax + dx * k; b.y = ay + dy * k; b.z = az + dz * k; }
+        b.y = Math.max(b.y, 0.4);
+        b.vx = clamp((b.x - b.ox) / dt, -30, 30); b.vy = clamp((b.y - b.oy) / dt, -30, 30); b.vz = clamp((b.z - b.oz) / dt, -30, 30);
+        // the knot points down the string
+        _q.set(b.x - ax, b.y - ay, b.z - az).normalize();
+        b.mesh.position.set(b.x, b.y, b.z);
+        b.mesh.quaternion.setFromUnitVectors(UP, _q);
+        // the string: from the hand to the knot, with a slight curl halfway
+        const kx = b.x - _q.x * 0.36, ky = b.y - _q.y * 0.36, kz = b.z - _q.z * 0.36, mx = (ax + kx) / 2 + Math.sin(clock * 2 + b.ph) * 0.03, my = (ay + ky) / 2, mz = (az + kz) / 2;
+        pos.set([ax, ay, az, mx, my, mz, mx, my, mz, kx, ky, kz], i * 12);
+      });
+      B.lines.geometry.setDrawRange(0, L.length * 4);
+      B.lines.geometry.attributes.position.needsUpdate = true;
+    }
+    function hideBunch(B, on) { B.lines.visible = on; for (const b of B.list) b.mesh.visible = on; }
+    // balloons let go: up and away with the wind, a bit of string trailing
+    const flying = [];
+    function letFly(b) {
+      const tail = new THREE.LineSegments(tailGeo, stringMat);
+      b.mesh.add(tail); b.mesh.visible = true; b.t = 0;
+      flying.push(b);
+    }
+
+    /* the balloon sellers: a bunch held up high, back to their spot after jumping out of the way of a car */
+    const SELLER_ID = makeIdentity({ shirt: 0x6a3d9a, pants: 0x3b5b8c, hair: 0x2b1d14, hat: 'beanie', hatColor: 0xc8102e, sleeves: true });
+    const sellers = SPOTS.map((sp) => {
+      const [x, z, face] = sp.seller, p = makePerson(SELLER_ID, x, z, { state: 'vendor', post: { x, z, face }, dodgeT: 0 });
+      p.keep = true; p.rot = face;
+      const s = { name: sp.name, p, bunch: makeBunch(SELLER_STOCK), restock: [] };
+      for (let i = 0; i < SELLER_STOCK; i++) addToBunch(s);
+      return s;
+    });
+    function addToBunch(s) {
+      const B = s.bunch, have = new Set(B.list.map((b) => b.col)), free = BALLOONS.filter(([c]) => !have.has(c)), [col] = rpick(free.length ? free : BALLOONS);
+      B.list.push(makeBalloon(col, s.p.x + (Math.random() - 0.5), 3.4 + Math.random() * 0.6, s.p.z + (Math.random() - 0.5), 1.1 + Math.random() * 0.75));
+    }
+    const mine = makeBunch(MAX_BALLOONS);
+
+    /* where your balloons are tied: your left hand, or out of the window of the car you sit in */
+    function anchor() {
+      const S = stop;
+      const seat = driving ? driving.driver : S && S.riding && S.car && S.car.rearSeat && S.car.rearSeat.visible ? S.car.rearSeat : null;
+      if (seat) {
+        const c = driving || S.car, side = Math.sign(seat.position.x) || 1;
+        c.group.updateMatrixWorld(true);
+        return seat.parent.localToWorld(_v.set(side * (c.M.W / 2 + 0.06), seat.position.y + 0.42, seat.position.z + 0.1));
+      }
+      if (player.model.group.visible) { player.model.group.updateMatrixWorld(true); return player.model.armL.localToWorld(_v.set(0, -0.6, 0.02)); }
+      return _v.set(player.x, player.y + 1, player.z);
+    }
+
+    /* buying */
+    let near = null;
+    const broke = (what, kr) => toast(what + ' kostar ' + fmtKr(kr) + ', men du har bara ' + fmtKr(JOBS.earned) + '. Tjäna pengar på ett jobb: ta taxin, Sprintern, SL-bussen, mopeden, en polisbil eller en motorbåt och tryck J, eller sälj en bil på bilskroten i Hammarby hamn.');
+    function buyIce(k) {
+      if (ice) { toast('Du har redan en glass. Ät upp den först!'); return; }
+      if (!JOBS.spend(ICE_PRICE)) { broke('En strut', ICE_PRICE); return; }
+      const a = rpick(FLAVORS), b = rpick(FLAVORS.filter((f) => f !== a));
+      ice = { model: makeIce([a[1], b[1]]), eaten: 0, t: -0.8 };
+      ice.model.group.position.set(0, -0.6, 0.07); ice.model.group.rotation.x = -HOLD; ice.model.group.visible = false;
+      player.model.armR.add(ice.model.group);
+      k.serveT = 1.1;
+      beep([988, 1319], 0.03, 0.16);
+      toast('En strut med ' + a[0] + ' och ' + b[0] + '. Mums! −' + fmtKr(ICE_PRICE));
+    }
+    const handsFull = () => mine.list.length >= MAX_BALLOONS;
+    function buyBalloon(s) {
+      if (handsFull()) { toast('Du har redan ' + MAX_BALLOONS + ' ballonger. Fler orkar du inte hålla i!'); return; }
+      if (!s.bunch.list.length) { toast('Ballongförsäljaren har sålt slut. Vänta lite, snart finns det fler.'); return; }
+      if (!JOBS.spend(BALLOON_PRICE)) { broke('En ballong', BALLOON_PRICE); return; }
+      // one from the seller's bunch, in a colour you don't have yet if there is one
+      const have = new Set(mine.list.map((b) => b.col)), L = s.bunch.list;
+      const pickB = L.find((b) => !have.has(b.col)) || L[0], first = !mine.list.length;
+      L.splice(L.indexOf(pickB), 1);
+      pickB.want = 1.25 + Math.random() * 0.2;
+      pickB.len = Math.max(pickB.want, Math.hypot(pickB.x - player.x, pickB.y - 1, pickB.z - player.z));
+      mine.list.push(pickB);
+      s.restock.push(7 + Math.random() * 5);
+      beep([784, 1175], 0.03, 0.16);
+      const name = BALLOONS.find(([c]) => c === pickB.col)[1];
+      toast('En ' + name + ' ballong! −' + fmtKr(BALLOON_PRICE) + (first && !isTouch ? ' Tryck V om du vill släppa den.' : ''));
+    }
+    function use() {
+      if (!near || driving || !started || paused()) return false;
+      if (near.seller) buyIce(near); else buyBalloon(near);
+      return true;
+    }
+    function letGo() {
+      if (!mine.list.length || paused()) return;
+      const b = mine.list.pop();
+      b.vy = Math.max(b.vy, 1);
+      letFly(b);
+      if (audio && !muted) tone(audio.ctx.currentTime, 'sine', 520, 1250, 0.5, 0.05);
+      toast(mine.list.length ? 'Ballongen flög iväg!' : 'Hej då, ballong!');
+    }
+    function prompt() {
+      if (!near) return null;
+      return near.seller ? (ice ? 'Du har redan en glass' : 'Köp glass · ' + fmtKr(ICE_PRICE)) : handsFull() ? 'Händerna är fulla av ballonger' : 'Köp en ballong · ' + fmtKr(BALLOON_PRICE);
+    }
+
+    /* every frame, after the people have been posed */
+    function update(dt) {
+      wind.x = 0.6 + Math.sin(clock * 0.07) * 0.5; wind.z = -0.3 + Math.cos(clock * 0.05) * 0.45;
+      const walking = !driving && !(stop && (stop.locked || stop.riding)) && player.y < 1.5;
+      near = null;
+      // the kiosks: the seller turns to you, and reaches out with your cone when you buy one
+      for (const k of kiosks) {
+        const [lx, lz] = toLocal(k, player.x, player.z), d = Math.hypot(lx, lz - 1.2);
+        if (walking && lz > 1.25 && lz < 3.6 && Math.abs(lx) < 1.9) near = k;
+        const S = k.seller;
+        if (d > 60) continue;
+        const want = d < 9 ? k.face + clamp(wrapAngle(Math.atan2(player.x - S.group.position.x, player.z - S.group.position.z) - k.face), -0.7, 0.7) : k.face;
+        k.look = lerpAngle(k.look, want, 1 - Math.exp(-4 * dt));
+        S.group.rotation.y = k.look;
+        S.inner.position.y = Math.sin(clock * 1.7 + k.x) * 0.012;
+        k.serveT = Math.max(0, k.serveT - dt);
+        const reach = k.serveT > 0 ? -1.35 : 0;
+        S.armR.rotation.x = lerp(S.armR.rotation.x, reach, 1 - Math.exp(-10 * dt));
+        k.handIce.visible = k.serveT > 0.35;
+      }
+      // the balloon sellers: one arm up holding the bunch
+      for (const s of sellers) {
+        const p = s.p, on = !p.asleep;
+        hideBunch(s.bunch, on);
+        for (let i = s.restock.length - 1; i >= 0; i--) if ((s.restock[i] -= dt) <= 0) { s.restock.splice(i, 1); addToBunch(s); }
+        if (!on) continue;
+        if (walking && Math.hypot(player.x - p.x, player.z - p.z) < 2.3 && !near) near = s;
+        const G = p.model;
+        if (p.grounded) { G.armR.rotation.x = -2.55; G.armR.rotation.z = -0.12; }
+        G.group.updateMatrixWorld(true);
+        const h = G.armR.localToWorld(_v.set(0, -0.62, 0));
+        stepBunch(s.bunch, h.x, h.y, h.z, dt);
+      }
+      // your ice cream: hold it, lick it now and then until it is gone
+      const shown = player.model.group.visible && !player.cuffed;
+      if (ice) {
+        const G = player.model;
+        ice.t += dt;
+        ice.model.group.visible = shown && ice.t > 0;
+        if (shown && ice.t > 0) {
+          const ph = ice.t % 3.2, licking = ph > 2.2;
+          if (licking) ice.eaten += dt;
+          const up = licking ? Math.sin((ph - 2.2) * Math.PI) : 0;
+          G.armR.rotation.x = lerp(HOLD, -2.05, up);
+          G.armR.rotation.z = lerp(0.12, 0.45, up);
+          // tipped towards the mouth, not right over
+          ice.model.group.rotation.set(lerp(-HOLD, 1.25, up), 0, lerp(-0.12, -0.35, up));
+          // the top scoop goes first, then the bottom one, then the cone
+          const [s1, s2] = ice.model.scoops, b = ice.eaten;
+          s2.scale.setScalar(clamp(1 - b / 4, 0, 1)); s2.visible = b < 4;
+          s1.scale.setScalar(clamp(1 - (b - 4) / 4, 0, 1)); s1.visible = b < 8;
+          ice.model.cone.scale.setScalar(clamp(1 - (b - 8) / 2.5, 0.2, 1));
+          if (b >= BITES && !licking) { dropIce(); toast('Mums! Glassen är uppäten.'); }
+        }
+      }
+      // your balloons: they make you fall slowly
+      const n = mine.list.length;
+      player.floaty = n ? 0.6 / (1 + 0.2 * (n - 1)) : 0;
+      if (n) { const a = anchor(); stepBunch(mine, a.x, a.y, a.z, dt); hideBunch(mine, true); }
+      else mine.ax = null;
+      // and the ones that got away
+      for (let i = flying.length - 1; i >= 0; i--) {
+        const b = flying[i];
+        b.t += dt;
+        b.vx += (wind.x * 2.5 - b.vx) * dt * 0.6; b.vz += (wind.z * 2.5 - b.vz) * dt * 0.6; b.vy = Math.min(3.2, b.vy + 2 * dt);
+        b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt;
+        b.mesh.position.set(b.x, b.y, b.z);
+        b.mesh.rotation.set(Math.sin(clock * 1.4 + b.ph) * 0.15, b.ph + b.t * 0.3, Math.cos(clock * 1.2 + b.ph) * 0.15);
+        if (b.y > 170 || b.t > 60) { scene.remove(b.mesh); flying.splice(i, 1); }
+      }
+    }
+
+    /* on the maps: a cone for the kiosks, a balloon for the sellers */
+    function icon(g, kind, X, Y, s) {
+      if (kind === 'ice') {
+        g.fillStyle = '#d9a35f'; g.strokeStyle = '#ffffff'; g.lineWidth = 1.5 * s;
+        g.beginPath(); g.moveTo(X - 3.6 * s, Y - 1 * s); g.lineTo(X + 3.6 * s, Y - 1 * s); g.lineTo(X, Y + 7 * s); g.closePath(); g.fill(); g.stroke();
+        g.fillStyle = '#e8457a'; g.beginPath(); g.arc(X, Y - 2.6 * s, 3.8 * s, 0, TAU); g.fill(); g.stroke();
+      } else {
+        g.strokeStyle = '#ffffff'; g.lineWidth = 1.2 * s; g.beginPath(); g.moveTo(X, Y + 1.5 * s); g.lineTo(X + 1.2 * s, Y + 8 * s); g.stroke();
+        g.fillStyle = '#e0203a'; g.lineWidth = 1.5 * s; g.beginPath(); g.ellipse(X, Y - 2.5 * s, 3.6 * s, 4.4 * s, 0, 0, TAU); g.fill(); g.stroke();
+      }
+    }
+    function drawMini(g, px, pz, u) {
+      for (const k of kiosks) if (Math.abs(k.x - px) < 110 && Math.abs(k.z - pz) < 110) icon(g, 'ice', k.x, k.z, u);
+      for (const s of sellers) if (Math.abs(s.p.x - px) < 110 && Math.abs(s.p.z - pz) < 110) icon(g, 'balloon', s.p.x, s.p.z, u);
+    }
+    function drawBig(g, toX, toY, k) {
+      if (k < 0.2) return;
+      const sc = clamp(k / 0.35, 1.3, 2);
+      for (const q of kiosks) icon(g, 'ice', toX(q.x), toY(q.z), sc);
+      for (const s of sellers) icon(g, 'balloon', toX(s.p.x), toY(s.p.z), sc);
+    }
+
+    return {
+      update, use, letGo, prompt, drawMini, drawBig, kiosks, sellers,
+      get near() { return near; }, get ice() { return ice; }, get balloons() { return mine.list.length; }, get flying() { return flying.length; }
+    };
+  })();
+
+  /* ================= game state ================= */
+  let started = false, pickerOpen = false, nearCar = null;
+  // the car picker and the big map both pause the game
+  const paused = () => pickerOpen || bigmap.open || MP.panelOpen;
+  let camYaw = player.rot, camPitch = 0.3, camDist = 6, lastLook = -1e9, clipT = 1;
+  const camTarget = new THREE.Vector3(player.x, 1.6, player.z);
+  let jumpQueued = false;
+  const keys = {}, joy = { x: 0, y: 0 };
+  let touchBrake = false, isTouch = window.matchMedia('(pointer: coarse)').matches;
+
+  function readInput() {
+    if (!started || paused() || inCustody() || (JOBS.job && JOBS.job.kind === 'race' && JOBS.job.t < 0)) return { fwd: 0, right: 0, run: false, brake: !!driving };
+    const k = keys;
+    const fwd = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0) - joy.y;
+    const right = (k.KeyD || k.ArrowRight ? 1 : 0) - (k.KeyA || k.ArrowLeft ? 1 : 0) + joy.x;
+    return { fwd: clamp(fwd, -1, 1), right: clamp(right, -1, 1), run: !!(k.ShiftLeft || k.ShiftRight) || Math.hypot(joy.x, joy.y) > 0.93, brake: !!k.Space || touchBrake };
+  }
+  function playerIntent(inp) {
+    const fx = Math.sin(camYaw), fz = Math.cos(camYaw), rx = -Math.cos(camYaw), rz = Math.sin(camYaw);
+    let mx = fx * inp.fwd + rx * inp.right, mz = fz * inp.fwd + rz * inp.right;
+    const len = Math.hypot(mx, mz);
+    let speed = 0;
+    if (len > 0.05) { speed = (inp.run ? 9.5 : 4.6) * Math.min(1, len); mx /= len; mz /= len; } else { mx = 0; mz = 0; }
+    return { mx, mz, speed, jump: jumpQueued };
+  }
+
+  function findNearCar() {
+    if (driving || MP.ride || !started || (stop && stop.locked)) return null;
+    let best = null, bd = Infinity;
+    for (const c of cars) {
+      // (a friend's car you can only ride along in, and the sjöpolis's and the navy's boats can't be taken)
+      if (c.remote || c.water) continue;
+      const dx = player.x - c.x, dz = player.z - c.z;
+      if (dx * dx + dz * dz > 100) continue;
+      const co = Math.cos(c.h), si = Math.sin(c.h), lx = dx * co - dz * si, lz = dx * si + dz * co;
+      const sp = Math.hypot(c.vx, c.vz);
+      // (a boat lies below the quay: you step down into it)
+      if (Math.abs(lx) < c.M.W / 2 + 1.6 && Math.abs(lz) < c.M.L / 2 + 1.2 + sp * 0.08 && (c.M.boat ? player.y < 0.5 : player.y < c.parts[c.parts.length - 1].top + 0.8)) {
+        const d = dx * dx + dz * dz;
+        if (d < bd) { bd = d; best = c; }
+      }
+    }
+    return best;
+  }
+  // ashore from a boat: the nearest bit of quay a step or two from the hull, if there is one
+  function boatExitSpot(c) {
+    const co = Math.cos(c.h), si = Math.sin(c.h), hl = c.M.L / 2;
+    let best = null, bd = Infinity;
+    for (const d of [0.8, 1.6, 2.6, 3.6]) for (const s of [1, -1]) for (let lz = -hl; lz <= hl + 0.01; lz += Math.max(0.6, hl / 3)) {
+      for (const [lx, lzz] of [[s * (c.M.W / 2 + d), lz], [0, s * (hl + d)]]) {
+        const x = c.x + lx * co + lzz * si, z = c.z - lx * si + lzz * co, dd = Math.hypot(lx, lzz - (c.driver ? c.driver.position.z : 0));
+        if (dd < bd && personFits(x, z) && !blockedAt(x, z, 0.36)) { best = { x, z }; bd = dd; }
+      }
+    }
+    return best;
+  }
+  function exitSpot(c) {
+    if (c.M.boat) return boatExitSpot(c);
+    const co = Math.cos(c.h), si = Math.sin(c.h), hw = c.M.W / 2 + 0.8, hl = c.M.L / 2 + 0.9;
+    for (const [lx, lz] of [[hw, c.driver.position.z], [-hw, 0], [0, hl], [0, -hl], [hw, 0]]) {
+      const x = c.x + lx * co + lz * si, z = c.z - lx * si + lz * co;
+      if (!personFits(x, z) || blockedAt(x, z, 0.36)) continue;
+      let ok = true;
+      for (const o of cars) if (o !== c && Math.hypot(o.x - x, o.z - z) < o.M.L / 2 + 0.4) { ok = false; break; }
+      if (ok) return { x, z };
+    }
+    return null;
+  }
+  function enterCar(c) {
+    if (c.police) policeCarTaken(c);
+    else if (c.bot && c.occupant) {
+      offense('stöld', 0, c.x, c.z);
+      const spot = exitSpot(c);
+      const npc = makePerson(c.occupant, spot ? spot.x : c.x, spot ? spot.z : c.z, { state: 'flee', t: 4.5, dodgeT: 0 });
+      npc.rot = c.h + Math.PI / 2; npc.vy = 4; npc.grounded = false;
+      if (!spot) npc.y = c.parts[c.parts.length - 1].top;
+      toast('Du tog ' + c.M.def + '!');
+    }
+    c.bot = null;
+    c.fallen = 0;
+    driving = c;
+    setOccupant(c, playerId);
+    for (const m of c.calipers) m.visible = true;
+    // keep whichever gearbox you used last; a car taken on the move starts in a gear that suits its speed
+    c.auto = gearAuto;
+    const vf = Math.max(0, c.vx * Math.sin(c.h) + c.vz * Math.cos(c.h));
+    c.gear = 0; c.inR = false; c.rT = 0; c.blink = 0;
+    while (c.gear < c.M.gears - 1 && vf > c.M.gearTop[c.gear] * 0.85) c.gear++;
+    player.model.group.visible = false;
+    player.vx = player.vz = player.vy = 0;
+    lastLook = -1e9;
+    JOBS.entered(c);
+  }
+  let gearAuto = true;
+  const evNote = () => toast(driving.M.boat ? 'En båt har ingen växellåda: W framåt, S back.' : driving.M.def[0].toUpperCase() + driving.M.def.slice(1) + (driving.M.cvt ? ' har variator och växlar steglöst själv.' : ' är en elbil och har bara en växel.'));
+  function playerShift(dir) {
+    if (!driving || paused()) return;
+    if (driving.M.ev || driving.M.cvt || driving.M.boat) { evNote(); return; }
+    if (driving.auto) { driving.auto = false; gearAuto = false; toast('Manuell växellåda: M växlar upp, N ner, och under ettan ligger R. G byter tillbaka till automat.'); }
+    const c = driving, vf = c.vx * Math.sin(c.h) + c.vz * Math.cos(c.h);
+    // below first gear is R, but only with the car (almost) standing still, like a real gearbox
+    if (c.inR) { if (dir > 0) { c.inR = false; c.gear = 0; onShift(c, 1); } return; }
+    if (dir < 0 && c.gear === 0) {
+      if (Math.abs(vf) > 1.5) { toast('Stanna bilen först, sedan kan du lägga i R.'); return; }
+      c.inR = true; onShift(c, -1); return;
+    }
+    shiftTo(c, c.gear + dir);
+  }
+  function toggleGearbox() {
+    if (!driving || paused()) return;
+    if (driving.M.ev || driving.M.cvt || driving.M.boat) { evNote(); return; }
+    gearAuto = driving.auto = !driving.auto;
+    toast(gearAuto ? 'Automatlåda. Håll in S så bromsar bilen och backar sedan.' : 'Manuell växellåda: M växlar upp, N ner. Under ettan ligger R, och håller du in S när bilen står still läggs R i.');
+  }
+  function exitCar() {
+    const c = driving, out = exitSpot(c);
+    if (c.M.boat && !out) { toast('Kör fram till en kaj eller brygga så att du kan kliva i land.'); return false; }
+    c.auto = true;
+    setOccupant(c, null);
+    driving = null;
+    player.model.group.visible = true;
+    if (out) { player.x = out.x; player.z = out.z; player.y = 0; }
+    else { player.x = c.x; player.z = c.z; player.y = c.parts[c.parts.length - 1].top; }
+    player.rot = c.h; player.vx = player.vz = player.vy = 0;
+    return true;
+  }
+  function toggleCar() {
+    if (!started || paused()) return;
+    if (driving) exitCar();
+    else if (nearCar) enterCar(nearCar);
+  }
+  // a position partway along a stretch of street, kept clear of the junctions at its ends (the middle if it is short)
+  const alongEdge = (f, s, margin) => (f.len > margin * 2 ? clamp(s, margin, f.len - margin) : f.len / 2);
+  function resetToRoad() {
+    if (!driving) return;
+    // a boat is freed where it is: turned and nudged to the nearest open water with room to steer
+    if (driving.M.boat) {
+      const c = driving;
+      for (let r = 0; r <= 30; r += 2) for (let a = 0; a < TAU; a += r ? 0.5 : TAU) for (const dh of [0, Math.PI / 2, -Math.PI / 2, Math.PI]) {
+        const x = c.x + Math.cos(a) * r, z = c.z + Math.sin(a) * r, h = c.h + dh;
+        if (!boatFree(c.M, x, z, h, c) || !boatFree(c.M, x + Math.sin(h) * 4, z + Math.cos(h) * 4, h, c)) continue;
+        c.x = x; c.z = z; c.h = h; c.vx = c.vz = 0; c.steer = 0;
+        camYaw = h;
+        return;
+      }
+      toast('Det finns inget öppet vatten här.');
+      return;
+    }
+    // back onto the nearest street a car can use: a proper street if there is one nearby, otherwise a wide lane
+    const c = driving, ne0 = nearestEdge(c.x, c.z, (e) => e.drive), ne = ne0.e && ne0.d < 60 ? ne0 : nearestEdge(c.x, c.z, (e) => e.emerg && e.hw >= 2.4);
+    if (!ne.e) return;
+    const f = edgeFrame(ne.e.a, ne.e.b), s0 = alongEdge(f, (c.x - f.A.x) * f.ux + (c.z - f.A.z) * f.uz, 12);
+    const hf = Math.atan2(f.ux, f.uz), same = Math.abs(wrapAngle(hf - c.h)) < Math.PI / 2;
+    for (const ds of [0, 6, -6, 12, -12]) for (const side of [1, -1, 0]) {
+      const lat = (same ? 1 : -1) * side * f.lane, s = alongEdge(f, s0 + ds, 3);
+      const x = f.A.x + f.ux * s + f.rx * lat, z = f.A.z + f.uz * s + f.rz * lat, h = (same ? hf : hf + Math.PI) + (side < 0 ? Math.PI : 0);
+      if (!spotFree(c.M, x, z, h, c)) continue;
+      c.x = x; c.z = z; c.h = h; c.vx = c.vz = 0; c.steer = 0;
+      camYaw = h;
+      return;
+    }
+    toast('Det finns ingen ledig plats på gatan här.');
+  }
+
+  /* ---------- car picker ---------- */
+  function drawSilhouette(cv, M) {
+    if (M.boat) {
+      // a boat from the side, on a band of water: the hull from its stations, then what stands on it
+      const g = cv.getContext('2d'), W = cv.width, H = cv.height, s = Math.min((W - 24) / (M.L * 1.08), (H - 24) / 2.2), ox = W / 2, oy = H - 34, P = (z, y) => [ox + z * s, oy - y * s];
+      const poly = (pts, fill) => { g.beginPath(); pts.forEach(([z, y], i) => { const [px, py] = P(z, y); if (i) g.lineTo(px, py); else g.moveTo(px, py); }); g.closePath(); g.fillStyle = fill; g.fill(); };
+      g.clearRect(0, 0, W, H);
+      const st = M.hull, col = hex(M.colors[0]);
+      poly([...st.map(([z, , , t]) => [z, t]), ...st.slice().reverse().map(([z, , k]) => [z, k])], M.boat === 'jetski' ? '#eeeeea' : M.boat === 'riva' ? col : col);
+      if (M.boat === 'jetski') {
+        poly([[0.05, 0.45], [0.45, 0.8], [0.95, 0.74], [1.35, 0.47]], col);
+        poly([[0.05, 0.5], [-0.3, 0.86], [-1.3, 0.8], [-1.3, 0.5]], '#16171a');
+        poly([[0.2, 0.8], [0.32, 1.06], [0.4, 1.06], [0.3, 0.8]], '#2a2c30');
+      } else if (M.boat === 'console') {
+        poly([[0.1, 0.7], [0.8, 0.7], [0.8, 1.1], [0.1, 1.1]], '#eeeeea');
+        poly([[0.68, 1.06], [0.52, 1.42], [0.58, 1.42], [0.74, 1.06]], '#8fa5b5');
+        poly([[-3.1, 0.6], [-3.75, 0.66], [-3.75, 1.44], [-3.1, 1.44]], '#1c1d20');
+        poly([[-3.35, -0.2], [-3.55, -0.2], [-3.55, 0.6], [-3.35, 0.6]], '#1c1d20');
+      } else {
+        poly([[0.97, 0.9], [0.82, 1.25], [0.87, 1.25], [1.02, 0.9]], '#8fa5b5');
+        poly([[-1.6, 0.76], [-1.6, 1.2], [0.5, 1.2], [0.5, 0.76]], '#7fb8b0');
+        g.fillStyle = '#e9dfc6'; const [ax, ay] = P(-4, 0.62), [bx] = P(4, 0.62); g.fillRect(ax, ay - 1, bx - ax, 1.5);
+      }
+      g.fillStyle = 'rgba(143,193,218,.85)'; g.fillRect(0, oy, W, H - oy);
+      return;
+    }
+    if (M.mil) {
+      // the army's vehicles from the side, plainly: the tank's tracks, hull, arrowhead turret and long gun; the armoured
+      // car's sloped hull on eight wheels and its weapon station; the truck's cab and the tarpaulin over the soldiers
+      const g = cv.getContext('2d'), W = cv.width, H = cv.height, gun = M.mil === 'tank' ? 2.4 : 0, hl = M.L / 2;
+      const s = Math.min((W - 20) / (M.L + gun), (H - 14) / 3.4), ox = W / 2 - (gun / 2) * s, oy = H - 8, P = (z, y) => [ox + z * s, oy - y * s];
+      const poly = (pts, fill) => { g.beginPath(); pts.forEach(([z, y], i) => { const [px, py] = P(z, y); if (i) g.lineTo(px, py); else g.moveTo(px, py); }); g.closePath(); g.fillStyle = fill; g.fill(); };
+      const col = hex(M.colors[0]), dark = hex(shade(M.colors[0], 0.7)), steel = '#2b2e2a', win = '#5a6a72';
+      g.clearRect(0, 0, W, H);
+      if (M.mil === 'tank') {
+        poly([[-hl, 0.2], [-hl + 0.3, 0], [hl - 0.4, 0], [hl, 0.4], [hl - 0.1, 0.95], [-hl + 0.1, 0.95]], '#2a2c2e');
+        poly([[-hl - 0.1, 0.85], [hl + 0.1, 0.85], [hl - 0.3, 1.55], [-hl, 1.6]], col);
+        poly([[-2.6, 1.55], [1.1, 1.55], [2.3, 1.85], [1.3, 2.45], [-2.6, 2.4]], dark);
+        poly([[1.9, 1.95], [hl + gun, 2.0], [hl + gun, 2.12], [1.9, 2.15]], steel);
+      } else if (M.mil === 'patria') {
+        poly([[-hl, 0.75], [hl - 0.9, 0.75], [hl, 1.35], [hl - 0.5, 2.05], [-hl + 0.1, 2.25], [-hl, 2.15]], col);
+        poly([[hl - 1.05, 1.5], [hl - 0.62, 1.5], [hl - 0.85, 1.9], [hl - 1.05, 1.95]], win);
+        poly([[-0.9, 2.2], [0.1, 2.2], [0.1, 2.75], [-0.9, 2.75]], dark);
+        poly([[0.1, 2.48], [1.3, 2.48], [1.3, 2.58], [0.1, 2.58]], steel);
+      } else {
+        poly([[-hl, 0.9], [hl, 0.9], [hl, 1.15], [-hl, 1.15]], steel);
+        poly([[hl - 2.0, 1.0], [hl, 1.0], [hl, 2.5], [hl - 0.4, 2.95], [hl - 2.0, 2.95]], col);
+        poly([[hl - 0.55, 2.2], [hl - 0.05, 2.2], [hl - 0.05, 2.5], [hl - 0.42, 2.85], [hl - 0.55, 2.85]], win);
+        poly([[-hl, 1.15], [hl - 2.2, 1.15], [hl - 2.2, 3.25], [-hl, 3.25]], dark);
+      }
+      for (const z of M.axles || [M.wb / 2, -M.wb / 2]) {
+        const [px, py] = P(z, M.R);
+        g.fillStyle = M.mil === 'tank' ? '#3a3d3a' : '#16181b'; g.beginPath(); g.arc(px, py, M.R * s, 0, TAU); g.fill();
+        g.fillStyle = '#4f5a3c'; g.beginPath(); g.arc(px, py, M.R * s * 0.5, 0, TAU); g.fill();
+      }
+      return;
+    }
+    if (M.moped) {
+      // the scooter from the side: wheels, the body under the seat, the frame tube, fork, bars and lamp mask
+      const g = cv.getContext('2d'), W = cv.width, H = cv.height, s = (H - 24) / 1.35, ox = W / 2, oy = H - 10, P = (z, y) => [ox + z * s, oy - y * s];
+      const poly = (pts, fill) => { g.beginPath(); pts.forEach(([z, y], i) => { const [px, py] = P(z, y); if (i) g.lineTo(px, py); else g.moveTo(px, py); }); g.closePath(); g.fillStyle = fill; g.fill(); };
+      const line = (pts, w, col) => { g.beginPath(); pts.forEach(([z, y], i) => { const [px, py] = P(z, y); if (i) g.lineTo(px, py); else g.moveTo(px, py); }); g.lineWidth = w * s; g.strokeStyle = col; g.lineCap = 'round'; g.stroke(); };
+      g.clearRect(0, 0, W, H);
+      line([[-0.18, 0.3], [-0.5, 0.33], [-0.84, 0.45]], 0.1, '#2a2c30');
+      poly([[0.05, 0.34], [-0.15, 0.36], [-0.42, 0.42], [-0.68, 0.52], [-0.88, 0.66], [-0.88, 0.82], [-0.68, 0.79], [-0.42, 0.75], [-0.15, 0.71], [0.05, 0.6]], hex(M.colors[0]));
+      poly([[0.06, 0.6], [-0.05, 0.68], [-0.36, 0.72], [-0.46, 0.74], [-0.74, 0.77], [-0.74, 0.87], [-0.46, 0.86], [-0.36, 0.81], [-0.05, 0.79], [0.06, 0.66]], '#16171a');
+      poly([[0.12, 0.3], [-0.2, 0.3], [-0.2, 0.34], [0.12, 0.34]], '#1c1d20');
+      line([[0.25, 0.8], [0.21, 0.62], [0.15, 0.45], [0.06, 0.34], [0, 0.3]], 0.05, '#aeb3b8');
+      line([[0.3, 0.82], [0.61, 0.24]], 0.05, '#2a2c30');
+      line([[0.2, 1.01], [0.1, 1.04]], 0.03, '#1c1d20');
+      poly([[0.25, 0.83], [0.42, 0.86], [0.42, 0.98], [0.25, 1.0]], hex(M.colors[0]));
+      poly([[0.27, 1.0], [0.4, 0.99], [0.33, 1.12], [0.25, 1.12]], '#8fa5b5');
+      for (const z of [M.wb / 2, -M.wb / 2]) {
+        const [px, py] = P(z, M.R);
+        g.fillStyle = '#16181b'; g.beginPath(); g.arc(px, py, M.R * s, 0, TAU); g.fill();
+        g.fillStyle = '#b9bec4'; g.beginPath(); g.arc(px, py, 0.155 * s, 0, TAU); g.fill();
+      }
+      return;
+    }
+    const g = cv.getContext('2d'), W = cv.width, H = cv.height, sh = carShape(M), S = M.shape, hl = M.L / 2;
+    g.clearRect(0, 0, W, H);
+    const pad = 10, s = M.bus ? (W - pad * 2) / 12.4 : Math.min((W - pad * 2) / 6.1, (H - pad * 2) / 2.5);
+    const ox = W / 2, oy = H - pad;
+    const P = (z, y) => [ox + z * s, oy - y * s];
+    const poly = (pts, fill) => { g.beginPath(); pts.forEach(([z, y], i) => { const [px, py] = P(z, y); if (i) g.lineTo(px, py); else g.moveTo(px, py); }); g.closePath(); g.fillStyle = fill; g.fill(); };
+    const n = 90, zs = [];
+    for (let i = 0; i <= n; i++) zs.push(-hl + (M.L * i) / n);
+    const rings = zs.map((z) => sh.ring(z));
+    poly([...zs.map((z, i) => [z, rings[i].top + rings[i].crown]), ...zs.slice().reverse().map((z) => [z, sh.sillAt(z)])], hex(M.colors[0]));
+    // side windows, with the pillars left in body colour
+    const win = [];
+    zs.forEach((z, i) => { const r = rings[i]; if (z > S.glass[0] && z < S.glass[1] && r.h > 0.08) win.push([z, r.yt + 0.03, r.yt + r.h - Math.min(0.07, r.h * 0.3)]); });
+    if (win.length > 1) {
+      poly([...win.map(([z, y0]) => [z, y0]), ...win.slice().reverse().map(([z, , y1]) => [z, y1])], '#23384b');
+      for (const [pz, pw] of S.pillars || []) { const r = sh.ring(pz); poly([[pz - pw / 2, r.yt], [pz + pw / 2, r.yt], [pz + pw / 2, r.top], [pz - pw / 2, r.top]], '#1d2024'); }
+    }
+    if (S.wing) {
+      const Wg = S.wing === true ? {} : S.wing, wz = -hl + (Wg.z ?? 0.32), wy = sh.belt(wz), h = Wg.h ?? 0.28;
+      poly([[wz - 0.04, wy], [wz + 0.04, wy], [wz + 0.04, wy + h], [wz - 0.04, wy + h]], '#1f2226');
+      poly([[wz - 0.22, wy + h - 0.01], [wz + 0.14, wy + h - 0.01], [wz + 0.14, wy + h + 0.03], [wz - 0.22, wy + h + 0.03]], '#1f2226');
+    }
+    if (S.open) { const zf = S.open.z[1], yb = sh.belt(zf), ws = S.open.screen ?? 0.3; poly([[zf, yb], [zf - ws * 0.55, yb + ws], [zf - ws * 0.55 - 0.05, yb + ws], [zf - 0.06, yb]], '#23384b'); }
+    // the F40's wing on its swept-up rear wings
+    if (S.f40) { const wy = S.f40.wingY, wa = -hl + 0.03, wb = -hl + 0.4; poly([[wa, sh.belt(wa) - 0.03], [-1.55, sh.belt(-1.55) - 0.03], [wb, wy - 0.02], [wb, wy + 0.01], [wa, wy + 0.03]], hex(shade(M.colors[0], 0.78))); }
+    for (const z of [M.wb / 2, -M.wb / 2]) {
+      const [px, py] = P(z, M.R);
+      g.fillStyle = '#16181b'; g.beginPath(); g.arc(px, py, M.R * s, 0, TAU); g.fill();
+      g.fillStyle = M.rim === 'black' ? '#3a3d42' : '#c6cbd1'; g.beginPath(); g.arc(px, py, M.R * s * 0.62, 0, TAU); g.fill();
+    }
+  }
+  function pickerButton(M, i) {
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'model'; btn.id = 'model-' + M.id;
+    const cv = document.createElement('canvas'); cv.width = 320; cv.height = 120;
+    drawSilhouette(cv, M);
+    const title = document.createElement('div'); title.className = 'model-title';
+    const name = document.createElement('b'); name.textContent = M.name;
+    title.append(name);
+    // the first ten have a number key
+    if (i < 10) { const num = document.createElement('span'); num.className = 'key'; num.textContent = String((i + 1) % 10); title.append(num); }
+    const stats = document.createElement('div'); stats.className = 'stats';
+    stats.textContent = M.kind + '\nToppfart ' + Math.round(M.max * 3.6) + ' km/h\n0–' + M.sprint.kmh + ' på ' + M.sprint.t.toFixed(1).replace('.', ',') + ' s\n' + (M.boat ? M.engine : M.ev ? 'Elmotor, en växel' : M.cvt ? 'Tvåtakt, variator' : M.gears + ' växlar');
+    btn.append(cv, title, stats);
+    btn.addEventListener('click', () => chooseModel(M));
+    return btn;
+  }
+  function buildPicker() {
+    PICKABLE.forEach((M, i) => {
+      const btn = pickerButton(M, i);
+      (M.boat ? $('gridBoat') : M.moped ? $('gridMoped') : M.group === 'super' ? $('gridSuper') : M.group === 'classic' ? $('gridClassic') : M.sport ? $('gridSport') : $('gridNormal')).appendChild(btn);
+    });
+    SECRET.forEach((M, i) => $(M.mil ? 'gridArmy' : 'gridPolice').appendChild(pickerButton(M, i)));
+  }
+  function openPicker() {
+    if (!started) return;
+    // no new car while you are under arrest or in the cell
+    if (stop && stop.locked) { toast('Det går inte nu, du är gripen.'); return; }
+    pickerOpen = true;
+    setPickerSecret(false);
+    $('picker').hidden = false;
+    if (document.pointerLockElement && document.exitPointerLock) document.exitPointerLock();
+    for (const k in keys) keys[k] = false;
+    joy.x = joy.y = 0;
+    const first = $('picker').querySelector('button.model');
+    if (first) first.focus();
+  }
+  function closePicker() { pickerOpen = false; $('picker').hidden = true; }
+  // The secret page: B twice in quick succession in the picker (or a double tap on its heading) turns to the police's
+  // and the army's vehicles, and back. The first B closes the picker as always; the second, right after, opens it
+  // again on the other page
+  let pickerSecret = false, pickerBClose = -1e9, pickerTapT = 0;
+  function setPickerSecret(on) {
+    pickerSecret = on;
+    $('picker').classList.toggle('secret', on);
+    $('pickerTitle').textContent = on ? 'Hemliga fordon' : 'Välj bil';
+    $('pickerLede').textContent = on ? 'Polisens och Försvarsmaktens fordon. Båtarna ställs vid närmaste kaj.' : 'Bilen ställs bredvid dig och du kliver in direkt.';
+    const first = $('picker').querySelector(on ? '.picker-secret button.model' : 'button.model');
+    if (first && pickerOpen) first.focus();
+  }
+  // (t: when the key went down, so a slow frame between the two presses does not pull them apart)
+  function pickerB(t = performance.now()) {
+    if (pickerOpen) { closePicker(); pickerBClose = t; return; }
+    const again = t - pickerBClose < 350, secret = again && !pickerSecret;
+    openPicker();
+    if (again && pickerOpen) setPickerSecret(secret);
+  }
+  $('pickerTitle').addEventListener('pointerup', () => {
+    const t = performance.now();
+    if (t - pickerTapT < 400) { pickerTapT = 0; setPickerSecret(!pickerSecret); } else pickerTapT = t;
+  });
+  // a berth for a boat by the quay nearest to (x, z): walk out from there to where the land ends, and lay the hull
+  // alongside the edge just off it (or, from out on the water, anywhere free near by)
+  function boatFree(M, x, z, h, ignore) {
+    if (!boatFits(M, x, z, h)) return false;
+    const r = M.W / 2 + 0.1, span = M.L / 2 - r, fx = Math.sin(h), fz = Math.cos(h);
+    for (const o of [-span, 0, span]) if (resolveWorld(x + fx * o, z + fz * o, r, WATER_Y).hit) return false;
+    for (const o of cars) if (o !== ignore && Math.hypot(o.x - x, o.z - z) < (o.M.L + M.L) / 2 + 0.8) return false;
+    return true;
+  }
+  function findBerth(M, x, z, maxD = 80, ignore) {
+    let best = null;
+    if (!(groundAt(x, z) & 1)) {
+      for (let r = 0; r < 40 && !best; r += 3) for (let a = 0; a < TAU && !best; a += 0.4) {
+        const cx = x + Math.cos(a) * r, cz = z + Math.sin(a) * r;
+        for (const h of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) if (boatFree(M, cx, cz, h, ignore)) { best = { x: cx, z: cz, h, d: r }; break; }
+      }
+      return best;
+    }
+    for (let a = 0; a < TAU; a += TAU / 36) {
+      const dx = Math.sin(a), dz = Math.cos(a);
+      let d = 0;
+      while (d < maxD && groundAt(x + dx * d, z + dz * d) & 1) d += 0.5;
+      if (d >= maxD || (best && d > best.d)) continue;
+      for (const off of [M.W / 2 + 0.5, M.W / 2 + 1.2, M.W / 2 + 2.5]) {
+        const cx = x + dx * (d + off), cz = z + dz * (d + off);
+        let found = false;
+        for (const h of [a + Math.PI / 2, a - Math.PI / 2]) if (boatFree(M, cx, cz, h, ignore)) { best = { x: cx, z: cz, h, d }; found = true; break; }
+        if (found) break;
+      }
+    }
+    return best;
+  }
+  function findSpawnSpot(M) {
+    if (M.boat) return findBerth(M, player.x, player.z);
+    const tries = [];
+    const ne = nearestEdge(player.x, player.z);
+    if (ne.e && ne.d < 25) {
+      const f = edgeFrame(ne.e.a, ne.e.b), s0 = alongEdge(f, (player.x - f.A.x) * f.ux + (player.z - f.A.z) * f.uz, 14);
+      const near = (player.x - f.A.x) * f.rx + (player.z - f.A.z) * f.rz >= 0 ? 1 : -1;
+      const park = f.park || f.e.hw - 1.1;
+      for (const ds of [0, 7, -7, 14, -14, 21, -21]) for (const lat of [park * near, f.lane * near, -f.lane * near, -park * near]) {
+        const s = alongEdge(f, s0 + ds, 6);
+        tries.push([f.A.x + f.ux * s + f.rx * lat, f.A.z + f.uz * s + f.rz * lat, Math.atan2(f.ux, f.uz) + (lat < 0 ? Math.PI : 0)]);
+      }
+      // (the army's wide vehicles, taken from the picker's secret page, often fit only down the middle of the street)
+      if (M.W > 2.4) for (const ds of [0, 10, -10, 20, -20, 30, -30, 40, -40]) {
+        const s = alongEdge(f, s0 + ds, 6);
+        tries.push([f.A.x + f.ux * s, f.A.z + f.uz * s, Math.atan2(f.ux, f.uz)]);
+      }
+    }
+    const dists = M.W > 2.4 ? [M.L / 2 + 2, M.L / 2 + 5, M.L / 2 + 9, M.L / 2 + 14] : [M.L / 2 + 2, M.L / 2 + 5];
+    for (const dist of dists) for (const a of [0, Math.PI / 2, -Math.PI / 2, Math.PI]) {
+      tries.push([player.x + Math.sin(player.rot + a) * dist, player.z + Math.cos(player.rot + a) * dist, player.rot]);
+    }
+    // (never inside the police station, where the lobby is just big enough for a car)
+    for (const [x, z, h] of tries) if (spotFree(M, x, z, h) && !STATION.inside(x, z)) return { x, z, h };
+    return null;
+  }
+  function chooseModel(M) {
+    closePicker();
+    if (stop && stop.locked) return;
+    let spot = null;
+    // riding in a friend's boat out on the water: a car has to wait for a quay, a boat is put beside theirs
+    if (MP.ride) {
+      const r = MP.ride;
+      if (r.M.boat && !boatExitSpot(r)) {
+        if (!M.boat) { toast('Vänta tills båten ligger vid en kaj, så kan du kliva i land.'); return; }
+        spot = findBerth(M, r.x, r.z, 80);
+      }
+      MP.unride();
+    }
+    if (driving && driving.M.boat && !exitSpot(driving)) {
+      // out on the water: another boat takes this one's place, but a car has to wait for dry land
+      if (!M.boat) { toast('Kör fram till en kaj först, så att du kan kliva i land.'); return; }
+      const old = driving;
+      setOccupant(old, null); driving = null;
+      if (old === spawnedCar) { spot = { x: old.x, z: old.z, h: old.h }; removeCar(old); spawnedCar = null; }
+      else spot = findBerth(M, old.x, old.z, 80, old);
+    } else if (driving) exitCar();
+    if (spawnedCar) removeCar(spawnedCar);
+    if (!spot) spot = findSpawnSpot(M);
+    if (!spot) { toast(M.boat ? 'Det finns inget vatten här i närheten. Gå ner till en kaj och försök igen.' : 'Det finns ingen plats för ' + M.def + ' här. Gå ut på en gata och försök igen.'); return; }
+    // found every Dalahäst: your cars come in gold
+    const c = makeCar(M, goldCars && !M.police && !M.mil && !M.boat && M.id !== 'taxi' ? 0xc9a227 : M.colors[Math.floor(Math.random() * M.colors.length)]);
+    c.x = spot.x; c.z = spot.z; c.h = spot.h;
+    spawnedCar = c;
+    enterCar(c);
+    camYaw = c.h;
+    requestLock();
+  }
+
+  /* ---------- traffic upkeep ---------- */
+  let botSpawnT = 0, npcCheckT = 0;
+  function manageTraffic(dt) {
+    botSpawnT -= dt;
+    let bots = 0, police = 0, army = 0;
+    // (the boats on the water are counted on their own, see WATER)
+    for (const c of cars) { if (c.water) continue; if (c.military) army++; else if (c.police) police++; else if (c.bot) bots++; }
+    // five stars: the army is called in, tanks, armoured cars and trucks of soldiers, from further off than the police
+    const at = armyTarget();
+    if (army < at && (armySpawnT -= dt) <= 0) {
+      const kinds = cars.filter((c) => c.military && !c.water).map((c) => c.M.mil), n = (k) => kinds.filter((m) => m === k).length;
+      const M = n('tank') < 2 ? MODEL.strv122 : n('truck') < 2 ? MODEL.miltruck : MODEL.patgb360;
+      const c = spawnBot(230, M, 520);
+      if (c) makeArmy(c);
+      armySpawnT = 2;
+    }
+    if (bots < BOT_TARGET && botSpawnT <= 0) { spawnBot(130); botSpawnT = 0.5; }
+    policeSpawnT -= dt;
+    // with stars more patrols come, sooner and from nearer by, and from four stars the piket too
+    const pt = policeTarget();
+    if (police < pt && policeSpawnT <= 0) {
+      const c = spawnBot(160, stars() >= 4 && Math.random() < 0.45 ? MODEL.piket : MODEL.polis, wanted ? 420 : 650);
+      if (c) makePolice(c);
+      policeSpawnT = wanted ? 2.5 : 6;
+    }
+    let parked = 0;
+    for (let i = cars.length - 1; i >= 0; i--) {
+      const c = cars[i];
+      if (c === driving || c.keep || c === spawnedCar) continue;
+      const d = Math.hypot(c.x - player.x, c.z - player.z);
+      if (c.police && c.police.state !== 'patrol') continue;
+      // the extra patrols of a chase go home again once it is over
+      if (c.military && !at && d > 140) { removeCar(c); continue; }
+      if (c.police && !c.military && police > pt && d > 220) { removeCar(c); police--; continue; }
+      if (c.bot) {
+        if ((c.bot.stuckTotal > 12 && d > 70) || d > (c.police ? 800 : TRAFFIC_RANGE + 120)) removeCar(c);
+        continue;
+      }
+      if ((c.dead && d > 110) || d > 420) { removeCar(c); continue; }
+      parked++;
+    }
+    if (parked < PARKED_TARGET && botSpawnT <= 0.25) spawnParkedNear(140, 300);
+    npcCheckT -= dt;
+    if (npcCheckT <= 0) {
+      npcCheckT = 0.4;
+      let walkers = 0;
+      for (let i = persons.length - 1; i >= 0; i--) {
+        const p = persons[i];
+        if (p === player || p.remote) continue;
+        const d = Math.hypot(p.x - camTarget.x, p.z - camTarget.z);
+        p.asleep = d > 150;
+        p.model.group.visible = !p.asleep;
+        if (p.keep) continue;
+        if (d > 170 || (p.ai.state === 'wander' && p.ai.t <= 0 && d > 40)) { removePerson(p); continue; }
+        if (p.ai.state === 'walk') walkers++;
+      }
+      if (walkers < NPC_COUNT) spawnWalker(70, 150);
+    }
+  }
+
+  /* ================= simulation step ================= */
+  function physicsStep(dt, pIntent) {
+    // (a friend's car is moved by their game, and only shown here)
+    for (const c of cars) if (!c.remote) updateCar(c, dt, c.input);
+    carPairs();
+    for (const c of cars) if (!c.remote && (c === driving || c.vx !== 0 || c.vz !== 0)) carWorld(c);
+    if (driving) { player.x = driving.x; player.z = driving.z; player.rot = driving.h; player.y = 0; }
+    else if (stop && stop.riding) { player.x = stop.car.x; player.z = stop.car.z; player.vx = player.vz = 0; }
+    else if (MP.ride) { const c = MP.ride; player.x = c.x; player.z = c.z; player.y = 0; player.vx = c.vx; player.vz = c.vz; player.vy = 0; player.rot = c.h; }
+    else personMove(player, dt, pIntent);
+    for (const p of persons) {
+      // someone who climbed out of a wreck during this step gets their first plan next frame
+      if (p === player || p.asleep || !p.intent) continue;
+      personMove(p, dt, p.intent);
+      if (!driving) {
+        const dx = p.x - player.x, dz = p.z - player.z, d2 = dx * dx + dz * dz;
+        if (d2 < 0.49 && d2 > 1e-6 && Math.abs(p.y - player.y) < 1.5) {
+          const d = Math.sqrt(d2), pen = (0.7 - d) / 2;
+          p.x += (dx / d) * pen; p.z += (dz / d) * pen; player.x -= (dx / d) * pen; player.z -= (dz / d) * pen;
+        }
+      }
+    }
+  }
+
+  /* ================= visuals ================= */
+  let clock = 0;
+  function animatePerson(p, dt) {
+    const G = p.model;
+    G.group.position.set(p.x, p.y, p.z);
+    G.group.rotation.y = p.rot;
+    const hs = Math.hypot(p.vx, p.vz), k = 1 - Math.exp(-14 * dt);
+    let lL, lR, aL, aR, az = 0, bob = 0;
+    if (p.grounded) {
+      p.walkPhase += hs * dt * 2.1;
+      const amp = Math.min(1, hs / 4.6) * (hs > 6 ? 0.95 : 0.7), s = Math.sin(p.walkPhase);
+      lL = s * amp; lR = -s * amp; aL = -s * amp * 0.9; aR = s * amp * 0.9;
+      bob = hs > 0.3 ? Math.abs(Math.cos(p.walkPhase)) * 0.07 * amp : Math.sin(clock * 2.2 + p.walkPhase) * 0.012;
+    } else { lL = -0.55; lR = 0.35; aL = -2.6; aR = -2.6; az = 0.25; }
+    // handcuffed: both hands held together behind the back
+    if (p.cuffed && p.grounded) { aL = aR = 0.45; az = -0.32; }
+    G.legL.rotation.x = lerp(G.legL.rotation.x, lL, k);
+    G.legR.rotation.x = lerp(G.legR.rotation.x, lR, k);
+    G.armL.rotation.x = lerp(G.armL.rotation.x, aL, k);
+    G.armR.rotation.x = lerp(G.armR.rotation.x, aR, k);
+    G.armL.rotation.z = lerp(G.armL.rotation.z, az, k);
+    G.armR.rotation.z = lerp(G.armR.rotation.z, -az, k);
+    G.inner.position.y = lerp(G.inner.position.y, bob, k);
+    G.inner.rotation.x = lerp(G.inner.rotation.x, p.grounded ? hs * 0.012 : 0, k);
+  }
+  function animate(dt) {
+    clock += dt;
+    for (const c of cars) {
+      const vf = c.vx * Math.sin(c.h) + c.vz * Math.cos(c.h), a = (vf - c.prevVf) / Math.max(dt, 1e-3);
+      c.prevVf = vf;
+      const yawRate = (vf / c.M.wb) * Math.tan(c.steer), k = 1 - Math.exp(-6 * dt);
+      if (c.M.mil && c.steerGroup) aimTurret(c, dt);
+      if (c.M.boat) {
+        // afloat: it bobs on the swell, lifts its bow as it climbs up to plane, and leans into the turns (a jet ski a lot)
+        const jet = c.M.boat === 'jetski', av = Math.abs(vf), seed = c.seed || (c.seed = Math.random() * 10), t = clock + seed;
+        const turn = (c.steer / 0.55) * clamp(av / 3 + 0.2, 0, 1) * (jet ? 1.7 : 0.75);
+        const hump = av > 2 ? Math.exp(-Math.pow((av - 8) / 5, 2)) : 0;
+        c.roll += (clamp(-Math.atan2(vf * turn, 9.81) * (jet ? 0.9 : 0.35), -0.55, 0.55) + Math.sin(t * 1.3) * 0.025 - c.roll) * k;
+        c.pitch += (-0.09 * hump * (c.throttle > 0.1 ? 1 : 0.5) - 0.025 * clamp(av / 15, 0, 1) + Math.sin(t * 1.7) * 0.02 - c.pitch) * k;
+        c.body.position.y = WATER_Y + Math.sin(t * 1.1) * 0.05 + 0.1 * clamp(av / 14, 0, 1);
+        // (the jet ski's handlebars turn with the steering; the combat boat's gun is aimed, see aimTurret)
+        if (c.steerGroup && !c.M.mil) c.steerGroup.rotation.y = c.steer;
+        boatWake(c, dt);
+      } else if (c.M.moped) {
+        // a moped leans into the turn as far as the turn needs; parked it leans on its stand, knocked over it lies flat
+        const cap = (14 * c.M.grip) / Math.max(Math.abs(vf), 5), yaw = clamp(yawRate, -cap, cap);
+        const want = c.fallen || (Math.abs(vf) < 0.3 && !c.occupant ? -0.1 : clamp(-Math.atan2(vf * yaw, 9.81), -0.8, 0.8));
+        c.roll += (want - c.roll) * (1 - Math.exp(-(c.fallen ? 9 : 5) * dt));
+        c.pitch += (clamp(-a * 0.006, -0.06, 0.06) - c.pitch) * k;
+        c.steerGroup.rotation.y = c.steer;
+      } else {
+        c.roll += (clamp(yawRate * vf * 0.0045, -0.07, 0.07) - c.roll) * k;
+        c.pitch += (clamp(-a * 0.004, -0.05, 0.05) - c.pitch) * k;
+        for (const w of c.wheels) w.pivot.rotation.set(0, (w.steers ? c.steer : 0) + w.toe, w.camber);
+      }
+      c.body.rotation.set(c.pitch, 0, c.roll);
+      c.group.position.set(c.x, 0, c.z);
+      c.group.rotation.y = c.h;
+      c.plates.visible = !c.M.boat && Math.abs(c.x - camera.position.x) + Math.abs(c.z - camera.position.z) < 90;
+      for (const s of c.spins) s.rotation.x = c.wheelRot;
+      const glow = c.mat.userData.glow;
+      glow.y = c.braking ? BRAKE_GLOW : TAIL_GLOW;
+      c.mat.userData.rev.value = c.reversing && !c.dead ? 1.8 : 0;
+      updateBlink(c, dt);
+      updateEngine(c, vf, dt);
+      damageFx(c, dt);
+      if (c.M.police) policeLights(c, dt);
+    }
+    for (const p of persons) {
+      if (p.knockT > 0) p.knockT -= dt;
+      if (!p.asleep) animatePerson(p, dt);
+    }
+    const pointScale = renderer.domElement.height / (2 * Math.tan((camera.fov * Math.PI) / 360));
+    for (const fx of [smokeFx, sparkFx, bitsFx, fireFx, foamFx]) { fx.mat.uniforms.scale.value = pointScale; fx.update(dt); }
+    waterNormal.offset.x += dt * 0.006; waterNormal.offset.y += dt * 0.0035;
+    sky.material.uniforms.time.value = clock;
+    if (nkSign) nkSign.rotation.y = clock * 0.5;
+    updateDraken(dt);
+    TIVOLI.update(dt);
+    updateTreeLods();
+    cullFar();
+    updateFar();
+  }
+
+  function camClip(tx, ty, tz, cx, cz) {
+    let tmin = 1;
+    const dx = cx - tx, dz = cz - tz;
+    forNear(Math.min(tx, cx) - 1, Math.min(tz, cz) - 1, Math.max(tx, cx) + 1, Math.max(tz, cz) + 1, (o) => {
+      // (the camera sees through the iron cage of the lift in the yellow house)
+      if (o.t === 1 || o.see || o.h < ty + 0.5 || (o.y0 !== undefined && o.y0 > ty + 0.3)) return;
+      tmin = Math.min(tmin, rayBox(o, tx, tz, dx, dz, 0.3));
+    });
+    return Math.max(0.1, tmin);
+  }
+  function updateCamera(dt) {
+    // in the back of a police car, or riding along with a friend, the camera follows the car just as when you drive
+    const car = driving || (stop && stop.riding ? stop.car : null) || MP.ride;
+    const vf = car ? car.vx * Math.sin(car.h) + car.vz * Math.cos(car.h) : 0;
+    let tx, ty, tz, want;
+    if (car) { tx = car.x; ty = car.M.boat ? WATER_Y + (car.M.boat === 'jetski' ? 1.6 : 2.0) : car.M.bus ? 3.2 : car.M.moped ? 1.45 : 1.7; tz = car.z; want = (car.M.bus ? 15 : car.M.moped ? 5.2 : car.M.boat === 'jetski' ? 6.5 : car.M.boat ? 11 : 9.5) + Math.abs(vf) * 0.05; }
+    else { tx = player.x; ty = player.y + 1.55; tz = player.z; want = STATION.inside(player.x, player.z) ? 4.2 : 6; }
+    const kh = 1 - Math.exp(-(car ? 10 : 14) * dt);
+    // indoors the camera comes in close and stays between the floor and the ceiling
+    const span = car ? null : indoorSpan(player.x, player.z, player.y);
+    if (span) want = 3.2;
+    camTarget.x += (tx - camTarget.x) * kh;
+    camTarget.z += (tz - camTarget.z) * kh;
+    camTarget.y += (ty - camTarget.y) * (1 - Math.exp(-8 * dt));
+    camDist += (want - camDist) * (1 - Math.exp(-4 * dt));
+    if (!started) camYaw += dt * 0.1;
+    else if (car && performance.now() - lastLook > 1500 && Math.abs(vf) > 1) camYaw = lerpAngle(camYaw, car.h, 1 - Math.exp(-2.5 * dt));
+    const cp = Math.cos(camPitch), sp = Math.sin(camPitch);
+    const t = camClip(camTarget.x, camTarget.y, camTarget.z, camTarget.x - Math.sin(camYaw) * cp * camDist, camTarget.z - Math.cos(camYaw) * cp * camDist);
+    clipT = t < clipT ? t : Math.min(t, clipT + dt * 1.5);
+    const dist = camDist * clipT;
+    let cx = camTarget.x - Math.sin(camYaw) * cp * dist, cz = camTarget.z - Math.cos(camYaw) * cp * dist;
+    let cy = Math.max(car && car.M.boat ? WATER_Y + 0.6 : 0.5, camTarget.y + sp * dist);
+    // indoors at the police station the camera stays under the ceiling
+    if (!car && (STATION.inside(player.x, player.z) || STATION.inside(cx, cz))) cy = Math.min(cy, STATION.GH - 0.3);
+    if (span) cy = clamp(cy, span.floor + 0.4, span.ceil - 0.15);
+    // so close that the camera would be inside your head: hide the body
+    if (!car) player.model.group.visible = dist > 1.15;
+    if (shake > 0.001) {
+      cx += (Math.random() - 0.5) * shake; cy += (Math.random() - 0.5) * shake; cz += (Math.random() - 0.5) * shake;
+      shake *= Math.exp(-7 * dt);
+    }
+    camera.position.set(cx, cy, cz);
+    camera.lookAt(camTarget);
+    const fov = 62 + (reduceMotion ? 0 : Math.min(18, Math.abs(vf) * 0.25));
+    if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = lerp(camera.fov, fov, 1 - Math.exp(-4 * dt)); camera.updateProjectionMatrix(); }
+    sky.position.copy(camera.position);
+    sun.position.copy(camTarget).add(SUN_OFF);
+    sun.target.position.copy(camTarget);
+  }
+
+  /* ================= HUD ================= */
+  const el = {
+    prompt: $('prompt'), promptText: $('promptText'), dash: $('dash'), kmh: $('kmh'), gear: $('gear'), blinkL: $('blinkL'), blinkR: $('blinkR'), bar: $('revbar'), rpm: $('rpm'), mode: $('gearMode'),
+    engineRow: $('engineRow'), hpbar: $('hpbar'), hpText: $('hpText'), limit: $('limit'), limitNum: $('limitNum'), wanted: $('wanted'), wantedHint: $('wantedHint'), wantedTitle: $('wantedTitle'),
+    fineTag: $('fineTag'), fines: $('fines'), horses: $('horses'), btnUp: $('btnUp'), btnDown: $('btnDown'),
+    carName: $('carName'), help: $('help'), sound: $('soundLabel'), btnUse: $('btnUse'), btnJump: $('btnJump'), touch: $('touch'),
+    start: $('start'), locStreet: $('locStreet'), locDistrict: $('locDistrict'), toast: $('toast'), liftPanel: $('liftPanel'), shiftHint: document.querySelector('.dash-foot .hint')
+  };
+  for (const b of el.liftPanel.querySelectorAll('button')) b.addEventListener('click', (e) => { e.preventDefault(); LIFT.go(Number(b.dataset.floor)); requestLock(); });
+  let lastPrompt = null, lastDriving, locT = 0, toastT = 0, lastUse = '', lastFines = -1, lastHint = '', lastHorses = -1, lastStars = '';
+  // the five wanted stars
+  const starEls = [];
+  {
+    const NS = 'http://www.w3.org/2000/svg', box = $('stars'), heliTag = box.querySelector('.heli');
+    for (let i = 0; i < 5; i++) {
+      const svg = document.createElementNS(NS, 'svg'), path = document.createElementNS(NS, 'path');
+      svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true');
+      path.setAttribute('d', 'M12 2.4l2.95 6.2 6.75.85-4.98 4.65 1.3 6.7L12 17.5l-6.02 3.3 1.3-6.7L2.3 9.45l6.75-.85z');
+      svg.append(path); box.insertBefore(svg, heliTag); starEls.push(svg);
+    }
+  }
+  function toast(msg) { el.toast.textContent = msg; el.toast.hidden = false; toastT = Math.min(6.5, 2.2 + msg.length * 0.035); }
+  function gearOf(c, vf) {
+    if (c.reversing || c.inR) return 'R';
+    if (c.M.boat) return Math.abs(vf) < 0.3 && c.throttle < 0.05 ? 'N' : 'F';
+    if (c.M.ev || c.M.cvt) return Math.abs(vf) < 0.3 && c.throttle < 0.05 ? (c.M.cvt ? 'N' : 'P') : 'D';
+    if (c.auto && Math.abs(vf) < 0.3 && c.throttle < 0.05) return 'N';
+    return String(c.gear + 1);
+  }
+  function updateHUD(dt) {
+    // at a kiosk or a balloon seller E buys, otherwise it is for the car you stand by
+    // riding along with a friend, or by a friend's car you can get in
+    const mpP = started ? MP.prompt() : null;
+    const liftP = started && !driving ? LIFT.prompt() : null, shop = !liftP && started && !driving ? VENDORS.prompt() : null;
+    const prompt = mpP || liftP || shop || (started && !driving && nearCar ? (nearCar.bot ? 'Ta ' + nearCar.M.def : 'Kliv in i ' + nearCar.M.def) : null);
+    if (prompt !== lastPrompt) {
+      lastPrompt = prompt;
+      el.prompt.hidden = !prompt || isTouch;
+      if (prompt) { el.promptText.textContent = prompt; el.prompt.classList.toggle('steal', !mpP && !shop && !liftP && !!nearCar && !!nearCar.bot); el.prompt.classList.toggle('shop', !mpP && !!shop); }
+    }
+    // the stars: as many lit as the police want you, flashing while they search for you; the helicopter beside them
+    const ns = stars(), searching = !!wanted && !wanted.inSight && !stop, hl = !!heli && heli.state !== 'leave', army = !!wanted && cars.some((c) => c.military && c.police && c.police.state === 'chase');
+    const sk = ns + ':' + searching + ':' + hl + ':' + army;
+    if (sk !== lastStars) {
+      const was = lastStars ? Number(lastStars.split(':')[0]) : 0;
+      lastStars = sk;
+      starEls.forEach((sv, i) => {
+        sv.classList.toggle('on', i < ns);
+        if (i < ns && i >= was) { sv.classList.remove('new'); void sv.getBoundingClientRect(); sv.classList.add('new'); }
+      });
+      const box = $('stars');
+      box.classList.toggle('search', searching); box.classList.toggle('heli-on', hl); box.classList.toggle('army-on', army);
+      box.setAttribute('aria-label', ns ? 'Efterlyst: ' + ns + ' av 5 stjärnor' + (hl ? ', helikoptern är ute' : '') : 'Polisen letar inte efter dig');
+    }
+    if (driving !== lastDriving) {
+      lastDriving = driving;
+      document.body.classList.toggle('driving', !!driving);
+      el.dash.hidden = !driving;
+      // (no speed limit signs out on the water)
+      el.limit.hidden = !driving || !!driving.M.boat;
+      if (driving) el.carName.textContent = driving.M.name;
+      // (an electric car and a scooter's variator have no gears to change)
+      el.shiftHint.hidden = !!driving && !!(driving.M.ev || driving.M.cvt || driving.M.boat);
+      el.btnJump.textContent = driving ? 'Broms' : 'Hoppa';
+      $('btnJob').textContent = driving && driving.M.mil === 'tank' ? 'Skjut' : 'Jobb';
+      el.btnUp.hidden = el.btnDown.hidden = !driving;
+    }
+    const ph = stop && stop.phase;
+    const vendor = !driving && VENDORS.near;
+    const use = ph === 'talk' ? 'Skriv under' : ph === 'transport' || ph === 'park' ? 'Hoppa fram' : ph === 'jail' ? 'Sov' : mpP ? (MP.ride ? 'Kliv ur' : 'Åk med') : driving ? 'Kliv ur' : liftP ? 'Hissen' : vendor ? (vendor.seller ? 'Köp glass' : 'Köp ballong') : nearCar && nearCar.bot ? 'Ta bilen' : 'Kliv in';
+    if (use !== lastUse) { el.btnUse.textContent = use; lastUse = use; }
+    el.btnUse.classList.toggle('off', !mpP && !driving && !nearCar && !vendor && !liftP && !['talk', 'transport', 'park', 'jail'].includes(ph));
+    if (driving) {
+      const c = driving, vf = c.vx * Math.sin(c.h) + c.vz * Math.cos(c.h);
+      const kmh = Math.round(Math.abs(vf) * 3.6), rf = clamp(c.rpm / (c.M.red * 1.04), 0, 1);
+      el.kmh.textContent = kmh;
+      el.blinkL.classList.toggle('on', !!c.blinkLit && !!(c.blink & 1));
+      el.blinkR.classList.toggle('on', !!c.blinkLit && !!(c.blink & 2));
+      el.gear.textContent = gearOf(c, vf);
+      el.mode.textContent = c.M.boat ? (c.M.boat === 'jetski' ? 'Jet' : 'Båt') : c.M.cvt ? 'Variator' : c.M.ev ? 'El' : c.auto ? 'Auto' : 'Manuell';
+      el.mode.classList.toggle('man', !c.auto && !c.M.boat);
+      el.bar.style.width = (rf * 100).toFixed(1) + '%';
+      el.bar.classList.toggle('red', c.rpm > c.M.red * 0.9);
+      el.rpm.textContent = (Math.round(c.rpm / 50) * 50).toLocaleString('sv-SE') + ' rpm';
+      el.engineRow.hidden = c.health >= 100;
+      if (c.health < 100) {
+        el.hpbar.style.width = c.health.toFixed(0) + '%';
+        el.hpbar.style.background = c.health > 55 ? '#4cc26a' : c.health > 25 ? '#f7c600' : '#c8102e';
+        el.hpText.textContent = c.dead ? 'Död' : Math.round(c.health) + ' %';
+      }
+      if (!c.M.boat) {
+        const lim = limitAt(c.x, c.z, c.h);
+        el.limitNum.textContent = lim;
+        el.limit.classList.toggle('over', kmh > lim + 3 && !c.siren);
+      }
+    }
+    // in the cell: how long until you are let out
+    const jail = stop && stop.phase === 'jail';
+    el.wanted.hidden = !wanted && !jail;
+    if (jail) {
+      const s = Math.max(0, Math.ceil(stop.jailT)), hint = 'Du släpps om ' + Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') + (stop.wait ? ' (du sover)' : '. E: sov så går tiden fortare');
+      if (hint !== lastHint) { el.wantedHint.textContent = hint; el.wantedTitle.textContent = 'Häktet'; lastHint = hint; }
+      el.wanted.classList.add('calm');
+    } else if (wanted) {
+      const title = stop ? (stop.mode === 'arrest' && stop.locked ? 'Gripen' : 'Poliskontroll') : 'Polisen jagar dig';
+      const ph = stop && stop.phase;
+      const hint = stop ? (ph === 'approach' || ph === 'parked' ? 'Sitt kvar, polisen parkerar' : ph === 'walk' ? 'Konstapeln kommer fram till dig'
+        : ph === 'talk' ? 'Tryck E för att skriva under boten' : ph === 'flee' ? 'Du smet! Konstapeln springer tillbaka'
+        : ph === 'order' ? 'Kliv ur bilen, du är gripen' : ph === 'cuff' ? 'Du får handbojor på dig' : ph === 'escort' || ph === 'board' ? 'Konstapeln för dig till polisbilen'
+        : ph === 'transport' || ph === 'park' ? 'På väg till polisstationen. E hoppar fram' : ph === 'walkin' || ph === 'incell' ? 'Du förs in på polisstationen'
+        : ph === 'water' ? 'Sjöpolisen tar dig till polisstationen' : 'Polisen kör snart vidare')
+        : wanted.stopT > 0.2 ? 'Stå still …' : driving ? 'Kör in till kanten och stanna' : footCops.some((f) => f.mode === 'chase') ? 'Polisen springer efter dig!' : 'Polisen letar efter dig';
+      if (hint !== lastHint) { el.wantedHint.textContent = hint; el.wantedTitle.textContent = title; lastHint = hint; }
+      el.wanted.classList.toggle('calm', !!stop);
+    }
+    if (fines !== lastFines) { lastFines = fines; el.fineTag.hidden = !fines; el.fines.textContent = fmtKr(fines); }
+    JOBS.hud();
+    if (horsesFound.size !== lastHorses) { lastHorses = horsesFound.size; el.horses.textContent = lastHorses + '/' + HORSES.length; }
+    locT -= dt;
+    if (locT <= 0) {
+      locT = 0.3;
+      const x = driving ? driving.x : player.x, z = driving ? driving.z : player.z, ne = nearestEdge(x, z);
+      el.locStreet.textContent = ne.e && ne.d < 10 ? ne.e.name : '';
+      el.locDistrict.textContent = districtAt(x, z);
+    }
+    if (toastT > 0) { toastT -= dt; if (toastT <= 0) el.toast.hidden = true; }
+  }
+
+  /* ---------- minimap ---------- */
+  const mapEl = $('map'), mctx = mapEl.getContext('2d');
+  let mapSize = 200, mapDpr = 1;
+  function sizeMap() {
+    const r = mapEl.getBoundingClientRect();
+    mapDpr = Math.min(2, window.devicePixelRatio || 1);
+    mapSize = r.width || 200;
+    mapEl.width = Math.round(mapSize * mapDpr);
+    mapEl.height = Math.round(mapSize * mapDpr);
+  }
+  // the whole city drawn once at MAP_K pixels per metre; the minimap and the big map both draw from it
+  const MAP = { x0: BOUNDS.x0, z0: BOUNDS.z0, w: BOUNDS.x1 - BOUNDS.x0, h: BOUNDS.z1 - BOUNDS.z0 }, MAP_K = 0.5;
+  const MAP_COL = { water: '#8fc1da', land: '#ebe6dc', green: '#a9cf8c', square: '#f6f2ea', rail: '#cdc6b9', road: '#ffffff', main: '#fbe7a6', edge: '#b9b2a5', ped: '#f4e4d2', lane: '#efe1c6' };
+  const mapStatic = document.createElement('canvas');
+  mapStatic.width = Math.round(MAP.w * MAP_K); mapStatic.height = Math.round(MAP.h * MAP_K);
+  {
+    const g = mapStatic.getContext('2d');
+    g.setTransform(MAP_K, 0, 0, MAP_K, -MAP.x0 * MAP_K, -MAP.z0 * MAP_K);
+    const fillPoly = (P, col) => { g.fillStyle = col; g.beginPath(); P.forEach(([x, z], i) => (i ? g.lineTo(x, z) : g.moveTo(x, z))); g.closePath(); g.fill(); };
+    g.fillStyle = MAP_COL.water; g.fillRect(MAP.x0, MAP.z0, MAP.w, MAP.h);
+    for (const L of LANDS) fillPoly(L.poly, MAP_COL.land);
+    for (const P of mapGreens) fillPoly(P, MAP_COL.green);
+    for (const P of mapSquares) fillPoly(P, MAP_COL.square);
+    fillPoly(RAIL_YARD, MAP_COL.rail);
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    const roadStyle = (e) => (e.kind === 'ped' ? MAP_COL.ped : e.kind === 'lane' ? MAP_COL.lane : e.hw >= 7 ? MAP_COL.main : MAP_COL.road);
+    for (const pass of [0, 1]) for (const e of edges) {
+      const A = nodes[e.a], B = nodes[e.b];
+      g.strokeStyle = pass ? roadStyle(e) : MAP_COL.edge;
+      g.lineWidth = e.hw * 2 + (pass ? 0 : 2.4);
+      g.beginPath(); g.moveTo(A.x, A.z); g.lineTo(B.x, B.z); g.stroke();
+    }
+    for (const [P, c] of mapPolys) { fillPoly(P, hex(shade(c, 0.82))); g.strokeStyle = 'rgba(80,70,60,.35)'; g.lineWidth = 0.8; g.stroke(); }
+  }
+  function drawMap() {
+    const g = mctx, S = mapSize;
+    g.setTransform(mapDpr, 0, 0, mapDpr, 0, 0);
+    g.clearRect(0, 0, S, S);
+    g.save();
+    g.beginPath(); g.arc(S / 2, S / 2, S / 2, 0, TAU); g.clip();
+    const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z, s = S / 250;
+    g.translate(S / 2, S / 2);
+    g.rotate(-Math.PI / 2 - Math.atan2(Math.cos(camYaw), Math.sin(camYaw)));
+    g.scale(s, s);
+    g.translate(-px, -pz);
+    g.drawImage(mapStatic, MAP.x0, MAP.z0, MAP.w, MAP.h);
+    JOBS.drawMini(g, px, pz, 1 / s);
+    VENDORS.drawMini(g, px, pz, 1 / s);
+    for (const c of cars) {
+      // (a friend at the wheel is their dot, drawn below)
+      if (c === driving || (c.remote && c.occupant) || Math.abs(c.x - px) > 160 || Math.abs(c.z - pz) > 160) continue;
+      g.save(); g.translate(c.x, c.z); g.rotate(-c.h);
+      const flash = c.siren && Math.floor(clock * 4) % 2;
+      g.fillStyle = c.M.police ? (flash ? '#e0102e' : '#2f6bff') : hex(c.color); g.strokeStyle = c.bot || c.M.police ? '#11161b' : '#ffffff'; g.lineWidth = 0.9;
+      const w = Math.max(2.6, c.M.W * 1.3), l = Math.max(5.2, c.M.L * 1.15);
+      g.fillRect(-w / 2, -l / 2, w, l); g.strokeRect(-w / 2, -l / 2, w, l);
+      g.restore();
+    }
+    if (heli) drawHeliIcon(g, heli.x, heli.z, heli.h, 1 / s, true);
+    MP.drawMini(g, px, pz, 1 / s);
+    const rot = driving ? driving.h : player.rot, u = 1 / s;
+    g.translate(px, pz); g.rotate(-rot);
+    g.beginPath(); g.moveTo(0, 9 * u); g.lineTo(6.5 * u, -6 * u); g.lineTo(0, -2.5 * u); g.lineTo(-6.5 * u, -6 * u); g.closePath();
+    g.fillStyle = driving ? hex(driving.color) : '#ffffff'; g.strokeStyle = '#0a5ba8'; g.lineWidth = 2 * u; g.lineJoin = 'round';
+    g.fill(); g.stroke();
+    g.restore();
+  }
+
+  // the helicopter on the maps: the light on the ground, then a blue body under a turning rotor (u: metres per pixel)
+  function drawHeliIcon(g, x, z, h, u, spot) {
+    if (spot && heliModel && heliModel.patch.visible) {
+      g.fillStyle = 'rgba(255,214,90,.45)'; g.beginPath(); g.arc(heli.spot.x, heli.spot.z, Math.max(4.5, 5 * u), 0, TAU); g.fill();
+    }
+    g.save(); g.translate(x, z); g.rotate(-h);
+    const k = Math.max(1, u * 1.15);
+    g.fillStyle = 'rgba(255,255,255,.55)'; g.beginPath(); g.arc(0, 0.8 * k, 6 * k, 0, TAU); g.fill();
+    g.fillStyle = '#163d8c'; g.strokeStyle = '#fff'; g.lineWidth = 1.2 * u;
+    g.beginPath(); g.ellipse(0, 1.2 * k, 1.9 * k, 3 * k, 0, 0, TAU); g.fill(); g.stroke();
+    g.fillRect(-0.45 * k, -6 * k, 0.9 * k, 5 * k);
+    g.strokeStyle = '#11161b'; g.lineWidth = 1.4 * u;
+    const a = clock * 9;
+    for (const d of [0, Math.PI / 2]) { g.beginPath(); g.moveTo(Math.cos(a + d) * 6 * k, 0.8 * k + Math.sin(a + d) * 6 * k); g.lineTo(-Math.cos(a + d) * 6 * k, 0.8 * k - Math.sin(a + d) * 6 * k); g.stroke(); }
+    g.restore();
+  }
+
+  /* ---------- the big map ---------- */
+  // Opened by clicking the minimap or pressing K. It pauses the game, shows the whole city with names,
+  // and can be zoomed (wheel, + and −) and dragged around.
+  const DISTRICT_LABELS = [['NORRMALM', -330, -800], ['ÖSTERMALM', 620, -900], ['VASASTAN', -880, -1600], ['KUNGSHOLMEN', -1500, -480], ['GAMLA STAN', -40, 300],
+    ['RIDDARHOLMEN', -470, 150], ['BLASIEHOLMEN', 330, -430], ['SKEPPSHOLMEN', 690, 130], ['DJURGÅRDEN', 2150, 60], ['SÖDERMALM', -150, 1300], ['HELGEANDSHOLMEN', -170, -175],
+    ['GÄRDET', 2050, -1250], ['NORRA DJURGÅRDEN', 1250, -2150], ['HAGASTADEN', -1500, -2250], ['LÅNGHOLMEN', -1420, 600], ['JOHANNESHOV', 150, 2700],
+    ['HAMMARBY SJÖSTAD', 1350, 2450], ['LILJEHOLMEN', -1850, 2450], ['NACKA', 2700, 1800]];
+  const WATER_LABELS = [['Riddarfjärden', -700, 330], ['Strömmen', 170, -175], ['Saltsjön', 2300, 820], ['Nybroviken', 700, -470], ['Klara sjö', -878, -620, -Math.PI / 2], ['Söderström', -120, 590],
+    ['Mälaren', -2250, 450], ['Karlbergssjön', -1900, -1218], ['Djurgårdsbrunnsviken', 2050, -585], ['Lilla Värtan', 3170, -1300, -Math.PI / 2], ['Hammarby sjö', 900, 2068],
+    ['Årstaviken', -1100, 2040], ['Danvikskanalen', 2010, 1580, -Math.PI / 2], ['Pålsundet', -1500, 752]];
+  // one label per street, on its longest straight run (the junctions along it don't break a run)
+  const STREET_LABELS = [];
+  {
+    const byName = new Map(), dir = (e) => [(nodes[e.b].x - nodes[e.a].x) / e.len, (nodes[e.b].z - nodes[e.a].z) / e.len];
+    for (const e of edges) { if (!byName.has(e.name)) byName.set(e.name, []); byName.get(e.name).push(e); }
+    for (const [name, list] of byName) {
+      const used = new Set();
+      let best = null;
+      for (const e0 of list) {
+        if (used.has(e0)) continue;
+        const d0 = dir(e0), run = [e0];
+        used.add(e0);
+        for (const start of [e0.a, e0.b]) {
+          let n = start;
+          for (;;) {
+            const next = list.find((f) => !used.has(f) && (f.a === n || f.b === n) && Math.abs(dir(f)[0] * d0[0] + dir(f)[1] * d0[1]) > 0.97);
+            if (!next) break;
+            used.add(next); run.push(next); n = next.a === n ? next.b : next.a;
+          }
+        }
+        let lo = Infinity, hi = -Infinity, P = null, Q = null;
+        for (const e of run) for (const i of [e.a, e.b]) {
+          const s = nodes[i].x * d0[0] + nodes[i].z * d0[1];
+          if (s < lo) { lo = s; P = nodes[i]; }
+          if (s > hi) { hi = s; Q = nodes[i]; }
+        }
+        if (!best || hi - lo > best.len) best = { P, Q, len: hi - lo, major: run.some((e) => e.hw >= 7) };
+      }
+      let ang = Math.atan2(best.Q.z - best.P.z, best.Q.x - best.P.x);
+      if (ang > Math.PI / 2) ang -= Math.PI; else if (ang < -Math.PI / 2) ang += Math.PI;
+      STREET_LABELS.push({ name, x: (best.P.x + best.Q.x) / 2, z: (best.P.z + best.Q.z) / 2, ang, len: best.len, major: best.major });
+    }
+  }
+  const bigmap = { open: false, cx: 0, cz: 150, zoom: 0, drag: null, drawn: 0 };
+  const MAJOR_LANDMARKS = ['Kungliga slottet', 'Stadshuset', 'Centralstationen', 'Riksdagshuset', 'Katarina kyrka', 'Vasamuseet', 'Hötorgsskraporna', 'Globen', 'Kaknästornet', 'Gröna Lund', 'Stadion'];
+  const bm = { el: $('bigmap'), cv: $('bigmapCanvas') };
+  function bigmapFit() { const r = bm.cv.getBoundingClientRect(); return Math.min(r.width / 4400, r.height / 4200); }
+  function openBigmap() {
+    if (!started || pickerOpen) return;
+    bigmap.open = true; bm.el.hidden = false;
+    if (document.pointerLockElement && document.exitPointerLock) document.exitPointerLock();
+    for (const k in keys) keys[k] = false;
+    joy.x = joy.y = 0;
+    const p = driving || player;
+    bigmap.cx = p.x; bigmap.cz = p.z; bigmap.zoom = 0;
+    bigmap.cx = clamp(bigmap.cx, BOUNDS.x0 + 1500, BOUNDS.x1 - 1500); bigmap.cz = clamp(bigmap.cz, BOUNDS.z0 + 1400, BOUNDS.z1 - 1400);
+    drawBigmap();
+  }
+  function closeBigmap() { bigmap.open = false; bm.el.hidden = true; requestLock(); }
+  function drawBigmap() {
+    if (!bigmap.open) return;
+    bigmap.drawn = performance.now();
+    const cv = bm.cv, r = cv.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+    if (cv.width !== Math.round(r.width * dpr) || cv.height !== Math.round(r.height * dpr)) { cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr); }
+    const g = cv.getContext('2d'), W = r.width, H = r.height, k = bigmapFit() * Math.pow(2, bigmap.zoom);
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.fillStyle = MAP_COL.water; g.fillRect(0, 0, W, H);
+    const toX = (x) => W / 2 + (x - bigmap.cx) * k, toY = (z) => H / 2 + (z - bigmap.cz) * k;
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(mapStatic, toX(MAP.x0), toY(MAP.z0), MAP.w * k, MAP.h * k);
+    const text = (t, x, y, font, fill, ang = 0, halo = 'rgba(255,255,255,.85)') => {
+      g.save(); g.translate(x, y); g.rotate(ang); g.font = font; g.textAlign = 'center'; g.textBaseline = 'middle';
+      if (halo) { g.lineWidth = 3; g.strokeStyle = halo; g.strokeText(t, 0, 0); }
+      g.fillStyle = fill; g.fillText(t, 0, 0); g.restore();
+    };
+    for (const [t, x, z, a] of WATER_LABELS) text(t, toX(x), toY(z), 'italic 600 ' + clamp(13 * Math.sqrt(k / 0.25), 11, 22) + 'px Overpass, sans-serif', '#2f6f93', a || 0, null);
+    if (k > 0.32) for (const L of STREET_LABELS) {
+      if (!L.major && k < 0.55) continue;
+      g.save(); g.font = '700 ' + clamp(9 * k / 0.45, 9, 14) + 'px Overpass, sans-serif';
+      const fits = g.measureText(L.name).width < L.len * k * 0.95;
+      g.restore();
+      if (fits) text(L.name, toX(L.x), toY(L.z), '700 ' + clamp(9 * k / 0.45, 9, 14) + 'px Overpass, sans-serif', '#4a4640', L.ang);
+    }
+    // names that would cover one already written are left out (zoom in to see them): the big landmarks first, then the
+    // other buildings, the stations, and the parks and squares
+    const placed = [], room = (t, X, Y, font) => {
+      g.font = font;
+      const w = g.measureText(t).width + 4, h = parseFloat(/(\d+(\.\d+)?)px/.exec(font)[1]) + 2, x0 = X - w / 2, y0 = Y - h / 2;
+      for (const [bx, by, bw, bh] of placed) if (x0 < bx + bw && bx < x0 + w && y0 < by + bh && by < y0 + h) return false;
+      placed.push([x0, y0, w, h]);
+      return true;
+    };
+    const rank = ([t, , , kind]) => (kind === 'landmark' ? (MAJOR_LANDMARKS.includes(t) ? 0 : 1) : kind === 'tbana' ? 2 : 3);
+    for (const [t, x, z, kind] of mapLabels.slice().sort((a, b) => rank(a) - rank(b))) {
+      if (kind === 'landmark' && (k > 0.42 || MAJOR_LANDMARKS.includes(t))) {
+        g.fillStyle = '#7a2a1a'; g.beginPath(); g.arc(toX(x), toY(z), 3, 0, TAU); g.fill();
+        const font = '700 ' + clamp(10 * Math.sqrt(k / 0.3), 10, 15) + 'px Overpass, sans-serif';
+        if (room(t, toX(x), toY(z) - 11, font)) text(t, toX(x), toY(z) - 11, font, '#5a2414');
+      } else if (kind === 'tbana' && k > 0.18) {
+        const X = toX(x), Y = toY(z);
+        g.fillStyle = '#1062b4'; g.beginPath(); g.arc(X, Y, 7, 0, TAU); g.fill();
+        g.fillStyle = '#fff'; g.font = '900 10px Overpass, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('T', X, Y + 0.5);
+        if (k > 0.4 && room(t, X, Y + 14, '700 11px Overpass, sans-serif')) text(t, X, Y + 14, '700 11px Overpass, sans-serif', '#1062b4');
+      } else if ((kind === 'park' || kind === 'square') && k > 0.45 && room(t, toX(x), toY(z), 'italic 600 11px Overpass, sans-serif')) text(t, toX(x), toY(z), 'italic 600 11px Overpass, sans-serif', kind === 'park' ? '#3b6e2a' : '#6b6255');
+    }
+    for (const [t, x, z] of DISTRICT_LABELS) text(t, toX(x), toY(z), '900 ' + clamp(14 * Math.sqrt(k / 0.25), 12, 26) + 'px Overpass, sans-serif', 'rgba(40,36,30,.62)', 0, 'rgba(255,255,255,.6)');
+    // the Dalahästar you have found
+    if (k > 0.25) for (const h of horses) if (h.found) {
+      const X = toX(h.x), Y = toY(h.z);
+      g.fillStyle = '#c8102e'; g.strokeStyle = '#fff'; g.lineWidth = 1.5;
+      g.beginPath(); g.moveTo(X, Y - 6); g.lineTo(X + 5, Y); g.lineTo(X, Y + 6); g.lineTo(X - 5, Y); g.closePath(); g.fill(); g.stroke();
+    }
+    VENDORS.drawBig(g, toX, toY, k);
+    JOBS.drawBig(g, toX, toY, k);
+    // the army: dark green squares
+    for (const c of cars) {
+      if (!c.military || c === driving) continue;
+      g.fillStyle = '#3d4a30'; g.strokeStyle = '#fff'; g.lineWidth = 1.5;
+      g.fillRect(toX(c.x) - 5, toY(c.z) - 5, 10, 10); g.strokeRect(toX(c.x) - 5, toY(c.z) - 5, 10, 10);
+    }
+    // police and you
+    for (const c of cars) {
+      if (!c.M.police || c === driving) continue;
+      g.fillStyle = c.siren && Math.floor(performance.now() / 250) % 2 ? '#e0102e' : '#2f6bff';
+      g.beginPath(); g.arc(toX(c.x), toY(c.z), 4.5, 0, TAU); g.fill();
+      g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.stroke();
+    }
+    if (heli) { g.save(); g.translate(toX(heli.x), toY(heli.z)); g.scale(2.2, 2.2); drawHeliIcon(g, 0, 0, heli.h, 0.5, false); g.restore(); }
+    // boats lying at the quays, waiting for someone
+    for (const c of cars) {
+      if (!c.M.boat || c === driving || c.occupant) continue;
+      const X = toX(c.x), Y = toY(c.z);
+      g.fillStyle = '#ffffff'; g.strokeStyle = '#0a5ba8'; g.lineWidth = 1.5;
+      g.beginPath(); g.moveTo(X - 6, Y - 2); g.lineTo(X + 6, Y - 2); g.lineTo(X + 3.5, Y + 3); g.lineTo(X - 3.5, Y + 3); g.closePath(); g.fill(); g.stroke();
+    }
+    if (spawnedCar && spawnedCar !== driving) {
+      g.fillStyle = hex(spawnedCar.color); g.strokeStyle = '#fff'; g.lineWidth = 2;
+      g.fillRect(toX(spawnedCar.x) - 4, toY(spawnedCar.z) - 4, 8, 8); g.strokeRect(toX(spawnedCar.x) - 4, toY(spawnedCar.z) - 4, 8, 8);
+    }
+    MP.drawBig(g, toX, toY, text);
+    const p = driving || player, rot = driving ? driving.h : player.rot, X = toX(p.x), Y = toY(p.z);
+    g.save(); g.translate(X, Y); g.rotate(-rot);
+    g.beginPath(); g.moveTo(0, 13); g.lineTo(9, -8); g.lineTo(0, -3); g.lineTo(-9, -8); g.closePath();
+    g.fillStyle = driving ? hex(driving.color) : '#ffffff'; g.strokeStyle = '#0a5ba8'; g.lineWidth = 3; g.lineJoin = 'round'; g.fill(); g.stroke();
+    g.restore();
+    text('Du är här', X, Y + 24, '800 13px Overpass, sans-serif', '#0a5ba8');
+  }
+  {
+    const zoomBy = (dz, mx, my) => {
+      const r = bm.cv.getBoundingClientRect(), k0 = bigmapFit() * Math.pow(2, bigmap.zoom);
+      const nz = clamp(bigmap.zoom + dz, 0, 3.8), k1 = bigmapFit() * Math.pow(2, nz);
+      if (mx !== undefined) {
+        const wx = bigmap.cx + (mx - r.left - r.width / 2) / k0, wz = bigmap.cz + (my - r.top - r.height / 2) / k0;
+        bigmap.cx = wx - (mx - r.left - r.width / 2) / k1; bigmap.cz = wz - (my - r.top - r.height / 2) / k1;
+      }
+      bigmap.zoom = nz;
+      drawBigmap();
+    };
+    bm.cv.addEventListener('wheel', (e) => { e.preventDefault(); zoomBy(-e.deltaY * 0.0018, e.clientX, e.clientY); }, { passive: false });
+    bm.cv.addEventListener('pointerdown', (e) => { bigmap.drag = { id: e.pointerId, x: e.clientX, y: e.clientY }; bm.cv.setPointerCapture(e.pointerId); });
+    bm.cv.addEventListener('pointermove', (e) => {
+      const d = bigmap.drag;
+      if (!d || d.id !== e.pointerId) return;
+      const k = bigmapFit() * Math.pow(2, bigmap.zoom);
+      bigmap.cx -= (e.clientX - d.x) / k; bigmap.cz -= (e.clientY - d.y) / k;
+      d.x = e.clientX; d.y = e.clientY;
+      drawBigmap();
+    });
+    const endDrag = (e) => { if (bigmap.drag && bigmap.drag.id === e.pointerId) bigmap.drag = null; };
+    bm.cv.addEventListener('pointerup', endDrag);
+    bm.cv.addEventListener('pointercancel', endDrag);
+    bm.cv.addEventListener('dblclick', () => { const p = driving || player; bigmap.cx = p.x; bigmap.cz = p.z; drawBigmap(); });
+    $('bigmapIn').addEventListener('click', () => zoomBy(0.6));
+    $('bigmapOut').addEventListener('click', () => zoomBy(-0.6));
+    $('bigmapClose').addEventListener('click', closeBigmap);
+    bm.el.addEventListener('click', (e) => { if (e.target === bm.el) closeBigmap(); });
+    $('map').addEventListener('click', (e) => { e.stopPropagation(); openBigmap(); });
+  }
+
+
+  /* ================= sound ================= */
+  // Engines are synthesised from the firing frequency (rpm / 60 × cylinders / 2). Each engine type mixes it differently:
+  // saw/sub/harm are the oscillator levels, noise the intake hiss, clatter the diesel knock, lope the uneven beat of a
+  // V8 at idle, drive how hard the sound is distorted, cut/open the muffler (low-pass) and how far it opens with revs,
+  // turbo the whistle, pops the crackle when you lift off at high revs.
+  const ENGINE_SOUNDS = {
+    i4: { cyl: 4, saw: 0.55, sub: 0.25, harm: 0.12, noise: 0.05, clatter: 0, lope: 0.05, drive: 1.6, cut: 240, open: 2.4, q: 0.9, turbo: 0, pops: 0, vol: 0.85 },
+    i5: { cyl: 5, saw: 0.5, sub: 0.35, harm: 0.16, noise: 0.05, clatter: 0, lope: 0.24, lopeRatio: 0.5, drive: 2.2, cut: 260, open: 2.8, q: 1.3, turbo: 0.12, pops: 0, vol: 0.9 },
+    i4t: { cyl: 4, saw: 0.55, sub: 0.25, harm: 0.16, noise: 0.07, clatter: 0, lope: 0.04, drive: 2.2, cut: 300, open: 3, q: 1.1, turbo: 0.55, pops: 0.15, vol: 0.9 },
+    diesel: { cyl: 4, saw: 0.42, sub: 0.45, harm: 0.08, noise: 0.14, clatter: 0.55, lope: 0.08, drive: 2.6, cut: 190, open: 2.1, q: 0.8, turbo: 0.3, pops: 0, vol: 0.95 },
+    bus: { cyl: 6, saw: 0.36, sub: 0.75, harm: 0.05, noise: 0.16, clatter: 0.45, lope: 0.1, drive: 3, cut: 120, open: 1.5, q: 0.7, turbo: 0.45, pops: 0, vol: 1.2 },
+    flat6: { cyl: 6, saw: 0.6, sub: 0.3, harm: 0.38, harmWave: 'sawtooth', harmRatio: 1.5, noise: 0.08, clatter: 0, lope: 0.12, drive: 4.2, cut: 420, open: 4.6, q: 2.2, turbo: 0.85, pops: 0.6, vol: 1.0 },
+    v8: { cyl: 8, saw: 0.6, sub: 0.8, subRatio: 0.25, harm: 0.18, noise: 0.08, clatter: 0, lope: 0.6, lopeRatio: 0.5, drive: 5, cut: 300, open: 3.4, q: 2.6, turbo: 0, pops: 1, vol: 1.15 },
+    // electric motor: a clean whine that climbs with speed, no firing pulses at all
+    ev: { cyl: 18, saw: 0, sub: 0, harm: 0.5, harmWave: 'sine', harmRatio: 1, noise: 0.05, clatter: 0, lope: 0, drive: 1, cut: 900, open: 1.6, q: 0.6, turbo: 0, pops: 0, vol: 0.55 },
+    v10: { cyl: 10, saw: 0.55, sub: 0.2, harm: 0.55, harmWave: 'sawtooth', harmRatio: 2, noise: 0.06, clatter: 0, lope: 0.05, drive: 3.4, cut: 650, open: 6, q: 3, turbo: 0, pops: 0.8, vol: 1.0 },
+    // BMW's straight six: smooth and even, a silky rasp at the top with a little turbo whistle
+    i6: { cyl: 6, saw: 0.55, sub: 0.3, harm: 0.32, harmWave: 'sawtooth', harmRatio: 1.5, noise: 0.06, clatter: 0, lope: 0.03, drive: 2.6, cut: 330, open: 3.8, q: 1.5, turbo: 0.35, pops: 0.25, vol: 0.95 },
+    // Ferrari's flat-plane V8: fires evenly like two fours, so no V8 burble, just a hard scream that climbs to 8 000
+    v8flat: { cyl: 8, saw: 0.6, sub: 0.28, harm: 0.5, harmWave: 'sawtooth', harmRatio: 2, noise: 0.07, clatter: 0, lope: 0.03, drive: 3.8, cut: 620, open: 5.5, q: 2.8, turbo: 0.45, pops: 0.7, vol: 1.0 },
+    // the F40's twin-turbo V8: flat-plane and raw, a loud whistle as the turbos come in, and the wastegates chattering
+    // when you lift off on boost
+    f40: { cyl: 8, saw: 0.62, sub: 0.3, harm: 0.46, harmWave: 'sawtooth', harmRatio: 2, noise: 0.12, clatter: 0, lope: 0.05, drive: 4.6, cut: 480, open: 4.6, q: 2.4, turbo: 1.7, pops: 0.9, flutter: 1, vol: 1.05 },
+    // a 50 cc two-stroke single: fires on every turn, a thin buzzy rasp through the expansion pipe that goes
+    // ring-ding-ding at idle, and the variator keeps it screaming while you ride
+    // the tank's MTU V12 diesel: a deep rumble, the turbines whining over it and the clatter of the tracks
+    tank: { cyl: 12, saw: 0.38, sub: 0.85, harm: 0.1, noise: 0.22, clatter: 0.65, lope: 0.12, drive: 3.4, cut: 170, open: 1.6, q: 0.8, turbo: 0.9, pops: 0, vol: 1.35 },
+    // the jet ski's supercharged Rotax triple: a hard, high rasp with the supercharger whining over it
+    jetski: { cyl: 3, saw: 0.5, sub: 0.22, harm: 0.42, harmWave: 'sawtooth', harmRatio: 1.5, noise: 0.22, clatter: 0, lope: 0.04, drive: 2.8, cut: 520, open: 3.4, q: 1.4, turbo: 1.1, pops: 0, vol: 0.85 },
+    // a big V8 outboard: a deep burble through the water at idle that turns into a growl
+    outboard: { cyl: 8, saw: 0.5, sub: 0.6, subRatio: 0.25, harm: 0.15, noise: 0.16, clatter: 0, lope: 0.4, lopeRatio: 0.5, drive: 3.2, cut: 240, open: 2.6, q: 1.7, turbo: 0, pops: 0.25, vol: 1.0 },
+    twostroke: { cyl: 2, saw: 0.7, sub: 0.12, harm: 0.5, harmWave: 'square', harmRatio: 2, noise: 0.2, clatter: 0, lope: 0.22, lopeRatio: 1, drive: 3.2, cut: 950, open: 2.8, q: 3.8, turbo: 0, pops: 0.35, vol: 0.62 },
+    // a V12 without turbos (the Aventador's, the LaFerrari's, the Countach's): smooth, and a high scream at the top
+    v12: { cyl: 12, saw: 0.55, sub: 0.2, harm: 0.6, harmWave: 'sawtooth', harmRatio: 2, noise: 0.05, clatter: 0, lope: 0.02, drive: 3.6, cut: 760, open: 6.5, q: 3.2, turbo: 0, pops: 0.6, vol: 1.0 },
+    // a V12 with turbos (the Huayra's AMG, the DBS's): deeper, rounder, the turbos hissing over it
+    v12t: { cyl: 12, saw: 0.55, sub: 0.35, harm: 0.45, harmWave: 'sawtooth', harmRatio: 2, noise: 0.07, clatter: 0, lope: 0.03, drive: 3.4, cut: 520, open: 5, q: 2.6, turbo: 0.75, pops: 0.6, flutter: 0.4, vol: 1.05 },
+    // the Chiron's W16 with four turbos: a deep, heavy roar, and a rush of air and whistles from the turbos
+    w16: { cyl: 16, saw: 0.5, sub: 0.55, subRatio: 0.5, harm: 0.3, harmWave: 'sawtooth', harmRatio: 1.5, noise: 0.12, clatter: 0, lope: 0.05, drive: 3.2, cut: 380, open: 3.8, q: 1.8, turbo: 1.4, pops: 0.3, flutter: 0.6, vol: 1.1 },
+    // the GT-R's V6 with two turbos: a hard, hissing growl
+    v6: { cyl: 6, saw: 0.58, sub: 0.3, harm: 0.3, harmWave: 'sawtooth', harmRatio: 1.5, noise: 0.08, clatter: 0, lope: 0.08, drive: 3, cut: 320, open: 3.6, q: 1.6, turbo: 0.9, pops: 0.5, vol: 0.95 }
+  };
+  const TRAFFIC_VOICES = 3;
+  let audio = null, muted = false;
+  function shaperCurve(k) {
+    const n = 512, c = new Float32Array(n), d = Math.tanh(k);
+    for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * 2 - 1; c[i] = Math.tanh(k * x) / d; }
+    return c;
+  }
+  function makeEngineVoice(ctx, dest, noiseBuf) {
+    const out = ctx.createGain(); out.gain.value = 0;
+    const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    if (pan) { out.connect(pan); pan.connect(dest); } else out.connect(dest);
+    const filt = ctx.createBiquadFilter(); filt.type = 'lowpass';
+    const shaper = ctx.createWaveShaper(); shaper.oversample = '2x';
+    const mix = ctx.createGain();
+    mix.connect(shaper); shaper.connect(filt); filt.connect(out);
+    const osc = (type) => { const o = ctx.createOscillator(); o.type = type; o.start(); return o; };
+    const gain = (to) => { const g = ctx.createGain(); g.gain.value = 0; g.connect(to); return g; };
+    const a = osc('sawtooth'), b = osc('square'), h = osc('triangle');
+    const ga = gain(mix), gb = gain(mix), gh = gain(mix);
+    a.connect(ga); b.connect(gb); h.connect(gh);
+    const noise = ctx.createBufferSource(); noise.buffer = noiseBuf; noise.loop = true; noise.start(0, Math.random() * 1.5);
+    const nf = ctx.createBiquadFilter(); nf.type = 'bandpass'; nf.Q.value = 0.9;
+    const gn = gain(mix); noise.connect(nf); nf.connect(gn);
+    // diesel knock: noise switched on and off by a square wave at the firing frequency
+    const cf = ctx.createBiquadFilter(); cf.type = 'bandpass'; cf.frequency.value = 1900; cf.Q.value = 1.6;
+    const gc = gain(mix); noise.connect(cf); cf.connect(gc);
+    const knock = osc('square'), gk = ctx.createGain(); gk.gain.value = 0; knock.connect(gk); gk.connect(gc.gain);
+    // uneven firing: the whole mix swells and dips at crank speed
+    const lope = osc('sine'), gl = ctx.createGain(); gl.gain.value = 0; lope.connect(gl); gl.connect(mix.gain);
+    const turbo = osc('sine'), gt = gain(out); turbo.connect(gt);
+    return { ctx, out, pan, filt, shaper, mix, a, b, h, ga, gb, gh, nf, gn, gc, gk, knock, lope, gl, turbo, gt, profile: null, P: null, car: null, boost: 0, prevLoad: 0 };
+  }
+  function setProfile(v, key) {
+    if (v.profile === key) return;
+    const P = ENGINE_SOUNDS[key], t = v.ctx.currentTime;
+    v.profile = key; v.P = P;
+    v.h.type = P.harmWave || 'triangle';
+    v.shaper.curve = shaperCurve(P.drive);
+    v.filt.Q.value = P.q;
+    v.ga.gain.setValueAtTime(P.saw, t); v.gb.gain.setValueAtTime(P.sub, t); v.gh.gain.setValueAtTime(P.harm, t); v.gn.gain.setValueAtTime(P.noise, t);
+    v.gc.gain.setValueAtTime(P.clatter * 0.5, t); v.gk.gain.setValueAtTime(P.clatter * 0.5, t);
+    v.mix.gain.setValueAtTime(1 - P.lope * 0.5, t); v.gl.gain.setValueAtTime(P.lope * 0.5, t);
+  }
+  function driveVoice(v, c, level, pan, t) {
+    const P = v.P, M = c.M, rpm = Math.max(1, c.rpm), T = 0.025;
+    const f = (rpm / 60) * (P.cyl / 2), rf = clamp(rpm / M.red, 0, 1.05), load = c.load || 0;
+    v.a.frequency.setTargetAtTime(f, t, T);
+    v.b.frequency.setTargetAtTime(f * (P.subRatio || 0.5), t, T);
+    v.h.frequency.setTargetAtTime(f * (P.harmRatio || 2), t, T);
+    v.knock.frequency.setTargetAtTime(f, t, T);
+    v.lope.frequency.setTargetAtTime((rpm / 60) * (P.lopeRatio || 0.5), t, T);
+    v.nf.frequency.setTargetAtTime(Math.min(8000, f * 4 + 200), t, T);
+    v.filt.frequency.setTargetAtTime(Math.min(12000, P.cut + f * P.open * (0.55 + load * 0.6)), t, 0.05);
+    v.boost += ((load > 0.5 && rf > 0.35 ? rf : 0) - v.boost) * 0.08;
+    v.turbo.frequency.setTargetAtTime(1400 + rpm * 0.9, t, 0.08);
+    v.gt.gain.setTargetAtTime(P.turbo * v.boost * 0.02 * level, t, 0.08);
+    let g = c.dead ? 0 : P.vol * level * (0.42 + 0.38 * load + 0.25 * rf);
+    if (c.limiter && Math.random() < 0.5) g *= 0.2; // stutter against the rev limiter
+    v.out.gain.setTargetAtTime(g * 0.12, t, c.limiter ? 0.01 : 0.05);
+    if (v.pan) v.pan.pan.setTargetAtTime(pan, t, 0.05);
+    // crackle and pops from the exhaust when you lift off at high revs
+    if (P.pops && v.prevLoad > 0.6 && load < 0.1 && rf > 0.45 && !c.dead) pops(P.pops * level, pan, rf);
+    if (P.flutter && v.prevLoad > 0.6 && load < 0.1 && v.boost > 0.25 && !c.dead) flutter(P.flutter * level, pan);
+    v.prevLoad = load;
+  }
+  function noiseBurst(t, dur, peak, type, freq, q, pan, attack = 0.005) {
+    const ctx = audio.ctx, src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    src.buffer = audio.noise; f.type = type; f.frequency.value = freq; if (q) f.Q.value = q;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t + attack); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f); f.connect(g);
+    if (pan && ctx.createStereoPanner) { const p = ctx.createStereoPanner(); p.pan.value = pan; g.connect(p); p.connect(audio.fx); } else g.connect(audio.fx);
+    src.start(t, Math.random() * 1.5, dur + 0.05);
+    return f;
+  }
+  function tone(t, type, f0, f1, dur, peak, pan) {
+    const ctx = audio.ctx, o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t + dur);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g);
+    if (pan && ctx.createStereoPanner) { const p = ctx.createStereoPanner(); p.pan.value = pan; g.connect(p); p.connect(audio.fx); } else g.connect(audio.fx);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  function pops(level, pan, rf) {
+    if (!audio || muted) return;
+    const t0 = audio.ctx.currentTime;
+    let t = t0 + 0.04;
+    const n = 3 + Math.floor(Math.random() * 5 * rf);
+    for (let i = 0; i < n; i++) {
+      t += 0.03 + Math.random() * 0.11;
+      noiseBurst(t, 0.05 + Math.random() * 0.04, (0.12 + Math.random() * 0.2) * level, 'lowpass', 700 + Math.random() * 900, 1.5, pan, 0.002);
+    }
+  }
+  // a cannon: a crack, a deep boom rolling away, and the thud you feel
+  function cannonSound(x, z, size) {
+    if (!audio || muted) return;
+    const s = placeSound(x, z, 700);
+    if (s.level < 0.003) return;
+    const t = audio.ctx.currentTime, L = Math.min(1, s.level * size);
+    noiseBurst(t, 0.18, 0.6 * L, 'highpass', 1500, 0.5, s.pan, 0.001);
+    const f = noiseBurst(t, 1.8, 0.9 * L, 'lowpass', 1200, 0.7, s.pan, 0.004);
+    f.frequency.setValueAtTime(1200, t); f.frequency.exponentialRampToValueAtTime(110, t + 1.4);
+    tone(t, 'sine', 85, 26, 1.1, 0.9 * L, s.pan);
+  }
+  // the wastegates chattering as you lift off on boost: a hiss, then a quick flutter
+  function flutter(level, pan) {
+    if (!audio || muted) return;
+    const t0 = audio.ctx.currentTime + 0.02;
+    noiseBurst(t0, 0.35, 0.09 * level, 'highpass', 2200, 0.7, pan, 0.01);
+    for (let i = 0; i < 6; i++) noiseBurst(t0 + 0.05 + i * 0.045, 0.035, (0.07 - i * 0.008) * level, 'bandpass', 1300 + Math.random() * 500, 1.2, pan, 0.003);
+  }
+  // where a sound is relative to the camera: left/right pan, and how loud it is with distance
+  function placeSound(x, z, range) {
+    const dx = x - camera.position.x, dz = z - camera.position.z, d = Math.hypot(dx, dz) || 1;
+    const rx = -Math.cos(camYaw), rz = Math.sin(camYaw);
+    return { pan: clamp((dx * rx + dz * rz) / d, -1, 1) * 0.85, level: Math.pow(clamp(1 - d / range, 0, 1), 2), d };
+  }
+  function initAudio() {
+    if (audio) { if (audio.ctx.state === 'suspended') audio.ctx.resume(); return; }
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const master = ctx.createGain(); master.gain.value = muted ? 0 : 1;
+      const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -10; comp.ratio.value = 4;
+      master.connect(comp); comp.connect(ctx.destination);
+      const fx = ctx.createGain(); fx.gain.value = 1; fx.connect(master);
+      const noise = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), nd = noise.getChannelData(0);
+      for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+      audio = { ctx, master, fx, noise, player: null, traffic: [], siren: null, tyre: null };
+      audio.player = makeEngineVoice(ctx, master, noise);
+      for (let i = 0; i < TRAFFIC_VOICES; i++) audio.traffic.push(makeEngineVoice(ctx, master, noise));
+      // tyre screech: narrow band of noise
+      {
+        const src = ctx.createBufferSource(); src.buffer = noise; src.loop = true; src.start();
+        const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1150; f.Q.value = 5;
+        const f2 = ctx.createBiquadFilter(); f2.type = 'peaking'; f2.frequency.value = 2300; f2.gain.value = 8;
+        const g = ctx.createGain(); g.gain.value = 0;
+        src.connect(f); f.connect(f2); f2.connect(g); g.connect(master);
+        audio.tyre = { g, f };
+        // the water rushing past a boat's hull and the hiss of its spray
+        const src2 = ctx.createBufferSource(); src2.buffer = noise; src2.loop = true; src2.start(0, 0.7);
+        const wf = ctx.createBiquadFilter(); wf.type = 'lowpass'; wf.frequency.value = 900; wf.Q.value = 0.5;
+        const wg = ctx.createGain(); wg.gain.value = 0;
+        src2.connect(wf); wf.connect(wg); wg.connect(master);
+        audio.water = { g: wg, f: wf };
+      }
+      // siren: a square wave whose pitch sweeps (wail) or warbles fast (yelp)
+      {
+        const o = ctx.createOscillator(); o.type = 'square'; o.frequency.value = 700; o.start();
+        const o2 = ctx.createOscillator(); o2.type = 'sawtooth'; o2.frequency.value = 702; o2.start();
+        const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 2600;
+        const g = ctx.createGain(); g.gain.value = 0;
+        const p = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+        o.connect(f); o2.connect(f); f.connect(g);
+        if (p) { g.connect(p); p.connect(master); } else g.connect(master);
+        audio.siren = { o, o2, g, p, phase: 0 };
+      }
+      // the helicopter: the thud of the blades (low noise chopped at the blade rate) over the whine of the turbines
+      {
+        const src = ctx.createBufferSource(); src.buffer = noise; src.loop = true; src.start();
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 520; lp.Q.value = 0.8;
+        const chop = ctx.createGain(); chop.gain.value = 0.35;
+        const lfo = ctx.createOscillator(); lfo.type = 'sawtooth'; lfo.frequency.value = 21; lfo.start();
+        const lg = ctx.createGain(); lg.gain.value = -0.35; lfo.connect(lg); lg.connect(chop.gain);
+        const thump = ctx.createOscillator(); thump.type = 'sine'; thump.frequency.value = 42; thump.start();
+        const tg = ctx.createGain(); tg.gain.value = 0.25; thump.connect(tg); tg.connect(chop);
+        const whine = ctx.createOscillator(); whine.type = 'sine'; whine.frequency.value = 3150; whine.start();
+        const wg = ctx.createGain(); wg.gain.value = 0;
+        const g = ctx.createGain(); g.gain.value = 0;
+        const p = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+        src.connect(lp); lp.connect(chop); chop.connect(g); whine.connect(wg); wg.connect(g);
+        if (p) { g.connect(p); p.connect(master); } else g.connect(master);
+        audio.rotor = { g, wg, p };
+      }
+    } catch { audio = null; }
+  }
+  function updateAudio(dt) {
+    if (!audio) return;
+    const t = audio.ctx.currentTime, quiet = paused() || !started;
+    // your own car
+    const pv = audio.player;
+    if (driving && !quiet) {
+      setProfile(pv, driving.M.eng);
+      driveVoice(pv, driving, 1, 0, t);
+      const sp = Math.hypot(driving.vx, driving.vz);
+      audio.tyre.g.gain.setTargetAtTime(sp > 2 ? clamp((driving.slip - 2.4) * 0.03, 0, 0.16) : 0, t, 0.05);
+      audio.tyre.f.frequency.setTargetAtTime(1000 + Math.min(600, driving.slip * 40), t, 0.1);
+      airBrake(driving, 0, 1);
+      if (driving.M.boat) { audio.water.g.gain.setTargetAtTime(0.03 + clamp(sp / 22, 0, 1) * 0.22, t, 0.1); audio.water.f.frequency.setTargetAtTime(500 + sp * 90, t, 0.1); audio.tyre.g.gain.setTargetAtTime(0, t, 0.05); }
+      else audio.water.g.gain.setTargetAtTime(0, t, 0.1);
+    } else {
+      pv.out.gain.setTargetAtTime(0, t, 0.08); pv.gt.gain.setTargetAtTime(0, t, 0.08); audio.water.g.gain.setTargetAtTime(0, t, 0.1);
+      audio.tyre.g.gain.setTargetAtTime(0, t, 0.05);
+    }
+    // the nearest few cars in traffic, each with its own engine sound
+    const near = [];
+    if (!quiet) for (const c of cars) {
+      if (c === driving || !c.occupant || c.dead) continue;
+      const d = Math.hypot(c.x - camera.position.x, c.z - camera.position.z);
+      if (d < 70) near.push({ c, d });
+    }
+    near.sort((a, b) => a.d - b.d);
+    const want = near.slice(0, TRAFFIC_VOICES).map((n) => n.c);
+    for (const v of audio.traffic) if (v.car && !want.includes(v.car)) v.car = null;
+    for (const c of want) if (!audio.traffic.some((v) => v.car === c)) { const v = audio.traffic.find((x) => !x.car); if (v) v.car = c; }
+    for (const v of audio.traffic) {
+      if (!v.car) { v.out.gain.setTargetAtTime(0, t, 0.1); v.gt.gain.setTargetAtTime(0, t, 0.1); continue; }
+      const s = placeSound(v.car.x, v.car.z, 70);
+      setProfile(v, v.car.M.eng);
+      driveVoice(v, v.car, s.level * 0.8, s.pan, t);
+      airBrake(v.car, s.pan, s.level);
+    }
+    // the loudest police siren
+    let siren = null, sl = 0, sp = 0, yelp = false;
+    if (!quiet) for (const c of cars) {
+      if (!c.siren) continue;
+      const s = placeSound(c.x, c.z, 320);
+      if (s.level > sl) { sl = s.level; sp = s.pan; siren = c; yelp = c.yelp; }
+    }
+    const S = audio.siren;
+    if (siren) {
+      S.phase += dt * (yelp ? 3.2 : 0.28);
+      const k = yelp ? Math.abs(((S.phase % 1) * 2) - 1) : 0.5 - 0.5 * Math.cos(S.phase * TAU);
+      const f = 640 + k * (yelp ? 700 : 760);
+      S.o.frequency.setTargetAtTime(f, t, 0.01); S.o2.frequency.setTargetAtTime(f * 1.003, t, 0.01);
+      S.g.gain.setTargetAtTime(0.045 * sl + (siren === driving ? 0.02 : 0), t, 0.05);
+      if (S.p) S.p.pan.setTargetAtTime(sp, t, 0.05);
+    } else S.g.gain.setTargetAtTime(0, t, 0.08);
+    // the helicopter overhead, heard from far off
+    const R = audio.rotor;
+    if (heli && !quiet) {
+      const s = placeSound(heli.x, heli.z, 700), d3 = Math.hypot(s.d, heli.y - camera.position.y), lv = Math.pow(clamp(1 - d3 / 700, 0, 1), 2);
+      R.g.gain.setTargetAtTime(0.9 * lv, t, 0.1); R.wg.gain.setTargetAtTime(0.012 * lv, t, 0.1);
+      if (R.p) R.p.pan.setTargetAtTime(s.pan * 0.7, t, 0.1);
+    } else R.g.gain.setTargetAtTime(0, t, 0.2);
+  }
+  // buses hiss when the air brakes hold them at a stop
+  function airBrake(c, pan, level) {
+    const sp = Math.hypot(c.vx, c.vz);
+    if (c.M.bus && c.hadBrake && sp < 0.3 && !muted && level > 0.02) noiseBurst(audio.ctx.currentTime, 0.9, 0.12 * level, 'bandpass', 3200, 0.6, pan, 0.02);
+    c.hadBrake = c.M.bus && (sp >= 0.3 ? c.braking || c.hadBrake : false);
+  }
+  function onShift(c, dir) {
+    if (!audio || muted) return;
+    const t = audio.ctx.currentTime, P = ENGINE_SOUNDS[c.M.eng];
+    noiseBurst(t, 0.06, 0.03, 'lowpass', 380, 1, 0); // gearbox clunk
+    if (dir > 0 && P.turbo > 0.4 && audio.player.boost > 0.35) noiseBurst(t + 0.02, 0.4, 0.07, 'highpass', 1900, 0.7, 0, 0.02); // blow-off valve
+  }
+  function crashSound(x, z, speed, glass) {
+    if (!audio || muted) return;
+    const s = placeSound(x, z, 120);
+    if (s.level < 0.01) return;
+    const t = audio.ctx.currentTime, k = Math.min(1, speed / 18) * s.level;
+    // crunch of metal and plastic, a low thump, and a few panels ringing
+    const f = noiseBurst(t, 0.35 + k * 0.3, 0.5 * k, 'lowpass', 3200, 0.8, s.pan, 0.003);
+    f.frequency.setValueAtTime(3200, t); f.frequency.exponentialRampToValueAtTime(260, t + 0.3);
+    tone(t, 'sine', 120, 38, 0.32, 0.5 * k, s.pan);
+    for (let i = 0; i < 3 + Math.round(k * 3); i++) {
+      const f0 = 180 + Math.random() * 900;
+      tone(t + Math.random() * 0.08, 'triangle', f0, f0 * 0.93, 0.25 + Math.random() * 0.35, 0.05 * k, s.pan);
+    }
+    if (glass) {
+      noiseBurst(t + 0.01, 0.5, 0.3 * s.level, 'highpass', 3600, 0.7, s.pan, 0.002);
+      for (let i = 0; i < 10; i++) { const f0 = 2600 + Math.random() * 4000; tone(t + 0.02 + Math.random() * 0.45, 'sine', f0, f0, 0.06 + Math.random() * 0.08, 0.04 * s.level, s.pan); }
+    }
+  }
+  function beep(freqs, vol, len, pan = 0) {
+    if (!audio || muted) return;
+    const t = audio.ctx.currentTime;
+    for (const f of freqs) {
+      const o = audio.ctx.createOscillator(), g = audio.ctx.createGain();
+      o.type = 'square'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + 0.02);
+      g.gain.setValueAtTime(vol, t + len - 0.08);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+      o.connect(g);
+      if (pan && audio.ctx.createStereoPanner) { const p = audio.ctx.createStereoPanner(); p.pan.value = pan; g.connect(p); p.connect(audio.fx); } else g.connect(audio.fx);
+      o.start(t); o.stop(t + len + 0.02);
+    }
+  }
+  // The indicators: c.blink is 1 for left, 2 for right and 3 for the hazard lights. They are lit for 0.4 s of every
+  // 0.75 s (80 flashes a minute, starting lit), and in your own car the relay ticks. Like a real stalk, a left or right
+  // signal drops back by itself once the car has turned that way and the wheel comes back to the middle
+  function updateBlink(c, dt) {
+    const bl = c.blink || 0, ind = c.mat.userData.ind;
+    let lit = false;
+    if (bl) { c.blinkT = (c.blinkT || 0) + dt; lit = c.blinkT % 0.75 < 0.4; } else c.blinkT = 0;
+    ind.x = lit && bl & 1 ? IND_GLOW : 0; ind.y = lit && bl & 2 ? IND_GLOW : 0;
+    if (c === driving && lit !== !!c.blinkLit) blinkTick(lit);
+    c.blinkLit = lit;
+    if (c === driving && (bl === 1 || bl === 2)) {
+      c.blinkTurn = (c.blinkTurn || 0) + wrapAngle(c.h - (c.blinkH ?? c.h)) * (bl === 1 ? 1 : -1);
+      if (c.blinkTurn > 0.5 && Math.abs(c.steer) < 0.08) c.blink = 0;
+    }
+    c.blinkH = c.h;
+  }
+  function setBlink(k) {
+    const c = driving;
+    if (!c || c.M.boat || paused()) return;
+    c.blink = c.blink === k ? 0 : k; c.blinkT = 0; c.blinkTurn = 0;
+  }
+  function blinkTick(on) {
+    if (!audio || muted) return;
+    const t = audio.ctx.currentTime;
+    noiseBurst(t, 0.022, on ? 0.1 : 0.075, 'bandpass', on ? 2900 : 2100, 4, 0, 0.001);
+    tone(t, 'square', on ? 1500 : 1150, on ? 900 : 700, 0.018, 0.02, 0);
+  }
+  function horn() {
+    if (!driving) return;
+    beep(driving.M.moped ? [740] : driving.M.bus ? [220, 277] : driving.M.sport ? [523, 659] : [392, 494], driving.M.moped ? 0.035 : 0.05, driving.M.moped ? 0.3 : 0.45);
+    MP.event('horn');
+  }
+  function honkAt(x, z) {
+    const s = placeSound(x, z, 70);
+    if (s.level > 0) beep([415, 523], 0.04 * s.level + 0.003, 0.3, s.pan);
+  }
+  function toggleMute() {
+    muted = !muted;
+    el.sound.textContent = muted ? 'Ljud av' : 'Ljud på';
+    if (audio) audio.master.gain.setTargetAtTime(muted ? 0 : 1, audio.ctx.currentTime, 0.05);
+  }
+
+  /* ================= input ================= */
+  function requestLock() {
+    if (isTouch || !canvas.requestPointerLock || paused()) return;
+    try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch { /* drag-to-look still works */ }
+  }
+  function look(dx, dy) {
+    camYaw -= dx * 0.0032;
+    camPitch = clamp(camPitch + dy * 0.0028, -0.4, 1.2);
+    lastLook = performance.now();
+  }
+  function setTouchMode(on) {
+    isTouch = on;
+    document.body.classList.toggle('touch', on);
+    el.touch.hidden = !(on && started);
+    lastPrompt = undefined;
+    sizeMap();
+  }
+  function startGame() {
+    if (started) return;
+    started = true;
+    el.start.hidden = true;
+    document.body.classList.add('playing');
+    camYaw = player.rot;
+    initAudio();
+    setTouchMode(isTouch);
+    requestLock();
+  }
+  $('play').addEventListener('click', startGame);
+  $('pickerClose').addEventListener('click', () => { closePicker(); requestLock(); });
+  $('picker').addEventListener('click', (e) => { if (e.target === $('picker')) closePicker(); });
+
+  const NO_SCROLL = ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+  function onKey(code, repeat, t) {
+    if (bigmap.open) {
+      if (code === 'Escape' || code === 'KeyK') closeBigmap();
+      return;
+    }
+    if (pickerOpen) {
+      if (code === 'Escape') closePicker();
+      else if (code === 'KeyB' && !repeat) pickerB(t);
+      const m = /^Digit(\d)$/.exec(code), list = pickerSecret ? SECRET : PICKABLE;
+      if (m) { const i = (Number(m[1]) + 9) % 10; if (list[i]) chooseModel(list[i]); }
+      return;
+    }
+    if (!started) { if (code === 'Enter' || code === 'Space') startGame(); return; }
+    if (repeat) return;
+    // under arrest most keys do nothing: you can still look at the map, the help and the sound, and E moves things on
+    if (stop && stop.locked && !['KeyE', 'Enter', 'KeyH', 'KeyT', 'KeyK', 'KeyQ'].includes(code) && !(stop.phase === 'jail' && code === 'Space')) return;
+    if (code === 'KeyE' || code === 'Enter') { if (!useKey() && !MP.use() && !LIFT.use() && !VENDORS.use()) toggleCar(); }
+    else if (/^(Digit|Numpad)[0-5]$/.test(code)) LIFT.digit(Number(code.slice(-1)));
+    else if (code === 'Space') jumpQueued = true;
+    else if (code === 'KeyH') el.help.hidden = !el.help.hidden;
+    else if (code === 'KeyT') toggleMute();
+    else if (code === 'KeyF') { if (!tankFire()) horn(); }
+    else if (code === 'KeyR') resetToRoad();
+    else if (code === 'KeyB') pickerB(t);
+    else if (code === 'KeyM') playerShift(1);
+    else if (code === 'KeyN') playerShift(-1);
+    else if (code === 'KeyG') toggleGearbox();
+    else if (code === 'KeyL') toggleSiren();
+    else if (code === 'KeyK') openBigmap();
+    else if (code === 'KeyQ') POST.cycle();
+    else if (code === 'KeyJ') JOBS.key();
+    else if (code === 'KeyV') VENDORS.letGo();
+    else if (code === 'KeyZ') setBlink(1);
+    else if (code === 'KeyX') setBlink(2);
+    else if (code === 'KeyC') setBlink(3);
+    else if (code === 'KeyP') MP.openPanel();
+  }
+  window.addEventListener('keydown', (e) => {
+    if (MP.keydown(e)) return;
+    if (bigmap.open) { if (e.code === 'Escape' || e.code === 'KeyK') { e.preventDefault(); onKey(e.code, e.repeat); } return; }
+    if (pickerOpen) { if (e.code === 'Escape' || e.code === 'KeyB' || /^Digit\d$/.test(e.code)) { e.preventDefault(); onKey(e.code, e.repeat, e.timeStamp); } return; }
+    // (P opens the friends' sign and focuses a field in it: the key itself must not type a "p" there)
+    if (NO_SCROLL.includes(e.code) || (started && e.code === 'KeyP')) e.preventDefault();
+    if (started) keys[e.code] = true;
+    onKey(e.code, e.repeat, e.timeStamp);
+  });
+  window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+  window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+
+  let dragging = false, lastTouchAt = 0;
+  canvas.addEventListener('mousedown', () => {
+    if (!started || paused() || performance.now() - lastTouchAt < 800) return;
+    dragging = true;
+    requestLock();
+  });
+  window.addEventListener('mouseup', () => { dragging = false; });
+  window.addEventListener('mousemove', (e) => {
+    if (!started || paused()) return;
+    if (document.pointerLockElement === canvas || dragging) look(e.movementX || 0, e.movementY || 0);
+  });
+  document.addEventListener('pointerlockchange', () => { document.body.classList.toggle('locked', document.pointerLockElement === canvas); });
+
+  let lookId = null, lookX = 0, lookY = 0;
+  canvas.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'touch') return;
+    lastTouchAt = performance.now();
+    if (!isTouch) setTouchMode(true);
+    if (lookId !== null) return;
+    lookId = e.pointerId; lookX = e.clientX; lookY = e.clientY;
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (e.pointerId !== lookId) return;
+    look((e.clientX - lookX) * 1.6, (e.clientY - lookY) * 1.6);
+    lookX = e.clientX; lookY = e.clientY;
+  });
+  const endLook = (e) => { if (e.pointerId === lookId) lookId = null; };
+  canvas.addEventListener('pointerup', endLook);
+  canvas.addEventListener('pointercancel', endLook);
+
+  const stick = $('stick'), knob = $('knob');
+  let stickId = null;
+  function moveStick(e) {
+    const r = stick.getBoundingClientRect();
+    let dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+    const max = r.width / 2 - 12, l = Math.hypot(dx, dy);
+    if (l > max) { dx *= max / l; dy *= max / l; }
+    joy.x = dx / max; joy.y = dy / max;
+    knob.style.transform = `translate(${dx}px, ${dy}px)`;
+  }
+  stick.addEventListener('pointerdown', (e) => { stickId = e.pointerId; stick.setPointerCapture(e.pointerId); moveStick(e); e.preventDefault(); });
+  stick.addEventListener('pointermove', (e) => { if (e.pointerId === stickId) moveStick(e); });
+  const endStick = (e) => { if (e.pointerId !== stickId) return; stickId = null; joy.x = joy.y = 0; knob.style.transform = ''; };
+  stick.addEventListener('pointerup', endStick);
+  stick.addEventListener('pointercancel', endStick);
+  el.btnJump.addEventListener('pointerdown', (e) => { e.preventDefault(); touchBrake = true; jumpQueued = true; });
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.btnJump.addEventListener(ev, () => { touchBrake = false; });
+  el.btnUse.addEventListener('pointerdown', (e) => { e.preventDefault(); if (!useKey() && !MP.use() && !LIFT.use() && !VENDORS.use()) toggleCar(); });
+  $('btnCars').addEventListener('pointerdown', (e) => { e.preventDefault(); openPicker(); });
+  $('btnJob').addEventListener('pointerdown', (e) => { e.preventDefault(); if (!tankFire()) JOBS.key(); });
+  el.btnUp.addEventListener('pointerdown', (e) => { e.preventDefault(); playerShift(1); });
+  el.blinkL.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); setBlink(1); });
+  el.blinkR.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); setBlink(2); });
+  el.btnDown.addEventListener('pointerdown', (e) => { e.preventDefault(); playerShift(-1); });
+
+  window.addEventListener('resize', () => {
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    sizeMap();
+    drawBigmap();
+  });
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(() => { signTex.redraw(); tTex.redraw(); polisTex.redraw(); if (nkSign) nkSign.userData.tex.redraw(); sizeMap(); drawBigmap(); }).catch(() => {});
+  }
+
+  // start sign distances from where you stand
+  $('dGamla').textContent = fmtKm(Math.hypot(SPAWN.x + 262, SPAWN.z + 606));
+  $('dSoder').textContent = fmtKm(Math.hypot(SPAWN.x - 150, SPAWN.z - 1420));
+  $('dGloben').textContent = fmtKm(Math.hypot(SPAWN.x - GLOBE.x, SPAWN.z - GLOBE.z));
+  buildPicker();
+
+  /* ================= post-processing ================= */
+  // Quality 2: the city mirrored in the water, ambient occlusion (the soft shade where things meet), bloom, anti-aliasing
+  // and a photographic grade (contrast, colour, vignette, film grain). Quality 1: bloom, grade and anti-aliasing only.
+  // Quality 0: straight to the screen as before. Q steps through them; a slow computer steps down by itself.
+  // Everything is drawn to an off-screen picture first, in the same screen colours as before (tone mapping and fog
+  // happen in the materials), and the passes work on that picture.
+  const POST = (() => {
+    const gl2 = renderer.capabilities.isWebGL2, depthOk = gl2 || renderer.extensions.has('WEBGL_depth_texture');
+    const half = gl2 ? THREE.HalfFloatType : THREE.UnsignedByteType;
+    const rt = (w, h, o = {}) => {
+      const t = new THREE.WebGLRenderTarget(w, h, Object.assign({ minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat, depthBuffer: false, stencilBuffer: false }, o));
+      t.texture.generateMipmaps = false;
+      return t;
+    };
+    const VERT = 'varying vec2 vUv;\nvoid main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
+    const pass = (frag, uniforms) => new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: frag, uniforms, depthTest: false, depthWrite: false });
+    const fsCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), fsScene = new THREE.Scene();
+    const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
+    quad.frustumCulled = false; fsScene.add(quad);
+    const draw = (mat, target) => { quad.material = mat; renderer.setRenderTarget(target); renderer.render(fsScene, fsCam); };
+
+    // the picture of the scene, with the depth the occlusion pass reads
+    const main = rt(1, 1, { depthBuffer: true });
+    main.texture.encoding = THREE.sRGBEncoding;
+    // (32-bit float depth where there is WebGL2: finer than 24-bit integer depth far off, where the occlusion needs it)
+    if (depthOk) { main.depthTexture = new THREE.DepthTexture(1, 1); main.depthTexture.type = gl2 ? THREE.FloatType : THREE.UnsignedIntType; }
+
+    /* ambient occlusion, at half size: a dozen samples in the half sphere above each point, then a blur that keeps edges */
+    const DEPTH_FN = [
+      'uniform sampler2D tDepth; uniform float uNear, uFar; uniform vec2 uTan;',
+      'float viewZ(vec2 uv) { float d = texture2D(tDepth, uv).x; return (uNear * uFar) / ((uFar - uNear) * d - uFar); }',
+      'vec3 viewPos(vec2 uv) { float z = viewZ(uv); return vec3((uv * 2.0 - 1.0) * uTan * -z, z); }'
+    ].join('\n');
+    const aoU = { tDepth: { value: main.depthTexture }, uNear: { value: 0.1 }, uFar: { value: 2400 }, uTan: { value: new THREE.Vector2() }, uProj: { value: new THREE.Matrix4() }, uRes: { value: new THREE.Vector2() }, uSeed: { value: 0 } };
+    const aoMat = pass([
+      DEPTH_FN,
+      'uniform mat4 uProj; uniform vec2 uRes; uniform float uSeed; varying vec2 vUv;',
+      'float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }',
+      'void main() {',
+      // read the depth at the middle of one full-size pixel, where its position is exactly known: a half-size pixel
+      // falls on the corner between four of them, and flat ground seen at a low angle would come out jagged
+      '  vec2 uv = (floor(vUv * uRes) + 0.5) / uRes;',
+      '  if (texture2D(tDepth, uv).x >= 0.99999) { gl_FragColor = vec4(1.0); return; }',
+      '  vec3 P = viewPos(uv);',
+      '  if (-P.z > 160.0) { gl_FragColor = vec4(1.0); return; }',
+      '  vec2 px = 1.0 / uRes;',
+      '  vec3 r = viewPos(uv + vec2(px.x, 0.0)), l = viewPos(uv - vec2(px.x, 0.0)), t = viewPos(uv + vec2(0.0, px.y)), b = viewPos(uv - vec2(0.0, px.y));',
+      '  vec3 dx = abs(r.z - P.z) < abs(P.z - l.z) ? r - P : P - l, dy = abs(t.z - P.z) < abs(P.z - b.z) ? t - P : P - b;',
+      '  vec3 N = normalize(cross(dx, dy));',
+      '  float a = hash(gl_FragCoord.xy + uSeed) * 6.2831853;',
+      '  vec3 rv = vec3(cos(a), sin(a), 0.3), T = normalize(rv - N * dot(rv, N)), B = cross(N, T);',
+      // (the tolerance grows with distance: depth is stored more coarsely further off, and on some GPUs it is read
+      // back with less precision, which would otherwise darken flat ground)
+      '  float rad = 0.9 * clamp(-P.z / 14.0, 0.5, 3.0), bias = 0.03 * rad + 1.5e-4 * P.z * P.z, occ = 0.0;',
+      '  for (int i = 0; i < 12; i++) {',
+      '    float s = (float(i) + 0.5) / 12.0, ang = float(i) * 2.3999632, h = sqrt(1.0 - s);',
+      '    vec3 k = vec3(cos(ang) * h, sin(ang) * h, sqrt(s)) * mix(0.15, 1.0, s * s);',
+      '    vec3 S = P + (T * k.x + B * k.y + N * k.z) * rad;',
+      '    vec4 c = uProj * vec4(S, 1.0);',
+      '    vec2 suv = c.xy / c.w * 0.5 + 0.5;',
+      '    float sz = viewZ((floor(suv * uRes) + 0.5) / uRes);',
+      '    occ += (sz >= S.z + bias ? 1.0 : 0.0) * smoothstep(0.0, 1.0, rad / abs(P.z - sz));',
+      '  }',
+      '  float ao = 1.0 - occ / 12.0;',
+      '  gl_FragColor = vec4(vec3(mix(ao, 1.0, smoothstep(100.0, 160.0, -P.z))), 1.0);',
+      '}'
+    ].join('\n'), aoU);
+    const aoBlurU = { tAO: { value: null }, tDepth: { value: main.depthTexture }, uNear: aoU.uNear, uFar: aoU.uFar, uTan: aoU.uTan, uRes: { value: new THREE.Vector2() } };
+    const aoBlur = pass([
+      DEPTH_FN,
+      'uniform sampler2D tAO; uniform vec2 uRes; varying vec2 vUv;',
+      'void main() {',
+      '  float z0 = -viewZ(vUv), sum = 0.0, wsum = 0.0;',
+      '  for (int x = -2; x <= 2; x++) for (int y = -2; y <= 2; y++) {',
+      '    vec2 uv = vUv + vec2(float(x), float(y)) / uRes;',
+      '    float w = exp(-abs(-viewZ(uv) - z0) / (0.03 * z0 + 0.15));',
+      '    sum += texture2D(tAO, uv).r * w; wsum += w;',
+      '  }',
+      '  gl_FragColor = vec4(vec3(sum / max(wsum, 1e-4)), 1.0);',
+      '}'
+    ].join('\n'), aoBlurU);
+    const aoA = rt(1, 1), aoB = rt(1, 1);
+
+    /* bloom: the brightest parts, blurred over a chain of ever smaller pictures and back up again (dual Kawase) */
+    const bloomPre = pass([
+      'uniform sampler2D tSrc; uniform vec2 uPx; varying vec2 vUv;',
+      'void main() {',
+      '  vec3 c = (texture2D(tSrc, vUv + vec2(-uPx.x, -uPx.y)).rgb + texture2D(tSrc, vUv + vec2(uPx.x, -uPx.y)).rgb + texture2D(tSrc, vUv + vec2(-uPx.x, uPx.y)).rgb + texture2D(tSrc, vUv + vec2(uPx.x, uPx.y)).rgb) * 0.25;',
+      '  float br = max(c.r, max(c.g, c.b)), knee = 0.18, soft = clamp(br - 0.82 + knee, 0.0, 2.0 * knee);',
+      '  soft = soft * soft / (4.0 * knee + 1e-4);',
+      '  gl_FragColor = vec4(c * max(soft, br - 0.82) / max(br, 1e-4), 1.0);',
+      '}'
+    ].join('\n'), { tSrc: { value: null }, uPx: { value: new THREE.Vector2() } });
+    const down = pass([
+      'uniform sampler2D tSrc; uniform vec2 uPx; varying vec2 vUv;',
+      'void main() {',
+      '  vec4 s = texture2D(tSrc, vUv) * 4.0 + texture2D(tSrc, vUv - uPx) + texture2D(tSrc, vUv + uPx) + texture2D(tSrc, vUv + vec2(uPx.x, -uPx.y)) + texture2D(tSrc, vUv - vec2(uPx.x, -uPx.y));',
+      '  gl_FragColor = s / 8.0;',
+      '}'
+    ].join('\n'), { tSrc: { value: null }, uPx: { value: new THREE.Vector2() } });
+    const up = pass([
+      'uniform sampler2D tSrc, tAdd; uniform vec2 uPx; varying vec2 vUv;',
+      'void main() {',
+      '  vec4 s = texture2D(tSrc, vUv + vec2(-uPx.x * 2.0, 0.0)) + texture2D(tSrc, vUv + vec2(0.0, uPx.y * 2.0)) + texture2D(tSrc, vUv + vec2(uPx.x * 2.0, 0.0)) + texture2D(tSrc, vUv + vec2(0.0, -uPx.y * 2.0));',
+      '  s += (texture2D(tSrc, vUv + vec2(-uPx.x, uPx.y)) + texture2D(tSrc, vUv + vec2(uPx.x, uPx.y)) + texture2D(tSrc, vUv + vec2(uPx.x, -uPx.y)) + texture2D(tSrc, vUv + vec2(-uPx.x, -uPx.y))) * 2.0;',
+      '  gl_FragColor = s / 12.0 + texture2D(tAdd, vUv);',
+      '}'
+    ].join('\n'), { tSrc: { value: null }, tAdd: { value: null }, uPx: { value: new THREE.Vector2() } });
+    const lvDown = [0, 1, 2, 3].map(() => rt(1, 1, { type: half })), lvUp = [0, 1, 2].map(() => rt(1, 1, { type: half }));
+
+    /* the final picture: anti-aliasing (FXAA), occlusion, bloom and the grade */
+    const finU = {
+      tColor: { value: main.texture }, tAO: { value: aoB.texture }, tBloom: { value: lvUp[0].texture }, uPx: { value: new THREE.Vector2() },
+      uAO: { value: 1 }, uBloom: { value: 0.32 }, uTime: { value: 0 }, uAspect: { value: 1 }, uShowAO: { value: 0 }
+    };
+    const finMat = pass([
+      'uniform sampler2D tColor, tAO, tBloom; uniform vec2 uPx; uniform float uAO, uBloom, uTime, uAspect, uShowAO; varying vec2 vUv;',
+      'vec3 fxaa(vec2 uv) {',
+      '  vec3 nw = texture2D(tColor, uv + vec2(-1.0, -1.0) * uPx).rgb, ne = texture2D(tColor, uv + vec2(1.0, -1.0) * uPx).rgb;',
+      '  vec3 sw = texture2D(tColor, uv + vec2(-1.0, 1.0) * uPx).rgb, se = texture2D(tColor, uv + vec2(1.0, 1.0) * uPx).rgb, m = texture2D(tColor, uv).rgb;',
+      '  vec3 L = vec3(0.299, 0.587, 0.114);',
+      '  float lnw = dot(nw, L), lne = dot(ne, L), lsw = dot(sw, L), lse = dot(se, L), lm = dot(m, L);',
+      '  float lmin = min(lm, min(min(lnw, lne), min(lsw, lse))), lmax = max(lm, max(max(lnw, lne), max(lsw, lse)));',
+      '  vec2 dir = vec2(-((lnw + lne) - (lsw + lse)), (lnw + lsw) - (lne + lse));',
+      '  float red = max((lnw + lne + lsw + lse) * 0.03125, 0.0078125), rmin = 1.0 / (min(abs(dir.x), abs(dir.y)) + red);',
+      '  dir = clamp(dir * rmin, vec2(-8.0), vec2(8.0)) * uPx;',
+      '  vec3 a = 0.5 * (texture2D(tColor, uv + dir * (1.0 / 3.0 - 0.5)).rgb + texture2D(tColor, uv + dir * (2.0 / 3.0 - 0.5)).rgb);',
+      '  vec3 b = a * 0.5 + 0.25 * (texture2D(tColor, uv - dir * 0.5).rgb + texture2D(tColor, uv + dir * 0.5).rgb);',
+      '  float lb = dot(b, L);',
+      '  return (lb < lmin || lb > lmax) ? a : b;',
+      '}',
+      'float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }',
+      'void main() {',
+      '  vec3 c = fxaa(vUv);',
+      // a touch of colour fringing towards the corners, as in a real lens
+      '  vec2 off = (vUv - 0.5) * 0.0016;',
+      '  c.r = mix(c.r, texture2D(tColor, vUv + off).r, 0.5); c.b = mix(c.b, texture2D(tColor, vUv - off).b, 0.5);',
+      '  vec3 lin = pow(max(c, 0.0), vec3(2.2));',
+      '  lin *= mix(1.0, texture2D(tAO, vUv).r, uAO);',
+      '  lin += pow(max(texture2D(tBloom, vUv).rgb, 0.0), vec3(2.2)) * uBloom;',
+      // the grade: a little less candy colour, cool shadows and warm highlights, a soft S-curve
+      '  float lum = dot(lin, vec3(0.2126, 0.7152, 0.0722));',
+      '  lin = mix(vec3(lum), lin, 0.9);',
+      '  lin *= mix(vec3(0.96, 1.0, 1.05), vec3(1.04, 1.0, 0.95), smoothstep(0.02, 0.6, lum));',
+      '  c = pow(max(lin, 0.0), vec3(1.0 / 2.2));',
+      '  c = mix(c, c * c * (3.0 - 2.0 * c), 0.22);',
+      '  vec2 q = (vUv - 0.5) * vec2(uAspect, 1.0);',
+      '  c *= 1.0 - 0.32 * smoothstep(0.35, 1.05, length(q));',
+      '  c += (hash(vUv * 1013.0 + uTime) - 0.5) * 0.022;',
+      '  gl_FragColor = vec4(uShowAO > 0.5 ? texture2D(tAO, vUv).rrr : c, 1.0);',
+      '}'
+    ].join('\n'), finU);
+
+    /* the city mirrored in the water: drawn from below the water surface, upside down, at about a third of the size */
+    const refl = rt(1, 1, { depthBuffer: true });
+    refl.texture.encoding = THREE.sRGBEncoding;
+    const mirror = new THREE.PerspectiveCamera(), reflU = { tReflect: { value: refl.texture }, uReflMatrix: { value: new THREE.Matrix4() }, uReflOn: { value: 0 } };
+    const WATER_Y = water.position.y, _p = new THREE.Plane(), _v4 = new THREE.Vector4(), _q = new THREE.Vector4(), _tgt = new THREE.Vector3(), _dir = new THREE.Vector3();
+    water.material.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, reflU);
+      sh.vertexShader = 'uniform mat4 uReflMatrix;\nvarying vec4 vRefl;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n\tvRefl = uReflMatrix * modelMatrix * vec4( transformed, 1.0 );');
+      sh.fragmentShader = 'uniform sampler2D tReflect;\nuniform float uReflOn;\nvarying vec4 vRefl;\n' + sh.fragmentShader.replace('#include <encodings_fragment>', [
+        '#include <encodings_fragment>',
+        '\tif ( uReflOn > 0.5 ) {',
+        // the ripples break the mirror image up, less so far off where they are small on screen
+        '\t\tvec2 wob = ( normal - geometryNormal ).xy * 0.05 * clamp( 14.0 / length( vViewPosition ), 0.1, 1.0 );',
+        '\t\tvec3 refl = texture2D( tReflect, vRefl.xy / vRefl.w + wob ).rgb;',
+        '\t\tfloat fres = 0.03 + 0.97 * pow( 1.0 - clamp( dot( normal, normalize( vViewPosition ) ), 0.0, 1.0 ), 5.0 );',
+        '\t\tgl_FragColor.rgb = mix( gl_FragColor.rgb, refl * vec3( 0.84, 0.92, 0.95 ), clamp( 0.22 + fres * 0.75, 0.0, 0.9 ) );',
+        '\t}'
+      ].join('\n'));
+    };
+    water.material.needsUpdate = true;
+    // is any water in sight: look out from the camera across its field of view, each way until a house is in the way
+    // (seen from up high, nothing is in the way)
+    function waterInView() {
+      camera.getWorldDirection(_dir);
+      if (_dir.y > 0.6) return false;
+      const yaw = Math.atan2(_dir.x, _dir.z), spread = (camera.fov * camera.aspect * Math.PI) / 360 + 0.15, high = camera.position.y > 25;
+      for (let k = -4; k <= 4; k++) {
+        const a = yaw + (k / 4) * spread, sx = Math.sin(a), sz = Math.cos(a);
+        for (const d of [6, 12, 20, 32, 50, 80, 125, 200, 320, 500, 750]) {
+          const x = camera.position.x + sx * d, z = camera.position.z + sz * d;
+          if (!walkable(x, z)) return true;
+          if (!high && blockedAt(x, z, 1)) break;
+        }
+      }
+      return false;
+    }
+    function renderMirror() {
+      camera.updateMatrixWorld();
+      mirror.copy(camera);
+      // (not the names over your friends' heads)
+      mirror.layers.disable(1);
+      mirror.position.set(camera.position.x, 2 * WATER_Y - camera.position.y, camera.position.z);
+      camera.getWorldDirection(_dir);
+      _tgt.copy(camera.position).add(_dir); _tgt.y = 2 * WATER_Y - _tgt.y;
+      mirror.up.set(0, 1, 0).applyQuaternion(camera.quaternion); mirror.up.y = -mirror.up.y;
+      mirror.lookAt(_tgt);
+      mirror.updateMatrixWorld();
+      mirror.updateProjectionMatrix();
+      reflU.uReflMatrix.value.set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1).multiply(mirror.projectionMatrix).multiply(mirror.matrixWorldInverse);
+      // an oblique near plane on the water surface, so nothing below the water shows up in the mirror
+      _p.setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, WATER_Y, 0)).applyMatrix4(mirror.matrixWorldInverse);
+      _v4.set(_p.normal.x, _p.normal.y, _p.normal.z, _p.constant);
+      const e = mirror.projectionMatrix.elements;
+      _q.set((Math.sign(_v4.x) + e[8]) / e[0], (Math.sign(_v4.y) + e[9]) / e[5], -1, (1 + e[10]) / e[14]);
+      _v4.multiplyScalar(2 / _v4.dot(_q));
+      e[2] = _v4.x; e[6] = _v4.y; e[10] = _v4.z + 1; e[14] = _v4.w;
+      const sp = sky.position.clone(), sh = renderer.shadowMap.autoUpdate;
+      water.visible = false; sky.position.copy(mirror.position); renderer.shadowMap.autoUpdate = false;
+      renderer.setRenderTarget(refl); renderer.render(scene, mirror);
+      water.visible = true; sky.position.copy(sp); renderer.shadowMap.autoUpdate = sh;
+    }
+
+    /* the street round the camera, for the reflections in the cars (CAR_PROBE): a small cube map, one side of it drawn a
+       frame (every other frame at the middle setting) into the copy the cars are not reading from, and swapped in when
+       all six sides are done. It sees 200 m out (the haze takes over beyond), without your own car or yourself, and the
+       shadows are not drawn again for it. The sky dome is shrunk inside that range while it looks */
+    const PROBE_SIZE = 256, probeRT = [0, 1].map(() => {
+      const t = new THREE.WebGLCubeRenderTarget(PROBE_SIZE, { format: THREE.RGBAFormat, generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter });
+      t.texture.encoding = THREE.sRGBEncoding;
+      return t;
+    });
+    const probeCam = new THREE.CubeCamera(0.3, 200, probeRT[0]), probeLast = new THREE.Vector3(1e9, 0, 0);
+    let probeFace = 0, probeRead = 0, probeSkip = 0;
+    CAR_PROBE.uProbeMip.value = Math.log2(PROBE_SIZE);
+    function renderProbe() {
+      const write = probeRT[1 - probeRead], at = camTarget;
+      // moved far since the last side (into a car across the map, a teleport): start again, and show none until done
+      if (probeLast.distanceToSquared(at) > 40 * 40) { probeFace = 0; CAR_PROBE.uProbeOn.value = 0; }
+      probeLast.copy(at);
+      probeCam.position.copy(at);
+      probeCam.updateMatrixWorld();
+      const car = driving || (stop && stop.riding ? stop.car : null) || MP.ride, hide = [player.model.group, car && car.group].filter((o) => o && o.visible);
+      for (const o of hide) o.visible = false;
+      const sp = sky.position.clone(), sh = renderer.shadowMap.autoUpdate;
+      sky.position.copy(at); sky.scale.setScalar(0.12); renderer.shadowMap.autoUpdate = false;
+      write.texture.generateMipmaps = probeFace === 5;
+      renderer.setRenderTarget(write, probeFace);
+      renderer.render(scene, probeCam.children[probeFace]);
+      sky.position.copy(sp); sky.scale.setScalar(1); renderer.shadowMap.autoUpdate = sh;
+      for (const o of hide) o.visible = true;
+      if (++probeFace === 6) {
+        probeFace = 0; probeRead = 1 - probeRead;
+        CAR_PROBE.tProbe.value = write.texture; CAR_PROBE.uProbePos.value.copy(at); CAR_PROBE.uProbeOn.value = 1;
+      }
+    }
+
+    let level = isTouch ? 1 : 2, W = 0, H = 0;
+    const stats = { calls: 0, triangles: 0, mirror: false };
+    let aoOn = true;
+    const size = new THREE.Vector2();
+    function resize() {
+      renderer.getDrawingBufferSize(size);
+      if (size.x === W && size.y === H) return;
+      W = size.x; H = size.y;
+      main.setSize(W, H);
+      const hw = Math.max(1, W >> 1), hh = Math.max(1, H >> 1);
+      aoA.setSize(hw, hh); aoB.setSize(hw, hh);
+      lvDown.forEach((t, i) => t.setSize(Math.max(1, W >> (i + 1)), Math.max(1, H >> (i + 1))));
+      lvUp.forEach((t, i) => t.setSize(Math.max(1, W >> (i + 1)), Math.max(1, H >> (i + 1))));
+      refl.setSize(Math.max(1, Math.round(W * 0.38)), Math.max(1, Math.round(H * 0.38)));
+    }
+    function render() {
+      if (level === 0) {
+        reflU.uReflOn.value = 0; CAR_PROBE.uProbeOn.value = 0; probeLast.set(1e9, 0, 0);
+        renderer.setRenderTarget(null); renderer.render(scene, camera); return;
+      }
+      resize();
+      if (level >= 2 || (probeSkip ^= 1)) renderProbe();
+      const mirrored = level >= 2 && waterInView();
+      reflU.uReflOn.value = mirrored ? 1 : 0;
+      if (mirrored) renderMirror();
+      renderer.setRenderTarget(main); renderer.render(scene, camera);
+      stats.calls = renderer.info.render.calls; stats.triangles = renderer.info.render.triangles; stats.mirror = mirrored;
+      const ao = level >= 2 && depthOk && aoOn;
+      if (ao) {
+        aoU.uNear.value = camera.near; aoU.uFar.value = camera.far;
+        const ty = Math.tan((camera.fov * Math.PI) / 360);
+        aoU.uTan.value.set(ty * camera.aspect, ty);
+        aoU.uProj.value.copy(camera.projectionMatrix);
+        aoU.uRes.value.set(W, H); aoU.uSeed.value = (aoU.uSeed.value + 1.37) % 100;
+        draw(aoMat, aoA);
+        aoBlurU.tAO.value = aoA.texture; aoBlurU.uRes.value.set(aoA.width, aoA.height);
+        draw(aoBlur, aoB);
+      }
+      bloomPre.uniforms.tSrc.value = main.texture; bloomPre.uniforms.uPx.value.set(0.5 / W, 0.5 / H);
+      draw(bloomPre, lvDown[0]);
+      for (let i = 1; i < lvDown.length; i++) {
+        down.uniforms.tSrc.value = lvDown[i - 1].texture; down.uniforms.uPx.value.set(0.5 / lvDown[i - 1].width, 0.5 / lvDown[i - 1].height);
+        draw(down, lvDown[i]);
+      }
+      for (let i = lvUp.length - 1; i >= 0; i--) {
+        const src = i === lvUp.length - 1 ? lvDown[i + 1] : lvUp[i + 1];
+        up.uniforms.tSrc.value = src.texture; up.uniforms.tAdd.value = lvDown[i].texture; up.uniforms.uPx.value.set(0.5 / src.width, 0.5 / src.height);
+        draw(up, lvUp[i]);
+      }
+      finU.uPx.value.set(1 / W, 1 / H); finU.uAO.value = ao ? 0.85 : 0; finU.uTime.value = (finU.uTime.value + 0.618) % 50; finU.uAspect.value = W / H;
+      draw(finMat, null);
+    }
+    const NAMES = ['Enkel grafik', 'Mellangrafik: bloom, färgkorrigering och speglingar i bilarna', 'Högsta grafik: speglingar i vattnet och bilarna, skuggning och bloom'];
+    return {
+      render,
+      get level() { return level; },
+      setLevel(l, quiet) {
+        level = clamp(l, 0, 2);
+        sun.shadow.mapSize.setScalar(level >= 2 && renderer.capabilities.maxTextureSize >= 8192 ? 4096 : 2048);
+        if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+        if (!quiet) toast(NAMES[level] + ' (Q byter).');
+      },
+      cycle() { this.setLevel((level + 2) % 3); },
+      waterInView, stats,
+      set ao(v) { aoOn = !!v; }, set showAO(v) { finU.uShowAO.value = v ? 1 : 0; }
+    };
+  })();
+  POST.setLevel(POST.level, true);
+
+  /* ================= playing with friends ================= */
+  // Up to eight players in the same Stockholm. One of you opens a room and gets a code of four letters; the others type
+  // the code in (or open the link with it) and join. The browsers talk straight to each other over WebRTC, with PeerJS's
+  // free server only there to introduce them, and the one who opened the room passes everything on to the rest. Each of
+  // you keeps your own traffic, police and Dalahästar. What goes between you is where you are and what you drive, and how:
+  // its lamps, blinkers, siren, dents and the tank's gun. The horn and the chat go too, and you can ride along in a
+  // friend's car. The others are shown a moment (DELAY) behind, smoothly in between the updates that come 15 times a second.
+  const MP = (() => {
+    const PROTO = 1, MAX = 8, SEND_MS = 66, DELAY = 140, PREFIX = 'gubbe-pa-vagen-', ABC = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const PEER_SRC = ['https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js', 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js'];
+    const COLORS = [0x2f6fdb, 0xc8102e, 0x2e8b57, 0xf2b705, 0x6a3d9a, 0xe46f2a, 0x1f9aa8, 0xb03a74, 0xe8e8e8, 0x222428];
+    const COLOR_NAMES = ['Blå', 'Röd', 'Grön', 'Gul', 'Lila', 'Orange', 'Turkos', 'Rosa', 'Vit', 'Svart'];
+    const store = {
+      get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+      set(k, v) { try { localStorage.setItem(k, v); } catch { /* a private window: forgotten next time */ } }
+    };
+    const params = new URLSearchParams(location.search);
+    const E = {
+      panel: $('mp'), setup: $('mpSetup'), room: $('mpRoom'), name: $('mpName'), colors: $('mpColors'), code: $('mpCode'), host: $('mpHost'), join: $('mpJoin'),
+      codeBig: $('mpCodeBig'), codeHint: $('mpCodeHint'), share: $('mpShare'), copy: $('mpCopy'), list: $('mpList'), play: $('mpPlay'), leave: $('mpLeave'),
+      status: $('mpStatus'), chatLog: $('mpChatLog'), sayInput: $('mpSayInput'), tag: $('mpTagText'), friends: $('btnFriends'), hudLog: $('chatLog'), bar: $('chatBar'), barInput: $('chatInput')
+    };
+    const S = {
+      peer: null, host: false, code: '', joining: '', myId: '', hostId: '', hostConn: null, conns: new Map(), players: new Map(), busy: false, timer: 0,
+      name: (store.get('gubbe-namn') || '').slice(0, 14), ride: null, near: null, lastCar: null, panel: false, chat: false
+    };
+    // you, as one of the riders in a car (the others are the players themselves)
+    const me = { id: '', ident: playerId, mesh: null, seat: null };
+    const num = (v, d = 0) => (typeof v === 'number' && isFinite(v) ? v : d);
+    const colour = (v, d) => (Number.isInteger(v) && v >= 0 && v <= 0xffffff ? v : d);
+    const cleanName = (n) => String(n || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 14);
+    const cleanText = (t) => String(t || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 120);
+    const r1 = (v) => Math.round(v * 10) / 10, r2 = (v) => Math.round(v * 100) / 100, r3 = (v) => Math.round(v * 1000) / 1000;
+    const inRoom = () => !!S.code;
+
+    /* ---------- how you look ---------- */
+    const look = () => ({ skin: playerId.skin, shirt: playerId.shirt, pants: playerId.pants, hair: playerId.hair, hat: playerId.hat, hatColor: playerId.hatColor, sleeves: playerId.sleeves });
+    function cleanLook(o) {
+      o = o && typeof o === 'object' ? o : {};
+      return {
+        skin: colour(o.skin, SKINS[0]), shirt: colour(o.shirt, COLORS[0]), pants: colour(o.pants, PANTS[0]), hair: colour(o.hair, HAIRS[1]),
+        hat: o.hat === 'cap' || o.hat === 'beanie' ? o.hat : null, hatColor: colour(o.hatColor, 0xf7c600), sleeves: !!o.sleeves
+      };
+    }
+    // put a person model in other clothes
+    function dress(model, id) {
+      model.inner.children[0].geometry = id.bodyGeo;
+      model.legL.children[0].geometry = model.legR.children[0].geometry = id.legGeo;
+      model.armL.children[0].geometry = model.armR.children[0].geometry = id.armGeo;
+    }
+    function applyShirt(col) {
+      if (col === playerId.shirt) return;
+      const id = makeIdentity({ ...look(), shirt: col });
+      for (const k of ['bodyGeo', 'legGeo', 'armGeo', 'driverGeo']) playerId[k] = id[k];
+      playerId.shirt = col;
+      delete playerId.riderGeo;
+      dress(player.model, playerId);
+      if (driving) setOccupant(driving, playerId);
+      store.set('gubbe-trojfarg', String(col));
+      if (inRoom()) { event('look', { look: look() }); renderList(); }
+    }
+    {
+      const saved = Number(store.get('gubbe-trojfarg'));
+      if (COLORS.includes(saved)) applyShirt(saved);
+    }
+
+    /* ---------- connecting ---------- */
+    const ICE = [
+      { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] },
+      { urls: 'stun:stun.cloudflare.com:3478' },
+      { urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478'], username: 'peerjs', credential: 'peerjsp' },
+      { urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp'], username: 'openrelayproject', credential: 'openrelayproject' }
+    ];
+    // the line to the server, kept up while you are in a room: it can drop when the phone sleeps or the tab is in the background,
+    // and while it is down nobody new can find the room. Called up again until it is back
+    function keepLine() {
+      const peer = S.peer;
+      if (!peer || peer.destroyed || !peer.disconnected || !inRoom()) return;
+      try { peer.reconnect(); } catch { /* tried again in a moment */ }
+    }
+    setInterval(keepLine, 4000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) keepLine(); });
+    window.addEventListener('online', keepLine);
+
+    /* ---------- the second way through ---------- */
+    // some networks won't let a direct connection through, and the free TURN servers often don't answer. Then the game's
+    // messages go via a free, open MQTT broker instead: a little slower, but it gets through almost everywhere.
+    // The room listens on several brokers at once; whoever joins uses the first one that answers. ?relay=wss://… picks another
+    const RELAY_SRC = ['https://cdn.jsdelivr.net/npm/mqtt@5.10.4/dist/mqtt.min.js', 'https://unpkg.com/mqtt@5.10.4/dist/mqtt.min.js'];
+    const BROKERS = params.get('relay') ? [params.get('relay')] : ['wss://broker.hivemq.com:8884/mqtt', 'wss://broker.emqx.io:8084/mqtt', 'wss://test.mosquitto.org:8081/mqtt'];
+    const TOPIC = 'gubbe-pa-vagen/' + PROTO + '/', RELAY_ID = /^[\w-]{1,64}$/;
+    const R = { clients: [], conns: new Map(), out: null, me: '', room: '' };
+    let mqttLib = null;
+    function loadMqtt() {
+      if (window.mqtt) return Promise.resolve(window.mqtt);
+      if (mqttLib) return mqttLib;
+      mqttLib = new Promise((resolve, reject) => {
+        let i = 0;
+        const next = () => {
+          if (i >= RELAY_SRC.length) { mqttLib = null; reject(new Error('mqtt')); return; }
+          const s = document.createElement('script');
+          s.src = RELAY_SRC[i++]; s.async = true;
+          s.onload = () => (window.mqtt ? resolve(window.mqtt) : next());
+          s.onerror = () => { s.remove(); next(); };
+          document.head.append(s);
+        };
+        next();
+      });
+      return mqttLib;
+    }
+    // a connection over the broker that looks like a PeerJS one to the rest of the code: peer, open, send, close, on
+    function relayConn(cl, peer, topic) {
+      const ls = {};
+      const conn = {
+        peer, open: true, relay: true, seen: performance.now(),
+        on(ev, fn) { (ls[ev] = ls[ev] || []).push(fn); return conn; },
+        emit(ev, a) { for (const fn of ls[ev] || []) fn(a); },
+        send(m) { if (conn.open && cl.connected) cl.publish(topic, JSON.stringify({ f: R.me, m })); },
+        close() {
+          if (!conn.open) return;
+          conn.open = false;
+          try { if (cl.connected) cl.publish(topic, JSON.stringify({ f: R.me, bye: 1 })); } catch { /* gone already */ }
+          if (R.conns.get(peer) === conn) R.conns.delete(peer);
+          conn.emit('close');
+        }
+      };
+      return conn;
+    }
+    const readRelay = (buf) => { try { const o = JSON.parse(String(buf)); return o && typeof o === 'object' && typeof o.f === 'string' && RELAY_ID.test(o.f) ? o : null; } catch { return null; } };
+    // the room: listen on every broker for those knocking
+    async function relayListen(code, me) {
+      relayDown();
+      try { await loadMqtt(); } catch { return; }
+      if (!inRoom() || !S.host || S.myId !== me) return;
+      R.me = me; R.room = code;
+      for (const url of BROKERS) {
+        let cl;
+        try { cl = window.mqtt.connect(url, { connectTimeout: 8000, reconnectPeriod: 4000, keepalive: 30 }); } catch { continue; }
+        R.clients.push(cl);
+        cl.on('error', () => { /* it tries again by itself */ });
+        cl.on('connect', () => cl.subscribe(TOPIC + code + '/h'));
+        cl.on('message', (topic, buf) => {
+          const o = readRelay(buf);
+          if (!o || !inRoom() || !S.host || o.f === R.me) return;
+          let conn = R.conns.get(o.f);
+          if (o.bye) { if (conn) conn.close(); return; }
+          if (!o.m || typeof o.m !== 'object') return;
+          if (!conn || conn.cl !== cl) {
+            if (o.m.t !== 'hi') return;
+            if (conn) conn.close();
+            conn = relayConn(cl, o.f, TOPIC + code + '/c/' + o.f);
+            conn.cl = cl;
+            R.conns.set(o.f, conn);
+            accept(conn);
+          }
+          conn.seen = performance.now();
+          conn.emit('data', o.m);
+        });
+      }
+    }
+    // joining: the first broker that answers, a door to the room on it
+    async function relayKnock(code, me) {
+      try { await loadMqtt(); } catch { return null; }
+      let cl = R.clients[0];
+      if (!cl || !cl.connected) {
+        relayDown();
+        for (const url of BROKERS) {
+          if (S.joining !== code || S.myId !== me) return null;
+          const c = await new Promise((res) => {
+            let c0;
+            try { c0 = window.mqtt.connect(url, { connectTimeout: 6000, reconnectPeriod: 0, keepalive: 30 }); } catch { res(null); return; }
+            const t = setTimeout(() => fin(false), 7000);
+            function fin(ok) { clearTimeout(t); if (ok) { res(c0); return; } try { c0.end(true); } catch { /* never was */ } res(null); }
+            c0.once('connect', () => fin(true));
+            c0.once('error', () => fin(false));
+          });
+          if (c) { cl = c; break; }
+        }
+        if (!cl || !cl.connected) return null;
+        R.clients.push(cl);
+        cl.options.reconnectPeriod = 4000;
+        cl.on('error', () => { /* it tries again by itself */ });
+        cl.on('message', (topic, buf) => {
+          const o = readRelay(buf), conn = R.out;
+          if (!o || !conn || o.f !== conn.peer) return;
+          if (o.bye) { conn.close(); return; }
+          if (!o.m || typeof o.m !== 'object') return;
+          conn.seen = performance.now();
+          conn.emit('data', o.m);
+        });
+        cl.on('connect', () => cl.subscribe(TOPIC + code + '/c/' + me));
+        await new Promise((res) => cl.subscribe(TOPIC + code + '/c/' + me, () => res()));
+      }
+      R.me = me; R.room = code;
+      if (R.out) R.out.close();
+      R.out = relayConn(cl, PREFIX + code.toLowerCase(), TOPIC + code + '/h');
+      return R.out;
+    }
+    function relayDown() {
+      const all = [...R.conns.values(), R.out].filter(Boolean);
+      R.conns.clear(); R.out = null;
+      for (const c of all) c.close();
+      for (const cl of R.clients) try { cl.end(false); } catch { /* gone already */ }
+      R.clients = [];
+    }
+    // a relay connection that has gone quiet (the game sends 15 times a second) has gone
+    setInterval(() => {
+      const now = performance.now();
+      for (const c of [...R.conns.values(), R.out]) if (c && c.open && now - c.seen > 25000) c.close();
+    }, 2000);
+    let peerLib = null;
+    function loadPeer() {
+      if (window.Peer) return Promise.resolve(window.Peer);
+      if (peerLib) return peerLib;
+      peerLib = new Promise((resolve, reject) => {
+        let i = 0;
+        const next = () => {
+          if (i >= PEER_SRC.length) { peerLib = null; reject(new Error('peerjs')); return; }
+          const s = document.createElement('script');
+          s.src = PEER_SRC[i++]; s.async = true;
+          s.onload = () => (window.Peer ? resolve(window.Peer) : next());
+          s.onerror = () => { s.remove(); next(); };
+          document.head.append(s);
+        };
+        next();
+      });
+      return peerLib;
+    }
+    function newPeer(id) {
+      // ?peerserver=host:port uses a PeerJS server of your own instead of the free one
+      // several ways through: STUN servers to find each other's address, and TURN servers that pass the traffic on when two networks won't let it straight through
+      const opts = { debug: 0, config: { iceServers: ICE } }, own = params.get('peerserver');
+      if (own) { const [host, port] = own.split(':'), p = Number(port) || 443; Object.assign(opts, { host, port: p, path: '/', secure: p === 443 }); }
+      const peer = id ? new window.Peer(id, opts) : new window.Peer(opts);
+      // the server only introduces players; if the line to it drops, the room carries on and it is called up again
+      peer.on('disconnected', () => setTimeout(() => {
+        if (S.peer === peer && !peer.destroyed && peer.disconnected) try { peer.reconnect(); } catch { /* tried again at the next drop */ }
+      }, 1500));
+      return peer;
+    }
+    function status(msg, err) { E.status.textContent = msg || ''; E.status.classList.toggle('err', !!err); }
+    function busy(on) { S.busy = on; E.host.disabled = E.join.disabled = on; }
+    function fail(msg) {
+      const peer = S.peer;
+      S.peer = null; S.hostConn = null;
+      relayDown();
+      if (peer) try { peer.destroy(); } catch { /* already gone */ }
+      busy(false);
+      status(msg, true);
+    }
+    function trouble(err) {
+      // once you are in a room it carries on between the players already in it: only meeting new ones needs the server
+      if (inRoom()) return;
+      const t = err && err.type;
+      fail(t === 'peer-unavailable' ? 'Hittade inget rum med koden ' + S.joining + '. Kolla koden, och att din vän har rummet öppet.'
+        : t === 'browser-incompatible' ? 'Den här webbläsaren kan inte spela med vänner. Prova Chrome, Safari, Firefox eller Edge.'
+        : 'Kunde inte nå servern som kopplar ihop spelarna. Kolla att du är uppkopplad och försök igen om en stund.');
+    }
+    function readyName() {
+      S.name = cleanName(E.name.value);
+      E.name.value = S.name;
+      if (!S.name) { status('Skriv ditt namn först, så att dina vänner ser vem du är.', true); E.name.focus(); return false; }
+      store.set('gubbe-namn', S.name);
+      return true;
+    }
+    const noLib = 'Kunde inte hämta det som behövs för att spela med vänner. Kolla att du är uppkopplad mot internet.';
+    async function hostRoom(tries = 0) {
+      if ((S.busy && !tries) || inRoom() || !readyName()) return;
+      busy(true); status('Skapar ett rum …');
+      try { await loadPeer(); } catch { fail(noLib); return; }
+      const code = Array.from({ length: 4 }, () => ABC[Math.floor(Math.random() * ABC.length)]).join('');
+      let peer;
+      try { peer = newPeer(PREFIX + code.toLowerCase()); } catch { trouble({ type: 'browser-incompatible' }); return; }
+      S.peer = peer;
+      peer.on('open', (id) => { if (S.peer === peer && !inRoom()) { S.host = true; S.myId = S.hostId = id; enter(code); } });
+      peer.on('connection', (conn) => { if (S.peer === peer) accept(conn); });
+      peer.on('error', (err) => {
+        if (S.peer !== peer) return;
+        // someone already has that code: draw another
+        if (err.type === 'unavailable-id' && !inRoom() && tries < 4) { S.peer = null; peer.destroy(); hostRoom(tries + 1); return; }
+        trouble(err);
+      });
+    }
+    async function joinRoom(raw) {
+      const code = String(raw || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
+      E.code.value = code;
+      if (S.busy || inRoom()) return;
+      if (code.length !== 4) { status('Rumskoden är fyra bokstäver. Fråga vännen som skapade rummet.', true); E.code.focus(); return; }
+      if (!readyName()) return;
+      busy(true); S.joining = code; status('Går med i rum ' + code + ' …');
+      try { await loadPeer(); } catch { fail(noLib); return; }
+      let peer;
+      try { peer = newPeer(); } catch { trouble({ type: 'browser-incompatible' }); return; }
+      S.peer = peer;
+      let iceFailed = false, tries = 0, retry = null;
+      const me0 = () => S.myId;
+      const wait = setTimeout(() => {
+        if (S.peer !== peer || inRoom()) return;
+        clearTimeout(retry);
+        fail(iceFailed ? 'Hittade rum ' + code + ', men era nätverk släpper inte igenom anslutningen. Prova ett annat nät, till exempel mobilens.'
+          : 'Rum ' + code + ' svarar inte. Kolla koden, och att din vän har spelet öppet och framme på skärmen.');
+      }, 32000);
+      // knock on the room's door: first straight through, then (if nothing has come back) via the broker, and again
+      const knock = async () => {
+        if (S.peer !== peer || inRoom()) return;
+        const n = tries++;
+        if (n < 4) retry = setTimeout(knock, n === 0 ? 6000 : 8000);
+        let conn;
+        if (n === 0) {
+          conn = peer.connect(PREFIX + code.toLowerCase(), { reliable: true, serialization: 'json' });
+          conn.on('iceStateChanged', (st) => { if (st === 'failed') iceFailed = true; });
+        } else {
+          if (n === 1) status('Går med i rum ' + code + ' en annan väg …');
+          const me = me0();
+          conn = await relayKnock(code, me);
+          if (!conn || S.peer !== peer || inRoom() || S.myId !== me) return;
+        }
+        if (S.hostConn && S.hostConn !== conn) try { S.hostConn.close(); } catch { /* gone already */ }
+        S.hostConn = conn;
+        conn.on('data', (m) => clientData(conn, m, code, wait));
+        conn.on('close', () => { if (S.hostConn === conn && inRoom()) hostGone(); });
+        conn.on('error', () => { /* the close, or the wait running out, deals with it */ });
+        const hi = () => conn.send({ t: 'hi', v: PROTO, name: S.name, look: look() });
+        if (conn.relay) hi(); else conn.on('open', hi);
+      };
+      peer.on('open', (id) => {
+        // (it fires again when the line to the server comes back: the connection to the room is still there)
+        if (S.peer !== peer || S.hostConn) return;
+        S.myId = id;
+        knock();
+        loadMqtt().catch(() => {});
+      });
+      peer.on('error', (err) => { if (S.peer === peer) { if (!inRoom()) clearTimeout(wait); trouble(err); } });
+    }
+    const info = (P) => ({ id: P.id, name: P.name, look: P.look });
+    function broadcast(m, except) {
+      for (const [id, c] of S.conns) if (id !== except && c.open) try { c.send(m); } catch { /* its close event drops it */ }
+    }
+    // you have the room: everyone else is connected to you, and you pass on what each of them sends
+    function accept(conn) {
+      conn.on('data', (m) => hostData(conn, m));
+      conn.on('close', () => dropConn(conn));
+      conn.on('error', () => dropConn(conn));
+    }
+    function hostData(conn, m) {
+      if (!m || typeof m !== 'object' || !inRoom()) return;
+      const id = conn.peer, P = S.players.get(id);
+      if (m.t === 'hi') {
+        // the same player again on a new connection: carry on over that one
+        if (P) {
+          const old = S.conns.get(id);
+          if (old !== conn) { S.conns.set(id, conn); if (old) try { old.close(); } catch { /* gone already */ } }
+          conn.send({ t: 'welcome', v: PROTO, host: S.myId, players: [{ id: S.myId, name: S.name, look: look() }, ...[...S.players.values()].filter((p) => p !== P).map(info)] });
+          return;
+        }
+        const no = m.v !== PROTO ? 'old' : S.players.size + 1 >= MAX ? 'full' : '';
+        if (no) { try { conn.send({ t: 'no', why: no }); } catch { /* gone already */ } setTimeout(() => conn.close(), 1000); return; }
+        S.conns.set(id, conn);
+        const np = addPlayer(id, m.name, m.look);
+        conn.send({ t: 'welcome', v: PROTO, host: S.myId, players: [{ id: S.myId, name: S.name, look: look() }, ...[...S.players.values()].filter((p) => p !== np).map(info)] });
+        broadcast({ t: 'join', ...info(np) }, id);
+        toast(np.name + ' kom in i rummet.');
+        return;
+      }
+      if (!P) return;
+      if (m.t === 's') { if (take(P, m.d)) broadcast({ t: 's', id, d: m.d.slice(0, 11) }, id); }
+      else if (m.t === 'e') { const e = cleanEvent(m, id); if (e) { heard(P, e); broadcast(e, id); } }
+    }
+    function dropConn(conn) {
+      if (S.conns.get(conn.peer) !== conn) return;
+      S.conns.delete(conn.peer);
+      try { conn.close(); } catch { /* closed already */ }
+      removePlayer(conn.peer, true);
+      broadcast({ t: 'left', id: conn.peer });
+    }
+    function clientData(conn, m, code, wait) {
+      if (!m || typeof m !== 'object' || S.hostConn !== conn) return;
+      if (m.t === 'welcome') {
+        if (inRoom()) return;
+        clearTimeout(wait);
+        S.host = false; S.hostId = String(m.host || conn.peer);
+        for (const i of Array.isArray(m.players) ? m.players.slice(0, MAX) : []) if (i && typeof i.id === 'string' && i.id !== S.myId && !S.players.has(i.id)) addPlayer(i.id, i.name, i.look);
+        enter(code);
+        return;
+      }
+      if (m.t === 'no') { clearTimeout(wait); fail(m.why === 'full' ? 'Rummet är fullt. Det får plats åtta spelare.' : 'Ni har olika versioner av spelet. Ladda om sidan, alla som ska spela.'); return; }
+      if (!inRoom()) return;
+      const P = S.players.get(m.id);
+      if (m.t === 's') { if (P) take(P, m.d); }
+      else if (m.t === 'e') { if (P) heard(P, m); }
+      else if (m.t === 'join') { if (!P && typeof m.id === 'string' && m.id !== S.myId && S.players.size + 1 < MAX) toast(addPlayer(m.id, m.name, m.look).name + ' kom in i rummet.'); }
+      else if (m.t === 'left') { if (P) removePlayer(P.id, true); }
+    }
+    function hostGone() {
+      const H = S.players.get(S.hostId), who = H ? H.name : 'Den som hade rummet';
+      leave();
+      toast(who + ' stängde rummet.');
+      status(who + ' stängde rummet. Skapa ett eget rum, eller gå med i ett annat.', true);
+    }
+    function enter(code) {
+      S.code = code; S.joining = '';
+      busy(false); status('');
+      clearInterval(S.timer);
+      S.timer = setInterval(send, SEND_MS);
+      showRoom(); hud();
+      if (!S.host) toast('Du är med i rum ' + code + '.');
+      else relayListen(code, S.myId);
+    }
+    function leave() {
+      if (S.ride) unride(true);
+      for (const id of [...S.players.keys()]) removePlayer(id, false);
+      clearInterval(S.timer);
+      const peer = S.peer;
+      Object.assign(S, { peer: null, host: false, code: '', joining: '', myId: '', hostId: '', hostConn: null, lastCar: null, near: null });
+      S.conns.clear();
+      relayDown();
+      if (peer) try { peer.destroy(); } catch { /* already gone */ }
+      seats();
+      busy(false); showSetup(); hud();
+    }
+    window.addEventListener('pagehide', () => { if (S.peer) try { S.peer.destroy(); } catch { /* closing anyway */ } });
+    // (back to the page from the browser's history: that room is gone)
+    window.addEventListener('pageshow', (e) => { if (e.persisted && inRoom()) { leave(); status('Du lämnade rummet.'); } });
+
+    /* ---------- the other players ---------- */
+    function addPlayer(id, name, lk) {
+      const L = cleanLook(lk), ident = makeIdentity(L);
+      const person = makePerson(ident, player.x, player.z, null);
+      person.remote = true; person.keep = true; person.asleep = true; person.model.group.visible = false;
+      const P = { id, name: cleanName(name) || 'Vän', look: L, ident, person, car: null, snaps: [], offset: null, st: null, stars: 0, tag: makeTag(), tagKey: '', mesh: null, seat: null };
+      drawTag(P);
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { P.tagKey = ''; drawTag(P); }).catch(() => {});
+      S.players.set(id, P);
+      renderList(); hud();
+      return P;
+    }
+    function removePlayer(id, announce) {
+      const P = S.players.get(id);
+      if (!P) return;
+      S.players.delete(id);
+      dropCar(P);
+      removePerson(P.person);
+      if (P.mesh && P.mesh.parent) P.mesh.parent.remove(P.mesh);
+      scene.remove(P.tag); P.tag.material.map.dispose(); P.tag.material.dispose();
+      if (announce) toast(P.name + ' lämnade rummet.');
+      renderList(); hud();
+    }
+    function dropCar(P) {
+      const c = P.car;
+      if (!c) return;
+      if (S.ride === c) unride(true);
+      removeCar(c);
+      P.car = null;
+    }
+    // the name over a friend's head (or car), and their stars when the police are after them; seen through walls
+    function makeTag() {
+      const cv = document.createElement('canvas');
+      cv.width = 512; cv.height = 96;
+      const tex = new THREE.CanvasTexture(cv);
+      tex.minFilter = THREE.LinearFilter; tex.generateMipmaps = false;
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, fog: false, toneMapped: false, sizeAttenuation: false }));
+      s.center.set(0.5, 0); s.renderOrder = 20; s.visible = false;
+      // (layer 1: drawn for the camera, but not in the mirror image in the water)
+      s.layers.set(1);
+      scene.add(s);
+      return s;
+    }
+    function drawTag(P) {
+      const key = P.name + ':' + P.look.shirt + ':' + P.stars;
+      if (key === P.tagKey) return;
+      P.tagKey = key;
+      const cv = P.tag.material.map.image, g = cv.getContext('2d'), stars = '★'.repeat(P.stars);
+      g.clearRect(0, 0, cv.width, cv.height);
+      g.font = '900 46px Overpass, Arial, sans-serif';
+      const tw = Math.min(330, g.measureText(P.name).width);
+      g.font = '900 38px Arial, sans-serif';
+      const sw = stars ? g.measureText(stars).width + 14 : 0, w = Math.min(cv.width - 8, 86 + tw + sw), x0 = (cv.width - w) / 2;
+      roundRect(g, x0, 8, w, 78, 24); g.fillStyle = '#0a5ba8'; g.fill(); g.lineWidth = 6; g.strokeStyle = '#ffffff'; g.stroke();
+      g.beginPath(); g.arc(x0 + 40, 47, 15, 0, TAU); g.fillStyle = hex(P.look.shirt); g.fill(); g.lineWidth = 4; g.stroke();
+      g.textBaseline = 'middle'; g.fillStyle = '#ffffff'; g.font = '900 46px Overpass, Arial, sans-serif';
+      g.fillText(P.name, x0 + 66, 50, 330);
+      if (stars) { g.fillStyle = '#f7c600'; g.font = '900 38px Arial, sans-serif'; g.fillText(stars, x0 + 66 + tw + 14, 49); }
+      P.tag.material.map.needsUpdate = true;
+    }
+    // d: [time, x, y, z, heading, vx, vz, flags (1 on the ground, 2 in a vehicle, 4 handcuffed), stars, riding with (id or 0), car or 0]
+    // car: [id, model, colour, x, z, heading, vx, vz, steering, gear, throttle, flags (1 brakes, 2 reversing, 4 blue lights,
+    //       8 engine dead, 16 at the wheel), blinkers, engine health, turret, wheel slip]
+    function take(P, d) {
+      if (!Array.isArray(d) || d.length < 11) return false;
+      const t = num(d[0], NaN), a = P.snaps;
+      if (!isFinite(t) || (a.length && t <= a[a.length - 1].t)) return false;
+      const pos = (v) => clamp(num(v), -9000, 9000), vel = (v) => clamp(num(v), -150, 150);
+      const s = {
+        t, x: pos(d[1]), y: clamp(num(d[2]), -10, 80), z: pos(d[3]), rot: num(d[4]), vx: vel(d[5]), vz: vel(d[6]), f: num(d[7]) | 0,
+        stars: clamp(num(d[8]) | 0, 0, 5), ride: typeof d[9] === 'string' ? d[9] : '', c: null
+      };
+      const c = d[10];
+      if (Array.isArray(c) && c.length >= 16 && typeof c[0] === 'string') {
+        s.c = {
+          id: c[0].slice(0, 12), m: typeof c[1] === 'string' && Object.prototype.hasOwnProperty.call(MODEL, c[1]) ? c[1] : 'halvkombi', col: num(c[2]), x: pos(c[3]), z: pos(c[4]), h: num(c[5]),
+          vx: vel(c[6]), vz: vel(c[7]), st: clamp(num(c[8]), -1, 1), g: clamp(num(c[9]) | 0, 0, 9), th: clamp(num(c[10]), -1, 1), f: num(c[11]) | 0,
+          b: clamp(num(c[12]) | 0, 0, 3), hp: clamp(num(c[13], 100), 0, 100), a: num(c[14]), slip: clamp(num(c[15]), 0, 30)
+        };
+      }
+      // (each colour is a geometry of its own: only the ones the model comes in, and gold)
+      if (s.c && !MODEL[s.c.m].colors.includes(s.c.col) && s.c.col !== 0xc9a227) s.c.col = MODEL[s.c.m].colors[0];
+      a.push(s);
+      if (a.length > 40) a.shift();
+      // how far their clock is from ours, plus the quickest a message has come through
+      const off = performance.now() - t;
+      if (P.offset === null || off < P.offset) P.offset = off;
+      return true;
+    }
+    function mix(A, B, k, ex) {
+      const D = k < 0.5 ? A : B;
+      const o = {
+        x: lerp(A.x, B.x, k) + A.vx * ex, y: lerp(A.y, B.y, k), z: lerp(A.z, B.z, k) + A.vz * ex, rot: lerpAngle(A.rot, B.rot, k),
+        vx: lerp(A.vx, B.vx, k), vz: lerp(A.vz, B.vz, k), f: D.f, stars: D.stars, ride: D.ride, c: D.c
+      };
+      const ca = A.c, cb = B.c;
+      if (ca && cb && ca.id === cb.id) {
+        o.c = Object.assign({}, D.c, {
+          x: lerp(ca.x, cb.x, k) + ca.vx * ex, z: lerp(ca.z, cb.z, k) + ca.vz * ex, h: lerpAngle(ca.h, cb.h, k),
+          vx: lerp(ca.vx, cb.vx, k), vz: lerp(ca.vz, cb.vz, k), st: lerp(ca.st, cb.st, k), a: lerpAngle(ca.a, cb.a, k)
+        });
+      }
+      return o;
+    }
+    // where a player was at (their) time rt: in between two updates, or a little way on from the last one
+    function sample(P, rt) {
+      const a = P.snaps;
+      if (!a.length) return null;
+      while (a.length > 2 && a[1].t < rt - 400) a.shift();
+      let i = a.length - 1;
+      while (i > 0 && a[i].t > rt) i--;
+      const A = a[i], B = a[i + 1];
+      if (!B || rt <= A.t) return mix(A, A, 0, B ? 0 : clamp((rt - A.t) / 1000, 0, 0.25));
+      return mix(A, B, (rt - A.t) / (B.t - A.t), 0);
+    }
+    function place(P, st, dt) {
+      P.st = st;
+      const cs = st.c;
+      if (cs) {
+        let c = P.car;
+        if (!c || c.netId !== cs.id || c.M.id !== cs.m) {
+          dropCar(P);
+          c = makeCar(MODEL[cs.m], cs.col);
+          Object.assign(c, { remote: true, keep: true, netId: cs.id, owner: P, x: cs.x, z: cs.z, h: cs.h });
+          c.group.position.set(c.x, 0, c.z); c.group.rotation.y = c.h;
+          P.car = c;
+        }
+        // at the wheel, or the car stands where they left it
+        const on = !!(cs.f & 16);
+        if (on !== (c.occupant === P.ident)) setOccupant(c, on ? P.ident : null);
+        c.x = cs.x; c.z = cs.z; c.h = cs.h; c.steer = cs.st;
+        c.vx = on ? cs.vx : 0; c.vz = on ? cs.vz : 0;
+        c.wheelRot += ((c.vx * Math.sin(c.h) + c.vz * Math.cos(c.h)) * dt) / c.M.R;
+        c.gear = Math.min(cs.g, c.M.gears - 1); c.thr = on ? cs.th : 0; c.throttle = Math.abs(c.thr);
+        c.braking = !!(cs.f & 1); c.reversing = !!(cs.f & 2); c.siren = !!(cs.f & 4); c.dead = !!(cs.f & 8);
+        c.health = cs.hp; c.blink = cs.b; c.aimWant = cs.a; c.slip = on ? cs.slip : 0;
+      } else if (P.car) dropCar(P);
+      const p = P.person, hide = !!(st.f & 2) || !!st.ride;
+      p.asleep = hide; p.model.group.visible = !hide;
+      p.x = st.x; p.y = st.y; p.z = st.z; p.rot = st.rot; p.vx = st.vx; p.vz = st.vz;
+      p.grounded = !!(st.f & 1); p.cuffed = !!(st.f & 4);
+      if (st.stars !== P.stars) { P.stars = st.stars; drawTag(P); }
+    }
+    // what you send 15 times a second (see take)
+    function state() {
+      if (driving) S.lastCar = driving;
+      const c = driving || (S.lastCar && S.lastCar.group.parent ? S.lastCar : null);
+      if (!c) S.lastCar = null;
+      if (c && !c.netId) c.netId = Math.random().toString(36).slice(2, 10);
+      const hidden = !!driving || !!S.ride || !!(stop && stop.riding);
+      const car = c ? [c.netId, c.M.id, c.color, r2(c.x), r2(c.z), r3(c.h), r2(c.vx), r2(c.vz), r3(c.steer), c.gear | 0, r2(c.thr || 0),
+        (c.braking ? 1 : 0) | (c.reversing ? 2 : 0) | (c.siren ? 4 : 0) | (c.dead ? 8 : 0) | (c === driving ? 16 : 0), c.blink | 0, Math.round(c.health), r3(c.aim || 0), r1(c.slip || 0)] : 0;
+      return [Math.round(performance.now()), r2(player.x), r2(player.y), r2(player.z), r3(player.rot), r2(player.vx), r2(player.vz),
+        (player.grounded ? 1 : 0) | (hidden ? 2 : 0) | (player.cuffed ? 4 : 0), stars(), S.ride ? S.ride.owner.id : 0, car];
+    }
+    function send() {
+      if (!inRoom()) return;
+      const d = state();
+      if (S.host) broadcast({ t: 's', id: S.myId, d });
+      else if (S.hostConn && S.hostConn.open) try { S.hostConn.send({ t: 's', d }); } catch { /* its close event deals with it */ }
+    }
+    // the horn, the chat, a dent, the tank's gun and new clothes go to everyone at once
+    function event(k, extra) {
+      if (!inRoom()) return;
+      const m = Object.assign({ t: 'e', k }, extra);
+      if (S.host) broadcast(Object.assign(m, { id: S.myId }));
+      else if (S.hostConn && S.hostConn.open) try { S.hostConn.send(m); } catch { /* its close event deals with it */ }
+    }
+    // an event as it may be passed on: only what it should hold, and not too often
+    function cleanEvent(m, id) {
+      const k = m.k, e = { t: 'e', k, id };
+      if (k === 'horn') return e;
+      if (k === 'chat') { const text = cleanText(m.m); return text ? Object.assign(e, { m: text }) : null; }
+      if (k === 'dent') return typeof m.c === 'string' && Array.isArray(m.a) && m.a.length === 8 ? Object.assign(e, { c: m.c.slice(0, 12), a: m.a.map((v) => num(v)) }) : null;
+      if (k === 'fire') return Object.assign(e, { a: num(m.a) });
+      if (k === 'look') return Object.assign(e, { look: cleanLook(m.look) });
+      return null;
+    }
+    function heard(P, m) {
+      const atWheel = P.car && P.car.occupant === P.ident;
+      if (m.k === 'horn') {
+        const at = atWheel ? P.car : P.person, M = atWheel ? P.car.M : null, s = placeSound(at.x, at.z, 140);
+        if (s.level > 0.01) beep(M && M.moped ? [740] : M && M.bus ? [220, 277] : M && M.sport ? [523, 659] : [392, 494], 0.05 * s.level + 0.004, M && M.moped ? 0.3 : 0.45, s.pan);
+      } else if (m.k === 'chat') {
+        const text = cleanText(m.m);
+        if (text) { chat(P.name, P.look.shirt, text); if (audio && !muted) beep([988, 1319], 0.012, 0.09); }
+      } else if (m.k === 'dent') {
+        const a = m.a;
+        if (P.car && P.car.netId === m.c && Array.isArray(a) && a.length === 8 && a.every((v) => typeof v === 'number' && isFinite(v))) {
+          dentCar(P.car, clamp(a[0], -9, 9), clamp(a[1], -2, 6), clamp(a[2], -9, 9), clamp(a[3], -1, 1), clamp(a[4], -1, 1), clamp(a[5], 0, 0.7), clamp(a[6], 0, 1.5), clamp(a[7], 0, 80));
+        }
+      } else if (m.k === 'fire') {
+        const now = performance.now();
+        if (atWheel && P.car.M.mil === 'tank' && !(now - (P.firedAt || -1e9) < 2000)) { P.firedAt = now; P.car.aim = num(m.a); fireCannon(P.car, true); }
+      } else if (m.k === 'look') {
+        const now = performance.now();
+        if (now - (P.lookAt || -1e9) < 800) return;
+        P.lookAt = now;
+        P.look = cleanLook(m.look); P.ident = makeIdentity(P.look);
+        dress(P.person.model, P.ident);
+        if (atWheel) setOccupant(P.car, P.ident);
+        drawTag(P); renderList();
+      }
+    }
+
+    /* ---------- riding along ---------- */
+    // the seats a passenger can have, beside the driver first, in the car's own frame
+    function seatsOf(c) {
+      const d = c.geo.driver, r = c.geo.rear, M = c.M;
+      if (rides(M)) return [{ x: 0, y: d.y + 0.04, z: d.z - 0.52 }];
+      if (M.bus) return [0, 1, 2, 3, 4, 5, 6].map((i) => ({ x: i % 2 ? d.x : -d.x, y: d.y, z: d.z - 2.4 - Math.floor(i / 2) * 1.5 }));
+      if (Math.abs(d.x) < 0.25) return [{ x: 0, y: d.y, z: d.z - 0.95 }];
+      const s = [{ x: -d.x, y: d.y, z: d.z }];
+      if (r) s.push({ x: -r.x, y: r.y, z: r.z }, { x: r.x, y: r.y, z: r.z });
+      return s;
+    }
+    // the car someone drives (or last drove), as this game sees it
+    function carOf(id) {
+      if (id === S.myId) return driving || (S.lastCar && S.lastCar.group.parent ? S.lastCar : null);
+      const P = S.players.get(id);
+      return P ? P.car : null;
+    }
+    // everyone riding with someone sits in that car: in the order of their ids, so that every game seats them alike
+    function seats() {
+      me.id = S.myId; me.ident = playerId;
+      const all = [me, ...S.players.values()], groups = new Map();
+      for (const R of all) {
+        R.seat = null;
+        const car = R === me ? S.ride : R.st && R.st.ride ? carOf(R.st.ride) : null;
+        if (!car) continue;
+        if (!groups.has(car)) groups.set(car, []);
+        groups.get(car).push(R);
+      }
+      for (const [car, list] of groups) {
+        const spots = seatsOf(car);
+        list.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+        list.forEach((R, i) => { if (spots[i]) R.seat = { car, spot: spots[i], n: i }; });
+      }
+      for (const R of all) {
+        if (!R.seat) { if (R.mesh && R.mesh.parent) R.mesh.parent.remove(R.mesh); continue; }
+        const { car, spot } = R.seat, geo = rides(car.M) ? riderGeometry(R.ident) : R.ident.driverGeo;
+        if (!R.mesh) R.mesh = new THREE.Mesh(geo, personMat);
+        R.mesh.geometry = geo;
+        if (R.mesh.parent !== car.body) car.body.add(R.mesh);
+        R.mesh.position.set(spot.x, spot.y, spot.z);
+      }
+    }
+    // a friend's car with them at the wheel, near enough to get in, and not going too fast to
+    function rideable() {
+      if (driving || S.ride || !started || (stop && stop.locked) || player.y > 1.5) return null;
+      let best = null, bd = Infinity;
+      for (const P of S.players.values()) {
+        const c = P.car;
+        if (!c || c.occupant !== P.ident || Math.hypot(c.vx, c.vz) > 6) continue;
+        const dx = player.x - c.x, dz = player.z - c.z, d = dx * dx + dz * dz;
+        if (d > 100 || d >= bd) continue;
+        const co = Math.cos(c.h), si = Math.sin(c.h), lx = dx * co - dz * si, lz = dx * si + dz * co;
+        if (Math.abs(lx) < c.M.W / 2 + 1.6 && Math.abs(lz) < c.M.L / 2 + 1.2 && (!c.M.boat || player.y < 0.5)) { bd = d; best = c; }
+      }
+      return best;
+    }
+    function ride(c) {
+      const taken = [...S.players.values()].filter((P) => P.st && P.st.ride === c.owner.id).length;
+      if (taken >= seatsOf(c).length) { toast('Det finns ingen plats kvar i ' + c.M.def + '.'); return; }
+      S.ride = c;
+      player.model.group.visible = false;
+      player.vx = player.vz = player.vy = 0;
+      lastLook = -1e9;
+      seats();
+      toast('Du åker med ' + c.owner.name + '.' + (isTouch ? '' : ' E kliver ur.'));
+    }
+    // out on the passenger's side if there is room
+    function rideExit(c) {
+      if (c.M.boat) return boatExitSpot(c);
+      const co = Math.cos(c.h), si = Math.sin(c.h), side = c.geo.driver.x > 0 ? -1 : 1, hw = c.M.W / 2 + 0.8;
+      for (const [lx, lz] of [[side * hw, c.geo.driver.z], [side * hw, 0]]) {
+        const x = c.x + lx * co + lz * si, z = c.z - lx * si + lz * co;
+        if (personFits(x, z) && !blockedAt(x, z, 0.36) && !cars.some((o) => o !== c && byCar(o, x, z, 0.3))) return { x, z };
+      }
+      return exitSpot(c);
+    }
+    function unride(force) {
+      const c = S.ride;
+      if (!c) return true;
+      let out = rideExit(c) || (force ? spotNear(c.x, c.z) : null);
+      // far out on the water: put ashore at the nearest street corner instead of on the water
+      if (!out && force) {
+        let bd = Infinity;
+        for (const n of nodes) { const d = Math.hypot(n.x - c.x, n.z - c.z); if (d < bd && personFits(n.x, n.z)) { bd = d; out = { x: n.x, z: n.z }; } }
+      }
+      if (!out && !force) { toast(c.M.boat ? 'Vänta tills båten ligger vid en kaj, så kan du kliva i land.' : 'Det finns ingen plats att kliva ur här.'); return false; }
+      S.ride = null;
+      seats();
+      player.model.group.visible = true;
+      if (out) { player.x = out.x; player.z = out.z; camTarget.set(out.x, 1.6, out.z); }
+      const sp = Math.hypot(c.vx, c.vz);
+      player.y = 0; player.rot = c.h; player.vx = c.vx * 0.5; player.vz = c.vz * 0.5; player.vy = 0;
+      if (sp > 5 && !c.M.boat) { player.vy = 4.5; player.grounded = false; player.knockT = 1.2; toast('Du hoppade ur i farten!'); }
+      return true;
+    }
+    function use() {
+      if (S.ride) { unride(false); return true; }
+      if (S.near) { ride(S.near); return true; }
+      return false;
+    }
+    // somewhere to stand near (x, z)
+    function spotNear(x, z) {
+      for (const r of [2.5, 4, 6, 9, 13, 18, 25, 35, 50, 70, 100]) for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * TAU, px = x + Math.sin(a) * r, pz = z + Math.cos(a) * r;
+        if (personFits(px, pz) && !blockedAt(px, pz, 0.4) && !STATION.inside(px, pz) && !cars.some((c) => byCar(c, px, pz, 0.4))) return { x: px, z: pz };
+      }
+      return null;
+    }
+    // straight to a friend: out of your car and onto the pavement beside them
+    function goTo(P) {
+      if (stop && stop.locked) { status('Det går inte nu, du är gripen.', true); return; }
+      // (the game stands still behind the sign: bring everyone up to date first)
+      update(0);
+      if (!P.st) { status(P.name + ' har inte kommit in i spelet än.', true); return; }
+      const at = P.car && P.car.occupant === P.ident ? P.car : (P.st.ride && carOf(P.st.ride)) || P.person;
+      const spot = spotNear(at.x, at.z);
+      if (!spot) { status('Hittade ingen plats bredvid ' + P.name + ' just nu. Försök igen om en stund.', true); return; }
+      if (S.ride) unride(true);
+      if (driving && !exitCar()) { closePanel(); return; }
+      player.x = spot.x; player.z = spot.z; player.y = 0; player.vx = player.vz = player.vy = 0;
+      player.rot = camYaw = Math.atan2(at.x - spot.x, at.z - spot.z);
+      camTarget.set(player.x, 1.6, player.z);
+      closePanel();
+      if (!started) startGame();
+      toast('Du är hos ' + P.name + '.');
+    }
+
+    /* ---------- every frame ---------- */
+    function update(dt) {
+      if (!inRoom()) { S.near = null; return; }
+      const now = performance.now();
+      for (const P of S.players.values()) {
+        if (P.offset === null) continue;
+        // (the clocks drift a little, and the way between you can get slower: let the offset creep up, the next quick
+        // message pulls it back. Running out of updates for a while means the lag has grown: catch up faster)
+        P.offset += dt * 3;
+        const behind = now - P.offset - DELAY - P.snaps[P.snaps.length - 1].t;
+        if (behind > 60) P.offset += Math.min(behind, 400) * dt * 1.5;
+        try {
+          const st = sample(P, now - P.offset - DELAY);
+          if (st) place(P, st, dt);
+        } catch (err) {
+          // (whatever it was, it is not worth the game: forget what came from them and wait for the next update)
+          P.snaps.length = 0; P.offset = null;
+        }
+      }
+      if (S.ride && (!S.ride.group.parent || driving || (stop && stop.locked))) unride(true);
+      seats();
+      S.near = rideable();
+      // a friend standing in your way: you can't walk through them
+      if (!driving && !S.ride) for (const P of S.players.values()) {
+        const p = P.person;
+        if (!p.model.group.visible) continue;
+        const dx = player.x - p.x, dz = player.z - p.z, d2 = dx * dx + dz * dz;
+        if (d2 < 0.49 && d2 > 1e-6 && Math.abs(p.y - player.y) < 1.5) {
+          const d = Math.sqrt(d2), x = player.x + (dx / d) * (0.7 - d), z = player.z + (dz / d) * (0.7 - d);
+          if (personFits(x, z)) { player.x = x; player.z = z; }
+        }
+      }
+      for (const P of S.players.values()) {
+        const t = P.tag, st = P.st;
+        if (!st) { t.visible = false; continue; }
+        const rc = st.ride ? carOf(st.ride) : null, wheel = P.car && P.car.occupant === P.ident ? P.car : null, c = wheel || rc;
+        let x = P.person.x, y = P.person.y + 2.12, z = P.person.z;
+        if (c) { x = c.x; z = c.z; y = (c.M.boat ? WATER_Y + 2.4 : c.parts[c.parts.length - 1].top + 0.75) + (wheel ? 0 : 0.6 * (1 + (P.seat ? P.seat.n : 0))); }
+        else if (st.f & 2) y = P.person.y + 2.6;
+        // (a little bigger on a short screen, a phone on its side, so the name can be read)
+        const d = Math.hypot(x - camera.position.x, z - camera.position.z), k = clamp(1.1 - d / 700, 0.62, 1) * clamp(600 / window.innerHeight, 1, 1.6);
+        t.visible = d < 1200;
+        t.position.set(x, y, z);
+        t.scale.set(0.046 * k * (512 / 96), 0.046 * k, 1);
+      }
+    }
+
+    /* ---------- the chat ---------- */
+    function chat(name, col, text) {
+      for (const box of [E.hudLog, E.chatLog]) {
+        const line = document.createElement('div'), who = document.createElement('span'), dot = document.createElement('i');
+        if (box === E.hudLog) line.className = 'chat-line';
+        who.className = 'chat-name'; dot.style.background = hex(col);
+        who.append(dot, name);
+        line.append(who, text);
+        box.append(line);
+        while (box.children.length > (box === E.hudLog ? 5 : 40)) box.firstChild.remove();
+        if (box === E.hudLog) setTimeout(() => line.remove(), 12000);
+      }
+      E.chatLog.scrollTop = E.chatLog.scrollHeight;
+    }
+    function say(raw) {
+      const text = cleanText(raw);
+      if (!text || !inRoom()) return;
+      chat(S.name, playerId.shirt, text);
+      event('chat', { m: text });
+    }
+    function openChat() {
+      if (!inRoom() || S.chat || paused()) return;
+      S.chat = true; E.bar.hidden = false; E.barInput.value = '';
+      for (const k in keys) keys[k] = false;
+      E.barInput.focus();
+    }
+    function closeChat() {
+      if (!S.chat) return;
+      S.chat = false; E.bar.hidden = true; E.barInput.blur();
+    }
+    E.bar.addEventListener('submit', (e) => { e.preventDefault(); say(E.barInput.value); closeChat(); });
+    E.barInput.addEventListener('blur', () => setTimeout(closeChat, 0));
+    // (pressing the button would take the focus from the input and close the bar before the click: keep it)
+    E.bar.addEventListener('mousedown', (e) => { if (e.target !== E.barInput) e.preventDefault(); });
+    $('mpSay').addEventListener('submit', (e) => { e.preventDefault(); say(E.sayInput.value); E.sayInput.value = ''; });
+
+    /* ---------- the room sign ---------- */
+    COLORS.forEach((col, i) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'swatch'; b.style.background = hex(col); b.dataset.col = String(col);
+      b.setAttribute('role', 'radio'); b.setAttribute('aria-label', COLOR_NAMES[i]);
+      b.addEventListener('click', () => { applyShirt(col); swatches(); });
+      E.colors.append(b);
+    });
+    function swatches() { for (const b of E.colors.children) b.setAttribute('aria-checked', String(Number(b.dataset.col) === playerId.shirt)); }
+    const web = /^https?:$/.test(location.protocol);
+    const link = () => location.origin + location.pathname + '?rum=' + S.code + (params.get('peerserver') ? '&peerserver=' + encodeURIComponent(params.get('peerserver')) : '');
+    function showSetup() { E.setup.hidden = false; E.room.hidden = true; E.name.value = S.name; swatches(); }
+    function showRoom() {
+      E.setup.hidden = true; E.room.hidden = false;
+      E.codeBig.textContent = S.code;
+      E.share.hidden = !web;
+      E.codeHint.textContent = S.host ? 'Skicka koden' + (web ? ' eller länken' : '') + ' till dina vänner, så kan de gå med.' : 'Du är med i rummet, och dina vänner ser dig nu.';
+      E.copy.textContent = navigator.share && isTouch ? 'Dela länken' : 'Kopiera länken';
+      E.play.textContent = started ? 'Tillbaka till spelet' : 'Spela';
+      renderList();
+    }
+    function renderList() {
+      E.list.textContent = '';
+      if (!inRoom()) return;
+      const row = (name, col, note, P) => {
+        const li = document.createElement('li'), dot = document.createElement('span'), nm = document.createElement('span');
+        dot.className = 'mp-dot'; dot.style.background = hex(col); nm.textContent = name;
+        li.append(dot, nm);
+        if (note) { const sm = document.createElement('small'); sm.textContent = note; li.append(sm); }
+        if (P) {
+          const b = document.createElement('button');
+          b.type = 'button'; b.className = 'btn-sign small alt'; b.textContent = 'Gå till'; b.setAttribute('aria-label', 'Gå till ' + P.name);
+          b.addEventListener('click', () => goTo(P));
+          li.append(b);
+        }
+        E.list.append(li);
+      };
+      row(S.name, playerId.shirt, S.host ? 'du, har rummet' : 'du', null);
+      for (const P of S.players.values()) row(P.name, P.look.shirt, P.id === S.hostId ? 'har rummet' : '', P);
+    }
+    function hud() {
+      const n = S.players.size + 1;
+      E.tag.textContent = inRoom() ? 'Vänner: rum ' + S.code + ', ' + n + ' spelare' : 'Spela med vänner';
+      E.friends.textContent = inRoom() ? 'Vänner ' + n : 'Vänner';
+    }
+    function openPanel() {
+      if (S.panel) return;
+      if (pickerOpen) closePicker();
+      if (bigmap.open) closeBigmap();
+      closeChat();
+      S.panel = true; E.panel.hidden = false;
+      if (document.pointerLockElement && document.exitPointerLock) document.exitPointerLock();
+      for (const k in keys) keys[k] = false;
+      joy.x = joy.y = 0;
+      if (inRoom()) showRoom(); else showSetup();
+      if (!isTouch) (inRoom() ? E.sayInput : S.name ? E.host : E.name).focus();
+    }
+    function closePanel() {
+      if (!S.panel) return;
+      S.panel = false; E.panel.hidden = true;
+      if (E.panel.contains(document.activeElement)) document.activeElement.blur();
+      if (started) requestLock();
+    }
+    E.host.addEventListener('click', () => hostRoom());
+    $('mpJoinForm').addEventListener('submit', (e) => { e.preventDefault(); joinRoom(E.code.value); });
+    E.code.addEventListener('input', () => { const v = E.code.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4); if (v !== E.code.value) E.code.value = v; });
+    E.name.addEventListener('change', () => { S.name = cleanName(E.name.value); if (S.name) store.set('gubbe-namn', S.name); });
+    E.copy.addEventListener('click', async () => {
+      const url = link();
+      if (navigator.share && isTouch) {
+        try { await navigator.share({ title: 'Gubbe på Vägen', text: 'Spela med mig i Stockholm! Rumskod ' + S.code + '.', url }); return; } catch { /* closed, or not allowed: copy it instead */ }
+      }
+      try { await navigator.clipboard.writeText(url); status('Länken är kopierad. Klistra in den till dina vänner.'); } catch { status('Länken: ' + url); }
+    });
+    E.play.addEventListener('click', () => {
+      closePanel();
+      if (started) return;
+      startGame();
+      // just joined: start beside the one who has the room (placed first, as the game stood still behind the sign)
+      update(0);
+      const H = S.players.get(S.hostId);
+      if (!S.host && H && H.st && Math.hypot(H.st.x - player.x, H.st.z - player.z) > 40) goTo(H);
+    });
+    E.leave.addEventListener('click', () => { leave(); status('Du lämnade rummet.'); });
+    $('mpClose').addEventListener('click', closePanel);
+    E.panel.addEventListener('click', (e) => { if (e.target === E.panel) closePanel(); });
+    $('playFriends').addEventListener('click', openPanel);
+    E.friends.addEventListener('pointerdown', (e) => { e.preventDefault(); openPanel(); });
+    // a link with ?rum=ABCD opens the sign ready to join that room
+    {
+      const want = (params.get('rum') || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
+      if (want.length === 4) {
+        E.code.value = want;
+        openPanel();
+        status('Skriv ditt namn och tryck Gå med, så kommer du in i rum ' + want + '.');
+        if (S.name && !isTouch) E.join.focus();
+      }
+    }
+    // keys while the sign or the chat is open go to them, not to the game
+    function keydown(e) {
+      const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+      if (S.panel) { if (e.code === 'Escape' || (!typing && e.code === 'KeyP')) { e.preventDefault(); closePanel(); } return true; }
+      if (S.chat) { if (e.code === 'Escape') { e.preventDefault(); closeChat(); } return true; }
+      if (typing) return true;
+      if (e.code === 'KeyY' && started && !e.repeat && inRoom() && !paused()) { e.preventDefault(); openChat(); return true; }
+      return false;
+    }
+    hud();
+
+    return {
+      update, use, keydown, openPanel, closePanel, event, unride: () => unride(true),
+      get ride() { return S.ride; }, get panelOpen() { return S.panel; },
+      prompt() { return S.ride ? 'Kliv ur' : S.near ? 'Åk med ' + S.near.owner.name : null; },
+      // a dent in your car, for the others to see
+      dent(c, a) { if (c.netId) event('dent', { c: c.netId, a: a.map(r3) }); },
+      drawMini(g, px, pz, u) {
+        for (const P of S.players.values()) {
+          if (!P.st) continue;
+          const c = P.car && P.car.occupant === P.ident ? P.car : null;
+          let x = c ? c.x : P.person.x, z = c ? c.z : P.person.z;
+          // (further off than the map reaches: on its edge, in their direction)
+          const dx = x - px, dz = z - pz, d = Math.hypot(dx, dz), R = 116;
+          if (d > R) { x = px + (dx / d) * R; z = pz + (dz / d) * R; }
+          g.beginPath(); g.arc(x, z, 6 * u, 0, TAU);
+          g.fillStyle = hex(P.look.shirt); g.fill(); g.lineWidth = 2.2 * u; g.strokeStyle = '#ffffff'; g.stroke();
+        }
+      },
+      drawBig(g, toX, toY, text) {
+        for (const P of S.players.values()) {
+          if (!P.st) continue;
+          const c = P.car && P.car.occupant === P.ident ? P.car : null, X = toX(c ? c.x : P.person.x), Y = toY(c ? c.z : P.person.z);
+          g.beginPath(); g.arc(X, Y, 7.5, 0, TAU);
+          g.fillStyle = hex(P.look.shirt); g.fill(); g.lineWidth = 2.5; g.strokeStyle = '#ffffff'; g.stroke();
+          text(P.name, X, Y - 16, '800 13px Overpass, sans-serif', '#0a5ba8');
+        }
+      },
+      // for the tests
+      debug: { S, get players() { return [...S.players.values()]; }, hostRoom, joinRoom, leave, say, goTo, seatsOf }
+    };
+  })();
+
+  /* ================= loop ================= */
+  function tick(dt) {
+    const inp = readInput();
+    if (!paused()) {
+      for (const c of cars) c.input = c === driving ? inp : c.water ? WATER.think(c, dt) : c.bot ? (c.police ? policeThink(c, dt) : botThink(c, dt)) : null;
+      for (const p of persons) if (p !== player && !p.asleep && !p.remote) p.intent = npcThink(p, dt);
+      MP.update(dt);
+      const pIntent = custodyIntent(dt) || playerIntent(inp);
+      const steps = Math.max(1, Math.ceil(dt * 120));
+      for (let i = 0; i < steps; i++) physicsStep(dt / steps, pIntent);
+      jumpQueued = false;
+      manageTraffic(dt);
+      policeUpdate(dt);
+      WATER.update(dt);
+      updateHeli(dt);
+      updateSurprises(dt);
+      JOBS.update(dt);
+      STATION.update(dt, player.x, player.z);
+      nearCar = findNearCar();
+      animate(dt);
+      VENDORS.update(dt);
+    }
+    updateCamera(dt);
+    updateHUD(dt);
+    drawMap();
+    if (bigmap.open && performance.now() - bigmap.drawn > 250) drawBigmap();
+    updateAudio(dt);
+  }
+  // dynamic resolution: render fewer pixels when the frame rate drops, and creep back up when there is room
+  let dpr = MAX_DPR, perfSum = 0, perfN = 0, holdUp = 0, qualityDropped = false;
+  function adaptQuality(raw) {
+    perfSum += Math.min(raw, 0.1); perfN++;
+    if (perfSum < 2) return;
+    const avg = perfSum / perfN;
+    perfSum = 0; perfN = 0; holdUp -= 2;
+    let next = dpr;
+    // still too slow at the lowest resolution: one step down in graphics quality (Q brings it back)
+    if (avg > 1 / 32 && dpr <= 0.7 && POST.level > 0 && !qualityDropped) { qualityDropped = true; POST.setLevel(POST.level - 1); holdUp = 20; }
+    else if (avg > 1 / 40 && dpr > 0.7) { next = Math.max(0.7, dpr - 0.2); holdUp = 20; }
+    else if (avg < 1 / 55 && dpr < MAX_DPR && holdUp <= 0) next = Math.min(MAX_DPR, dpr + 0.1);
+    if (next !== dpr) { dpr = next; renderer.setPixelRatio(dpr); renderer.setSize(window.innerWidth, window.innerHeight); }
+  }
+  let last = performance.now(), testHold = false;
+  function frame(now) {
+    if (testHold) { requestAnimationFrame(frame); return; }
+    const raw = Math.max(0, (now - last) / 1000), dt = Math.min(0.05, raw);
+    last = now;
+    adaptQuality(raw);
+    tick(dt);
+    POST.render();
+    requestAnimationFrame(frame);
+  }
+
+  // test hooks: step the simulation without relying on animation frames
+  window.gubbeTest = {
+    run(seconds, dt = 1 / 60, draw = true) { const n = Math.round(seconds / dt); for (let i = 0; i < n; i++) tick(dt); if (draw) POST.render(); return this.state(); },
+    key(code, down) { keys[code] = down; },
+    press(code) { keys[code] = true; onKey(code, false); keys[code] = false; },
+    start() { startGame(); },
+    teleport(x, z, y = 0) { player.x = x; player.z = z; player.y = y; camTarget.set(x, y + 1.6, z); },
+    draken: DRAKEN, indoorSpan, lift: LIFT,
+    // park one car of each model in a row (facing +x) and photograph them with a fixed camera
+    showroom(ids, x, z, gap) {
+      return ids.map((id, i) => {
+        const M = MODEL[id], c = makeCar(M, M.colors[0]);
+        c.x = x; c.z = z + i * gap; c.h = Math.PI / 2;
+        for (const m of c.calipers) m.visible = true;
+        c.group.position.set(c.x, 0, c.z); c.group.rotation.y = c.h;
+        return { id, z: c.z, tris: c.geo.body.attributes.position.count / 3 + c.geo.glass.attributes.position.count / 3, wheel: wheelGeometry(M.R, M.rim).attributes.position.count / 3 };
+      });
+    },
+    // stop the frame loop and draw what the game camera sees now (for screenshots), or let it run again
+    hold(on) { testHold = !!on; if (on) POST.render(); },
+    shot(cx, cy, cz, tx, ty, tz) { testHold = true; camera.position.set(cx, cy, cz); camera.lookAt(tx, ty, tz); camera.updateMatrixWorld(); sky.position.copy(camera.position); POST.render(); },
+    quality(l) { POST.setLevel(l, true); }, get post() { return POST; }, jobs: JOBS, vendors: VENDORS,
+    look(yaw, pitch) { camYaw = yaw; if (pitch !== undefined) camPitch = pitch; lastLook = performance.now(); },
+    choose(id) { chooseModel(MODEL[id]); },
+    openPicker, closePicker, crash, limitAt, startChase, endChase, openBigmap, closeBigmap, drawBigmap, bigmap, carShape, MODELS,
+    info() {
+      const r = renderer.info;
+      return { calls: POST.level ? POST.stats.calls : r.render.calls, triangles: POST.level ? POST.stats.triangles : r.render.triangles, mirror: POST.stats.mirror, geometries: r.memory.geometries, programs: r.programs ? r.programs.length : 0, chunks: chunks.size, buildings: mapPolys.length, lamps: lamps.length, trees: lindens.length + cherries.length, loadMs: Math.round(loadMs) };
+    },
+    // landmarks that stand on a street or its pavement
+    mapProblems() {
+      const out = [];
+      for (const L of landmarkList) for (const e of edges) {
+        const A = nodes[e.a], B = nodes[e.b], d = segPolyDist(A.x, A.z, B.x, B.z, L.poly);
+        if (d < e.hw + Math.min(e.walk, 1.5)) out.push(`${L.name || 'landmark at ' + centroid(L.poly).map(Math.round)} vs ${e.name}: ${d.toFixed(1)} m`);
+      }
+      return out;
+    },
+    // renders one second of an engine sound offline and measures it: loudness, peak, brightness, fundamental
+    engineSample(key, rpm, load) {
+      const ctx = new window.OfflineAudioContext(1, 44100, 44100), sr = 44100;
+      const noise = ctx.createBuffer(1, sr * 2, sr), nd = noise.getChannelData(0);
+      for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+      const v = makeEngineVoice(ctx, ctx.destination, noise), M = MODELS.find((m) => m.eng === key);
+      setProfile(v, key);
+      v.prevLoad = load;
+      v.boost = load;
+      driveVoice(v, { M, rpm, load, dead: false, limiter: false }, 1, 0, 0);
+      return ctx.startRendering().then((buf) => {
+        const d = buf.getChannelData(0).subarray(22050 - 4096, 22050);
+        let sum = 0, peak = 0;
+        for (let i = 0; i < d.length; i++) { sum += d[i] * d[i]; peak = Math.max(peak, Math.abs(d[i])); }
+        let num = 0, den = 0, best = 0, bestF = 0;
+        for (let k = 1; k < 400; k++) {
+          let re = 0, im = 0;
+          for (let i = 0; i < d.length; i++) { const a = (2 * Math.PI * k * i) / d.length; re += d[i] * Math.cos(a); im -= d[i] * Math.sin(a); }
+          const m = Math.hypot(re, im), f = (k * sr) / d.length;
+          num += f * m; den += m;
+          if (m > best) { best = m; bestF = f; }
+        }
+        return { rms: +Math.sqrt(sum / d.length).toFixed(4), peak: +peak.toFixed(3), centroid: Math.round(num / den), strongest: Math.round(bestF), firing: Math.round((rpm / 60) * (ENGINE_SOUNDS[key].cyl / 2)) };
+      });
+    },
+    mp: MP, get cars() { return cars; }, boatFits, findBerth, blockedAt: (x, z, r) => blockedAt(x, z, r), obstaclesNear(x, z, r) { const out = []; forNear(x - r, z - r, x + r, z + r, (o) => out.push({ ...o })); return out; }, distTo, get persons() { return persons; }, get player() { return player; }, get driving() { return driving; },
+    get wanted() { return wanted; }, get heli() { return heli; }, updateStars, get fines() { return fines; }, get audio() { return audio; }, get stop() { return stop; }, footCops, STATION, useKey, walkWaypoint, walkLine, landmarkList, mapSquares, mapGreens, signTicket, beginStop, setCall, resyncBot, get horses() { return horses; }, fireworks(s) { fireworksT = s; },
+    nodes, edges, walkable, fitsM, MODEL, driveAccel, limitAt, bridgeTrims, nearestEdgeAt(x, z) { const ne = nearestEdge(x, z); return ne.e && ne.d < ne.e.hw + ne.e.walk + 2 ? ne.e : null; },
+    state() {
+      const bad = [];
+      for (const c of cars) { if (!isFinite(c.x + c.z + c.h + c.vx + c.vz)) bad.push('nan-car'); else if (!c.remote && !(c.M.boat ? boatFits(c.M, c.x, c.z, c.h) : fitsM(c.M, c.x, c.z, c.h))) bad.push('car-off ' + c.M.id + ' ' + c.x.toFixed(1) + ',' + c.z.toFixed(1)); }
+      for (const p of persons) { if (!isFinite(p.x + p.z + p.y)) bad.push('nan-person'); else if (!p.remote && !walkable(p.x, p.z) && !(p === player && (driving || MP.ride) && (driving || MP.ride).M.boat) && !(p === player && stop && stop.phase === 'water')) bad.push('person-off ' + p.x.toFixed(1) + ',' + p.z.toFixed(1)); }
+      const bots = cars.filter((c) => c.bot);
+      return {
+        player: { x: +player.x.toFixed(2), y: +player.y.toFixed(2), z: +player.z.toFixed(2) },
+        driving: driving ? driving.M.id : null, near: nearCar ? (nearCar.bot ? 'bot ' : '') + nearCar.M.id : null,
+        kmh: driving ? Math.round(Math.hypot(driving.vx, driving.vz) * 3.6) : 0,
+        cars: cars.length, bots: bots.length, movingBots: bots.filter((c) => Math.hypot(c.vx, c.vz) > 2).length,
+        stuckBots: bots.filter((c) => c.bot.stuckTotal > 4).length, persons: persons.length, bad,
+        street: el.locStreet.textContent, district: el.locDistrict.textContent, prompt: el.prompt.hidden ? '' : el.promptText.textContent,
+        gear: driving ? el.gear.textContent : null, rpm: driving ? Math.round(driving.rpm) : 0, auto: driving ? driving.auto : null,
+        health: driving ? Math.round(driving.health) : null, wanted: wanted ? [...wanted.kinds].join(',') : null, fines,
+        police: cars.filter((c) => c.police).map((c) => c.police.state + (c.siren ? '+siren' : '')).join(' '),
+        toast: el.toast.hidden ? '' : el.toast.textContent
+      };
+    }
+  };
+
+  const hot = window.claude && window.claude.hot;
+  if (hot && hot.snapshot) hot.snapshot(() => ({ p: { x: player.x, y: player.y, z: player.z, rot: player.rot }, started, muted }));
+  function boot(data) {
+    data = data || {};
+    if (data.p && personFits(data.p.x, data.p.z)) { player.x = data.p.x; player.z = data.p.z; player.y = data.p.y || 0; player.rot = data.p.rot || 0; }
+    if (data.muted) toggleMute();
+    if (data.started) {
+      started = true;
+      el.start.hidden = true;
+      document.body.classList.add('playing');
+      setTouchMode(isTouch);
+      camYaw = player.rot;
+    }
+    camTarget.set(player.x, player.y + 1.6, player.z);
+    sizeMap();
+    last = performance.now();
+    requestAnimationFrame(frame);
+  }
+  if (hot && hot.ready) hot.ready(boot);
+  else boot((hot && hot.data) || {});
+})();

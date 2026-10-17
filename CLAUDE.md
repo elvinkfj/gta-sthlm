@@ -16,16 +16,22 @@ The game is being split into smaller files, one step per PR, following **`PLAN.m
 
 ## How to find things
 
-`index.html` is about 13,700 lines and roughly 300k tokens. **Never read it whole.** Each part starts with a section header comment. Grep for the header (or a name from the table) and read only that range:
+The game is three files:
+
+- `index.html` (about 220 lines): only the HTML for the HUD, maps, start sign and car picker, plus the `<link>` and `<script>` tags.
+- `style.css` (about 410 lines): all the styles.
+- `src/game.js` (about 13,100 lines, roughly 290k tokens): all the JavaScript. **Never read it whole.**
+
+Each part of `src/game.js` starts with a section header comment. Grep for the header (or a name from the table) and read only that range:
 
 - Big sections: `/* ================= name ================= */`
 - Subsections: `/* ---------- name ---------- */`
 
-Line numbers drift with every change, so search instead of trusting numbers. Lines 1–620 are CSS and HTML; the rest is one script inside `(function () { 'use strict'; … })()`. Everything inside shares one scope, so a top-level name in one section may be used anywhere: grep for a name before renaming or removing it.
+Line numbers drift with every change, so search instead of trusting numbers. `src/game.js` is one script inside `(function () { 'use strict'; … })()`. Everything inside shares one scope, so a top-level name in one section may be used anywhere: grep for a name before renaming or removing it.
 
 | Section header | What's in it | Key names |
 | --- | --- | --- |
-| *(CSS, top of file)* `HUD`, `start sign`, `big map`, `car picker`, `touch controls`, `playing with friends…` | Styles for the overlays | |
+| *(in `style.css`)* `HUD`, `start sign`, `big map`, `car picker`, `touch controls`, `playing with friends…` | Styles for the overlays | |
 | *(script start)* | Helpers, seeded random | `$`, `clamp`, `lerp`, `rand`, `pick`, `TAU` |
 | `renderer & scene`, `geometry helpers`, `textures` | Three.js setup, mesh and texture helpers | `renderer`, `scene`, `camera` |
 | `Stockholm: land, water and streets` | Map data: land polygons, the street graph, walkable raster, obstacle grid | `nodes`, `edges` |
@@ -72,7 +78,7 @@ Then mention the car in `README.md` if it lists similar cars.
 
 `window.gubbeTest` (end of the script) lets code drive the game without a player: `start()`, `run(seconds)`, `key(code, down)`, `press(code)`, `teleport(x, z)`, `choose(id)`, `showroom(ids, x, z, gap)` (builds cars side by side), `shot(...)` (fixed-camera screenshot), `info()` (render stats), `mapProblems()` (landmarks standing on streets; should not grow), `engineSample(...)` (measures an engine sound).
 
-**Run `npm test` before every PR, and don't open the PR until it is green.** The first time, run `npm install` and `npx playwright install chromium`. The smoke test (`tests/smoke.spec.js`, Playwright) opens `index.html` from disk in headless Chromium and checks that the page loads without console errors, that `start()` + `run(10)` works, that the player can get into a car and drive it away, that `mapProblems()` doesn't grow, and that every model in `MODELS` builds. It takes under a minute. GitHub Actions (`.github/workflows/test.yml`) also runs it on every pull request; if that check fails, fix it on the same branch. The game itself never needs `npm install`: `package.json` exists only for the tests.
+**Run `npm test` before every PR, and don't open the PR until it is green.** The first time, run `npm install` and `npx playwright install chromium`. The smoke test (`tests/smoke.spec.js`, Playwright) opens `index.html` from disk in headless Chromium and checks that the page loads without console errors, that `start()` + `run(10)` works, that the player can get into a car and drive it away, that `mapProblems()` doesn't grow, and that every model in `MODELS` builds. `tests/baseline.spec.js` checks the invariants for the split in `PLAN.md`: with `Math.random` seeded, a fixed `teleport` and a camera `shot`, the draw calls, triangles, geometries, `MODELS.length` and `mapProblems().length` must equal `tests/baseline.json`, and the 3D picture must match `tests/baseline.png` within 1 % of the pixels. A step that only moves code must not change them. After a real change to the game, record a new baseline with `npm run baseline` in its own commit. The tests take under a minute. GitHub Actions (`.github/workflows/test.yml`) also runs it on every pull request; if that check fails, fix it on the same branch. The game itself never needs `npm install`: `package.json` exists only for the tests.
 
 ## Working rules
 
