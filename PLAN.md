@@ -168,7 +168,7 @@ För varje PR: flytta koden oförändrad, kör testet, uppdatera kartan i `CLAUD
 
 ## PR 18: Städa upp efteråt
 
-- [ ] Gå igenom "Saker att fixa senare" och gör om dem till egna, små PR:er.
+- [x] Gå igenom "Saker att fixa senare" och gör om dem till egna, små PR:er. (Oscar valde att bara rätta felmeddelandet om 3D-motorn. Resten står kvar i listan.)
 - [x] Skriv in i `CLAUDE.md`: ny funktion ska ligga i den fil den hör till, och en fil som växer över ca 1 500 rader delas.
 - [x] Uppdatera "Spela"-delen i `README.md` om något har ändrats.
 
@@ -178,10 +178,8 @@ För varje PR: flytta koden oförändrad, kör testet, uppdatera kartan i `CLAUD
 
 *(Claude skriver upp saker här som den ser under uppdelningen men inte får ändra.)*
 
-- Felmeddelandet "Kunde inte ladda 3D-motorn. Kontrollera internetanslutningen …" stämmer inte längre: Three.js laddas nu från `lib/`, inte från internet. (PR 2)
 - Spelet tar ca 20 sekunder att ladda i en webbläsare utan grafikkort (testet), fast `loadMs` säger ca 3 sekunder. Det kan vara värt att ta reda på vad som är långsamt. (PR 2)
 - Koden i `src/` är fortfarande indragen två steg, som när den låg inuti omslaget. Den kan flyttas ut till vänsterkanten, men se upp med strängar som går över flera rader (`` ` ``), där indraget är en del av texten. (PR 5)
-- Kollen "kunde inte ladda 3D-motorn" stoppar bara sin egen fil. När koden ligger i många filer kommer de andra filerna också att ge fel i konsolen om Three.js saknas. Spelet startar ändå inte, men det kan bli snyggare. (PR 5)
 - Gröna Lund använder `curve` och `tubeTo`, som ligger bland bilarna. De flyttades till `src/core.js` för att filen ska kunna laddas. Leta efter fler sådana hjälpfunktioner som borde ligga i `core.js`. (PR 8)
 - `src/core.js` använder `CELL_W` och `FLOOR_H` från `src/city/map.js` inuti en funktion. Det fungerar, men ett "kärn"-ställe borde inte bero på kartan. (PR 8)
 - "initial traffic" (bilarna, poliserna och båtarna som finns när spelet startar) ligger sist i `src/police-stops.js`, eftersom den måste köras på samma ställe i ordningen som förut. Den hör egentligen inte till polisen. (PR 14)
