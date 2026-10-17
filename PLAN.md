@@ -180,7 +180,7 @@ För varje PR: flytta koden oförändrad, kör testet, uppdatera kartan i `CLAUD
 
 - Felmeddelandet "Kunde inte ladda 3D-motorn. Kontrollera internetanslutningen …" stämmer inte längre: Three.js laddas nu från `lib/`, inte från internet. (PR 2)
 - Spelet tar ca 20 sekunder att ladda i en webbläsare utan grafikkort (testet), fast `loadMs` säger ca 3 sekunder. Det kan vara värt att ta reda på vad som är långsamt. (PR 2)
-- Koden i `src/game.js` är fortfarande indragen två steg, som när den låg inuti omslaget. Den kan flyttas ut till vänsterkanten, men se upp med strängar som går över flera rader (`` ` ``), där indraget är en del av texten. (PR 5)
+- Koden i `src/` är fortfarande indragen två steg, som när den låg inuti omslaget. Den kan flyttas ut till vänsterkanten, men se upp med strängar som går över flera rader (`` ` ``), där indraget är en del av texten. (PR 5)
 - Kollen "kunde inte ladda 3D-motorn" stoppar bara sin egen fil. När koden ligger i många filer kommer de andra filerna också att ge fel i konsolen om Three.js saknas. Spelet startar ändå inte, men det kan bli snyggare. (PR 5)
 - `src/city/build.js` blev ca 1 740 rader, alltså mer än målet på ca 1 500. Den kan delas i två, till exempel efter polisstationen. (PR 8)
 - Gröna Lund använder `curve` och `tubeTo`, som ligger bland bilarna. De flyttades till `src/core.js` för att filen ska kunna laddas. Leta efter fler sådana hjälpfunktioner som borde ligga i `core.js`. (PR 8)

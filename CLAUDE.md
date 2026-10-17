@@ -38,7 +38,8 @@ The game is these files, loaded in this order:
 - `src/sound.js` (about 360 lines): synthesised engine sounds and effects.
 - `src/input.js` (about 150 lines): keyboard, touch and the start screen.
 - `src/post.js` (about 320 lines): graphics quality levels and post-processing.
-- `src/game.js` (about 1,140 lines): playing with friends, then the main loop and the test hooks.
+- `src/multiplayer.js` (about 980 lines): playing with friends.
+- `src/main.js` (about 160 lines): the main loop, adaptive resolution and the test hooks. Loaded last.
 
 Each part of the JavaScript starts with a section header comment. Grep for the header (or a name from the table) and read only that range:
 
@@ -72,8 +73,8 @@ Line numbers drift with every change, so search instead of trusting numbers. Eac
 | `src/sound.js` | `sound` | Synthesised engine sounds and effects | `ENGINE_SOUNDS`, `updateAudio` |
 | `src/input.js` | `input` | Keyboard, touch and the start screen | `startGame` |
 | `src/post.js` | `post-processing` | Graphics quality levels and effects | `POST` |
-| `src/game.js` | `playing with friends` | Multiplayer over WebRTC (PeerJS), with MQTT as fallback. Libraries load only when used. | `MP` |
-| `src/game.js` | `loop` | The main loop, adaptive resolution and the test hooks | `tick`, `frame`, `window.gubbeTest` |
+| `src/multiplayer.js` | `playing with friends` | Multiplayer over WebRTC (PeerJS), with MQTT as fallback. Libraries load only when used. | `MP` |
+| `src/main.js` | `loop` | The main loop, adaptive resolution and the test hooks | `tick`, `frame`, `window.gubbeTest` |
 
 ## How the parts depend on each other
 
