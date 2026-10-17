@@ -13,12 +13,13 @@ test('spelet ser likadant ut som i baseline', async ({ page }) => {
   await page.addInitScript(() => {
     let s = 1;
     Math.random = () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; };
+    // no frame loop: it would step the game with real time before the test starts, more often on a slow machine
+    window.requestAnimationFrame = () => 0;
   });
   await page.goto(GAME);
   await page.waitForFunction(() => window.gubbeTest);
   const now = await page.evaluate(() => {
     const t = gubbeTest;
-    t.hold(true); // stop the frame loop so only run() moves the game
     const x = 239.5, z = 95.8;
     t.start();
     t.teleport(x, z);
