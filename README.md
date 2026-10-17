@@ -4,7 +4,7 @@ Ett 3D-spel i webbläsaren där du är en gubbe i Stockholms innerstad. Du går 
 
 ## Spela
 
-Öppna `index.html` i Chrome, Safari, Firefox eller Edge. Spelet behöver ingen installation. 3D-motorn (Three.js) ligger i mappen `lib/`, så spelet går att köra utan internet. Typsnitten laddas från internet, men utan nätet används datorns egna typsnitt.
+Öppna `index.html` i Chrome, Safari, Firefox eller Edge. Spelet behöver ingen installation. Koden ligger i flera filer, så ha kvar `style.css` och mapparna `src/` och `lib/` bredvid `index.html` om du kopierar spelet. 3D-motorn (Three.js) ligger i mappen `lib/`, så spelet går att köra utan internet. Typsnitten laddas från internet, men utan nätet används datorns egna typsnitt.
 
 ### Spela med vänner
 

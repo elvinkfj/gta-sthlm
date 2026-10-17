@@ -4,9 +4,13 @@ A GTA-style 3D browser game set in central Stockholm, built with Three.js r128 (
 
 The owner is Elvin (15). He speaks Swedish and is learning to program, so keep explanations to him short, simple and in Swedish.
 
-## Ongoing work: splitting the file
+## Where new code goes
 
-The game is being split into smaller files, one step per PR, following **`PLAN.md`**. When asked to "do the next PR in PLAN.md", do exactly the unchecked PR section that comes first, tick its boxes in `PLAN.md` in the same PR, and update the map below. Follow the agent rules in `PLAN.md`.
+The game used to be one big file and was split into the files below following **`PLAN.md`** (done). Keep it that way:
+
+- New code goes in the file it belongs to (a new car in `src/vehicles/models.js`, a new sound in `src/sound.js`, and so on). Update the map below when a file gets a new job.
+- A file that grows over about 1,500 lines is split, at a section header, into two files that load one after the other. Add the new `<script>` tag in `index.html` right after the old one, and update the map.
+- Leftover clean-up ideas are under "Saker att fixa senare" at the end of `PLAN.md`.
 
 ## Language
 
@@ -106,7 +110,7 @@ Then mention the car in `README.md` if it lists similar cars.
 
 ## Working rules
 
-- One Claude session at a time on this repo. Parallel sessions editing the same big file cause merge conflicts.
-- While splitting the file (`PLAN.md`), move code **without changing it**. Only change what is needed for it to work in its new file. Note bugs and clean-up ideas under "Saker att fixa senare" in `PLAN.md` instead of fixing them.
+- One Claude session at a time on this repo. Parallel sessions editing the same files cause merge conflicts.
+- When moving code between files, move it **without changing it**. Only change what is needed for it to work in its new file, and check that `npm test` and the baseline stay the same.
 - Keep changes small and focused. Don't refactor or "tidy up" code that the task doesn't touch.
 - The game must keep working when `index.html` is opened directly from disk (`file://`). Don't introduce ES modules or a build step.
