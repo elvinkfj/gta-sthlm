@@ -23,7 +23,7 @@
       status: $('mpStatus'), chatLog: $('mpChatLog'), sayInput: $('mpSayInput'), tag: $('mpTagText'), friends: $('btnFriends'), hudLog: $('chatLog'), bar: $('chatBar'), barInput: $('chatInput')
     };
     const S = {
-      peer: null, host: false, code: '', joining: '', myId: '', hostId: '', hostConn: null, conns: new Map(), players: new Map(), busy: false, timer: 0,
+      peer: null, go: null, host: false, code: '', joining: '', myId: '', hostId: '', hostConn: null, conns: new Map(), players: new Map(), busy: false, timer: 0,
       name: (store.get('gubbe-namn') || '').slice(0, 14), ride: null, near: null, lastCar: null, panel: false, chat: false
     };
     // you, as one of the riders in a car (the others are the players themselves)
@@ -193,6 +193,8 @@
         cl.on('connect', () => cl.subscribe(TOPIC + code + '/c/' + me));
         await new Promise((res) => cl.subscribe(TOPIC + code + '/c/' + me, () => res()));
       }
+      // (knocking again: the same door, so that a late answer to the first knock still finds it)
+      if (R.out && R.out.open && R.room === code && R.me === me) return R.out;
       R.me = me; R.room = code;
       if (R.out) R.out.close();
       R.out = relayConn(cl, PREFIX + code.toLowerCase(), TOPIC + code + '/h');
@@ -244,7 +246,7 @@
     function busy(on) { S.busy = on; E.host.disabled = E.join.disabled = on; }
     function fail(msg) {
       const peer = S.peer;
-      S.peer = null; S.hostConn = null;
+      S.peer = null; S.hostConn = null; S.go = null;
       relayDown();
       if (peer) try { peer.destroy(); } catch { /* already gone */ }
       busy(false);
@@ -266,21 +268,44 @@
       return true;
     }
     const noLib = 'Kunde inte hämta det som behövs för att spela med vänner. Kolla att du är uppkopplad mot internet.';
+    const newCode = () => Array.from({ length: 4 }, () => ABC[Math.floor(Math.random() * ABC.length)]).join('');
+    // PeerJS's server is down or can't be reached (or the library wouldn't load): the room is opened on the brokers
+    // alone, and it is closed again if none of them answers either
+    async function relayRoom(code, go) {
+      const peer = S.peer;
+      S.peer = null;
+      if (peer) try { peer.destroy(); } catch { /* already gone */ }
+      status('Skapar rummet en annan väg …');
+      try { await loadMqtt(); } catch { if (S.go === go) fail(noLib); return; }
+      if (S.go !== go || inRoom()) return;
+      S.host = true; S.myId = S.hostId = PREFIX + code.toLowerCase();
+      enter(code);
+      setTimeout(() => {
+        if (S.go !== go || !inRoom() || R.clients.some((cl) => cl.connected)) return;
+        leave();
+        status('Kunde inte nå servrarna som kopplar ihop spelarna. Kolla att du är uppkopplad och försök igen om en stund.', true);
+      }, 12000);
+    }
     async function hostRoom(tries = 0) {
       if ((S.busy && !tries) || inRoom() || !readyName()) return;
       busy(true); status('Skapar ett rum …');
-      try { await loadPeer(); } catch { fail(noLib); return; }
-      const code = Array.from({ length: 4 }, () => ABC[Math.floor(Math.random() * ABC.length)]).join('');
-      let peer;
-      try { peer = newPeer(PREFIX + code.toLowerCase()); } catch { trouble({ type: 'browser-incompatible' }); return; }
+      const go = {}, code = newCode();
+      S.go = go;
+      let peer = null;
+      try { await loadPeer(); peer = newPeer(PREFIX + code.toLowerCase()); } catch { /* the other way, then */ }
+      if (S.go !== go) { if (peer) peer.destroy(); return; }
+      if (!peer) { relayRoom(code, go); return; }
       S.peer = peer;
-      peer.on('open', (id) => { if (S.peer === peer && !inRoom()) { S.host = true; S.myId = S.hostId = id; enter(code); } });
+      const slow = setTimeout(() => { if (S.peer === peer && !inRoom()) relayRoom(code, go); }, 10000);
+      peer.on('open', (id) => { if (S.peer === peer && !inRoom()) { clearTimeout(slow); S.host = true; S.myId = S.hostId = id; enter(code); } });
       peer.on('connection', (conn) => { if (S.peer === peer) accept(conn); });
       peer.on('error', (err) => {
-        if (S.peer !== peer) return;
+        // once you are in a room it carries on between the players already in it: only meeting new ones needs the server
+        if (S.peer !== peer || inRoom()) return;
+        clearTimeout(slow);
         // someone already has that code: draw another
-        if (err.type === 'unavailable-id' && !inRoom() && tries < 4) { S.peer = null; peer.destroy(); hostRoom(tries + 1); return; }
-        trouble(err);
+        if (err.type === 'unavailable-id' && tries < 4) { S.peer = null; peer.destroy(); hostRoom(tries + 1); return; }
+        relayRoom(code, go);
       });
     }
     async function joinRoom(raw) {
@@ -290,49 +315,77 @@
       if (code.length !== 4) { status('Rumskoden är fyra bokstäver. Fråga vännen som skapade rummet.', true); E.code.focus(); return; }
       if (!readyName()) return;
       busy(true); S.joining = code; status('Går med i rum ' + code + ' …');
-      try { await loadPeer(); } catch { fail(noLib); return; }
-      let peer;
-      try { peer = newPeer(); } catch { trouble({ type: 'browser-incompatible' }); return; }
-      S.peer = peer;
-      let iceFailed = false, tries = 0, retry = null;
-      const me0 = () => S.myId;
+      const go = {};
+      S.go = go;
+      const live = () => S.go === go && !inRoom();
+      let iceFailed = false, noRoom = false, tries = 0, retry = null, begun = false, knocking = false;
       const wait = setTimeout(() => {
-        if (S.peer !== peer || inRoom()) return;
+        if (!live()) return;
         clearTimeout(retry);
         fail(iceFailed ? 'Hittade rum ' + code + ', men era nätverk släpper inte igenom anslutningen. Prova ett annat nät, till exempel mobilens.'
+          : noRoom ? 'Hittade inget rum med koden ' + code + '. Kolla koden, och att din vän har rummet öppet.'
           : 'Rum ' + code + ' svarar inte. Kolla koden, och att din vän har spelet öppet och framme på skärmen.');
       }, 32000);
       // knock on the room's door: first straight through, then (if nothing has come back) via the broker, and again
       const knock = async () => {
-        if (S.peer !== peer || inRoom()) return;
+        if (!live()) return;
         const n = tries++;
         if (n < 4) retry = setTimeout(knock, n === 0 ? 6000 : 8000);
         let conn;
-        if (n === 0) {
-          conn = peer.connect(PREFIX + code.toLowerCase(), { reliable: true, serialization: 'json' });
+        if (n === 0 && S.peer) {
+          conn = S.peer.connect(PREFIX + code.toLowerCase(), { reliable: true, serialization: 'json' });
           conn.on('iceStateChanged', (st) => { if (st === 'failed') iceFailed = true; });
         } else {
           if (n === 1) status('Går med i rum ' + code + ' en annan väg …');
-          const me = me0();
-          conn = await relayKnock(code, me);
-          if (!conn || S.peer !== peer || inRoom() || S.myId !== me) return;
+          // (finding a broker can take longer than the next knock: one at a time)
+          if (knocking) return;
+          knocking = true;
+          const me = S.myId;
+          try { conn = await relayKnock(code, me); } finally { knocking = false; }
+          if (!conn || !live() || S.myId !== me) return;
         }
+        const hi = () => conn.send({ t: 'hi', v: PROTO, name: S.name, look: look() });
+        if (conn === S.hostConn) { hi(); return; }
         if (S.hostConn && S.hostConn !== conn) try { S.hostConn.close(); } catch { /* gone already */ }
         S.hostConn = conn;
         conn.on('data', (m) => clientData(conn, m, code, wait));
         conn.on('close', () => { if (S.hostConn === conn && inRoom()) hostGone(); });
         conn.on('error', () => { /* the close, or the wait running out, deals with it */ });
-        const hi = () => conn.send({ t: 'hi', v: PROTO, name: S.name, look: look() });
         if (conn.relay) hi(); else conn.on('open', hi);
       };
+      const begin = () => { if (begun || !live()) return; begun = true; knock(); };
+      // without PeerJS's server: only via the brokers, with an id of your own
+      const relayOnly = async () => {
+        if (!live() || begun) return;
+        const peer = S.peer;
+        S.peer = null;
+        if (peer) try { peer.destroy(); } catch { /* already gone */ }
+        try { await loadMqtt(); } catch { if (live()) { clearTimeout(wait); fail(noLib); } return; }
+        if (!live() || begun) return;
+        S.myId = 'r-' + Math.random().toString(36).slice(2, 12);
+        tries = Math.max(tries, 1);
+        begin();
+      };
+      let peer = null;
+      try { await loadPeer(); peer = newPeer(); } catch { /* the other way, then */ }
+      if (S.go !== go) { if (peer) peer.destroy(); return; }
+      if (!peer) { relayOnly(); return; }
+      S.peer = peer;
+      setTimeout(() => { if (S.peer === peer && !peer.open) relayOnly(); }, 10000);
       peer.on('open', (id) => {
         // (it fires again when the line to the server comes back: the connection to the room is still there)
-        if (S.peer !== peer || S.hostConn) return;
+        if (S.peer !== peer || S.hostConn || begun) return;
         S.myId = id;
-        knock();
+        begin();
         loadMqtt().catch(() => {});
       });
-      peer.on('error', (err) => { if (S.peer === peer) { if (!inRoom()) clearTimeout(wait); trouble(err); } });
+      peer.on('error', (err) => {
+        if (S.peer !== peer || inRoom()) return;
+        // (the room may still be there on the brokers, if its PeerJS couldn't reach the server either)
+        if (err.type === 'peer-unavailable') { noRoom = true; return; }
+        if (err.type === 'browser-incompatible' && !window.RTCPeerConnection) { clearTimeout(wait); trouble(err); return; }
+        if (!begun) relayOnly();
+      });
     }
     const info = (P) => ({ id: P.id, name: P.name, look: P.look });
     function broadcast(m, except) {
@@ -413,7 +466,7 @@
       for (const id of [...S.players.keys()]) removePlayer(id, false);
       clearInterval(S.timer);
       const peer = S.peer;
-      Object.assign(S, { peer: null, host: false, code: '', joining: '', myId: '', hostId: '', hostConn: null, lastCar: null, near: null });
+      Object.assign(S, { peer: null, go: null, host: false, code: '', joining: '', myId: '', hostId: '', hostConn: null, lastCar: null, near: null });
       S.conns.clear();
       relayDown();
       if (peer) try { peer.destroy(); } catch { /* already gone */ }
