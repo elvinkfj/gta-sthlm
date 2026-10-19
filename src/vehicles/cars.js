@@ -4,10 +4,11 @@
   // Each car has one PBR material. The vertex attribute "surf" says how rough, metallic and lacquered each part is,
   // and which light it belongs to: 1 headlights, 2 tail/brake lights, 3 and 4 the blue lights left/right, 5 reversing lights.
   // Below zero it marks the parts the shader adds detail to: -1 the paint (metal flakes under the clear coat), -2 the tyres.
-  // The paint is a base coat with a little metal in it under a full, glassy clear coat; chrome and the rims are bare
-  // polished metal, sharp enough to mirror the street; the tyres are matte rubber.
+  // The paint is a base coat under a thin clear coat: glossy enough to catch the sun and the sky, thin enough that the
+  // colour and the car's lines still show through it; chrome and the rims are bare polished metal, sharp enough to
+  // mirror the street; the tyres are matte rubber.
   const SURF = {
-    paint: [0.34, 0.12, 1, -1], trim: [0.62, 0.1, 0, 0], gloss: [0.1, 0.2, 1, 0], chrome: [0.05, 1, 0, 0], plate: [0.4, 0, 0, 0], tyre: [0.86, 0, 0, -2],
+    paint: [0.45, 0.03, 0.4, -1], trim: [0.62, 0.1, 0, 0], gloss: [0.1, 0.2, 1, 0], chrome: [0.05, 1, 0, 0], plate: [0.4, 0, 0, 0], tyre: [0.86, 0, 0, -2],
     alloy: [0.2, 1, 0.45, 0], under: [0.85, 0, 0, 0],
     head: [0.08, 0, 1, 1], tail: [0.12, 0, 1, 2], blueL: [0.08, 0, 1, 3], blueR: [0.08, 0, 1, 4], rev: [0.08, 0, 1, 5],
     indL: [0.1, 0, 1, 6], indR: [0.1, 0, 1, 7]
@@ -47,7 +48,7 @@
     '\t\tvec3 c = textureCube( tProbe, r, lod ).rgb;',
     '\t#endif',
     '\tc = sRGBToLinear( vec4( c, 1.0 ) ).rgb;',
-    '\treturn c / max( vec3( 1.0 ) - c * 0.7, vec3( 0.3 ) ) * envMapIntensity;',
+    '\treturn c / max( vec3( 1.0 ) - c * 0.5, vec3( 0.5 ) ) * envMapIntensity;',
     '}',
     '#endif'
   ].join('\n');
@@ -118,7 +119,7 @@
   const HEAD_GLOW = 0.6, TAIL_GLOW = 0.3, BRAKE_GLOW = 2.6, IND_GLOW = 2.6;
   const IND = (s) => (s > 0 ? COL.indL : COL.indR);
   function carMaterial() {
-    const m = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.3, clearcoat: 1, clearcoatRoughness: 0.025, envMapIntensity: 0.8 });
+    const m = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.3, clearcoat: 1, clearcoatRoughness: 0.08, envMapIntensity: 0.5 });
     m.userData.glow = new THREE.Vector4(HEAD_GLOW, TAIL_GLOW, 0, 0);
     m.userData.rev = { value: 0 };
     m.userData.ind = new THREE.Vector2(0, 0);
@@ -506,7 +507,9 @@
       else pts.push([w * 0.55, t + 0.025, 'deck'], [w * 0.0001, t + 0.035, 'deck'], [0, t + 0.035, 'deck']);
       return pts.map(([x, y, tag]) => [x, y, z, tag]);
     };
-    const hint = { bottom: [0, -1, 0], side: [1, 0, 0], rail: [0, 1, 0], inner: [-1, 0, 0], floor: [0, 1, 0], deck: [0, 1, 0] };
+    // which way each strip faces, named by the point it ends at: the vee down, the chine and the topsides (up to the
+    // rail) out, the cap on the gunwale (up to inner), the cockpit's walls and floor and the deck up
+    const hint = { bottom: [0, -1, 0], side: [1, 0, 0], rail: [1, 0, 0], inner: [0, 1, 0], floor: [0, 1, 0], deck: [0, 1, 0] };
     const quad = (a, b, c, d, col, h) => {
       const ux = c[0] - a[0], uy = c[1] - a[1], uz = c[2] - a[2], vx = d[0] - b[0], vy = d[1] - b[1], vz = d[2] - b[2];
       let n = [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx];
