@@ -94,6 +94,14 @@
       const lx = sd * c.M.W * 0.45, bz = c.M.L * 0.25, x = c.x + lx * co + bz * si, z = c.z - lx * si + bz * co;
       foamFx.spawn({ x, y: WATER_Y + 0.12, z, vx: sd * co * 1.6 + c.vx * 0.2, vy: 0.5, vz: -sd * si * 1.6 + c.vz * 0.2, life: 1.6, size: [0.4, 1.6], alpha: 0.4, c: FOAM_COL, grav: 3, drag: 0.8, floor: WATER_Y + 0.08 });
     }
+    // sliding through a hard turn: the side the hull skids towards throws up a sheet of spray, a little out from the hull
+    // and faster sideways than the hull itself, so that the hull doesn't slide into its own spray
+    const vl = c.vx * co - c.vz * si;
+    if (c.slip > 2 && v > 3 && Math.random() < dt * c.slip * 6) {
+      const sd = Math.sign(vl), lx = sd * (c.M.W * 0.5 + 0.25), lz = (Math.random() - 0.6) * c.M.L * 0.6, x = c.x + lx * co + lz * si, z = c.z - lx * si + lz * co;
+      const kick = vl * 0.7 + sd * (1.5 + c.slip * 0.4);
+      foamFx.spawn({ x, y: WATER_Y + 0.3, z, vx: c.vx * 0.3 + co * kick, vy: 1.5 + Math.random() * 2, vz: c.vz * 0.3 - si * kick, life: 1.1, size: [0.4, 1.8], alpha: Math.min(0.6, 0.15 + c.slip * 0.05), c: FOAM_COL, grav: 9, drag: 0.6, floor: WATER_Y + 0.08 });
+    }
   }
   const FIRE_COLS = [0x2f7bff, 0xf7c600, 0xe0203a, 0x3fd06a, 0xffffff, 0xff7ad9];
   function launchRocket() {

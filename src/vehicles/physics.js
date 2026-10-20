@@ -508,6 +508,7 @@
     }
   }
   // steam, then smoke, from the engine of every damaged car close to the camera; burnouts and slides smoke the tyres
+  // (a boat has no tyres: its slides throw up spray instead, see boatWake)
   function damageFx(c, dt) {
     if (c.hitT > 0) c.hitT -= dt;
     const near = Math.hypot(c.x - camTarget.x, c.z - camTarget.z) < 90;
@@ -520,6 +521,7 @@
         smokeFx.spawn({ x: e.x + (Math.random() - 0.5) * 0.4, y: e.y, z: e.z + (Math.random() - 0.5) * 0.4, vx: c.vx * 0.3 + (Math.random() - 0.5) * 0.6 + 0.4, vy: 1.3 + Math.random() * 0.9, vz: c.vz * 0.3 + (Math.random() - 0.5) * 0.6 + 0.2, life: c.dead ? 3.6 : 2.4, size: [0.6, c.dead ? 5 : 3.4], alpha: c.dead ? 0.38 : heavy ? 0.3 : 0.22, c: col, drag: 0.7, fadeIn: 0.3 });
       }
     }
+    if (c.M.boat) return;
     if (c.slip > 3.5 && Math.random() < dt * 30) {
       const co = Math.cos(c.h), si = Math.sin(c.h), lx = (Math.random() < 0.5 ? -1 : 1) * wheelX(c.M), lz = -c.M.wb / 2;
       smokeFx.spawn({ x: c.x + lx * co + lz * si, y: 0.3, z: c.z - lx * si + lz * co, vx: (Math.random() - 0.5) * 1.2, vy: 0.5 + Math.random() * 0.5, vz: (Math.random() - 0.5) * 1.2, life: 1.8, size: [0.6, 3.2], alpha: Math.min(0.5, (c.slip - 3) * 0.08), c: SMOKE_COL.tyre, drag: 1.2, fadeIn: 0.15 });

@@ -4,10 +4,11 @@
   // Each car has one PBR material. The vertex attribute "surf" says how rough, metallic and lacquered each part is,
   // and which light it belongs to: 1 headlights, 2 tail/brake lights, 3 and 4 the blue lights left/right, 5 reversing lights.
   // Below zero it marks the parts the shader adds detail to: -1 the paint (metal flakes under the clear coat), -2 the tyres.
-  // The paint is a base coat with a little metal in it under a full, glassy clear coat; chrome and the rims are bare
-  // polished metal, sharp enough to mirror the street; the tyres are matte rubber.
+  // The paint is a base coat under a thin clear coat: glossy enough to catch the sun and the sky, thin enough that the
+  // colour and the car's lines still show through it; chrome and the rims are bare polished metal, sharp enough to
+  // mirror the street; the tyres are matte rubber.
   const SURF = {
-    paint: [0.34, 0.12, 1, -1], trim: [0.62, 0.1, 0, 0], gloss: [0.1, 0.2, 1, 0], chrome: [0.05, 1, 0, 0], plate: [0.4, 0, 0, 0], tyre: [0.86, 0, 0, -2],
+    paint: [0.45, 0.03, 0.4, -1], trim: [0.62, 0.1, 0, 0], gloss: [0.1, 0.2, 1, 0], chrome: [0.05, 1, 0, 0], plate: [0.4, 0, 0, 0], tyre: [0.86, 0, 0, -2],
     alloy: [0.2, 1, 0.45, 0], under: [0.85, 0, 0, 0],
     head: [0.08, 0, 1, 1], tail: [0.12, 0, 1, 2], blueL: [0.08, 0, 1, 3], blueR: [0.08, 0, 1, 4], rev: [0.08, 0, 1, 5],
     indL: [0.1, 0, 1, 6], indR: [0.1, 0, 1, 7]
@@ -47,7 +48,7 @@
     '\t\tvec3 c = textureCube( tProbe, r, lod ).rgb;',
     '\t#endif',
     '\tc = sRGBToLinear( vec4( c, 1.0 ) ).rgb;',
-    '\treturn c / max( vec3( 1.0 ) - c * 0.7, vec3( 0.3 ) ) * envMapIntensity;',
+    '\treturn c / max( vec3( 1.0 ) - c * 0.5, vec3( 0.5 ) ) * envMapIntensity;',
     '}',
     '#endif'
   ].join('\n');
@@ -118,7 +119,7 @@
   const HEAD_GLOW = 0.6, TAIL_GLOW = 0.3, BRAKE_GLOW = 2.6, IND_GLOW = 2.6;
   const IND = (s) => (s > 0 ? COL.indL : COL.indR);
   function carMaterial() {
-    const m = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.3, clearcoat: 1, clearcoatRoughness: 0.025, envMapIntensity: 0.8 });
+    const m = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.3, clearcoat: 1, clearcoatRoughness: 0.08, envMapIntensity: 0.5 });
     m.userData.glow = new THREE.Vector4(HEAD_GLOW, TAIL_GLOW, 0, 0);
     m.userData.rev = { value: 0 };
     m.userData.ind = new THREE.Vector2(0, 0);
@@ -497,24 +498,33 @@
     };
   }
   // A hull lofted through stations [z, half beam, keel y, gunwale y] (y = 0 is the waterline): a vee from the keel out to
-  // the chine, the topsides up to the gunwale, then either a closed deck with some camber or an open cockpit with a
-  // floor at floorY. cols: { bottom, side, rail, deck, inner, floor }
+  // the chine, the topsides up to the gunwale, a rail capping it, then either a closed deck with some camber or an open
+  // cockpit with a floor at floorY. cols: { bottom (the vee and the chine), side (the topsides), rail, deck, inner (the
+  // cockpit's walls), floor }
   function hullLoft(m, st, cols, floorY) {
     const ring = ([z, w, k, t]) => {
-      const pts = [[0, k, 'bottom'], [w * 0.9, lerp(k, t, 0.3), 'bottom'], [w, lerp(k, t, 0.42), 'side'], [w, t, 'rail']];
-      if (floorY !== undefined && w > 0.25) pts.push([w - 0.07, t + 0.02, 'inner'], [w - 0.1, floorY, 'floor'], [0, floorY, 'floor']);
-      else pts.push([w * 0.55, t + 0.025, 'deck'], [w * 0.0001, t + 0.035, 'deck'], [0, t + 0.035, 'deck']);
+      const pts = [[0, k, 'bottom'], [w * 0.9, lerp(k, t, 0.3), 'bottom'], [w, lerp(k, t, 0.42), 'bottom'], [w, t, 'side']];
+      if (floorY !== undefined && w > 0.25) pts.push([w - 0.07, t + 0.02, 'rail'], [w - 0.1, floorY, 'inner'], [0, floorY, 'floor']);
+      else pts.push([w - Math.min(0.05, w * 0.2), t + 0.012, 'rail'], [w * 0.55, t + 0.025, 'deck'], [0, t + 0.035, 'deck']);
       return pts.map(([x, y, tag]) => [x, y, z, tag]);
     };
+    // each strip has the colour and faces the way of the point it ends at: the vee and the chine down, the topsides out,
+    // the rail, the floor and the deck up, the cockpit's walls in
     const hint = { bottom: [0, -1, 0], side: [1, 0, 0], rail: [0, 1, 0], inner: [-1, 0, 0], floor: [0, 1, 0], deck: [0, 1, 0] };
+    // (each of its two triangles is wound to face along the strip's normal, also where the strip is twisted)
     const quad = (a, b, c, d, col, h) => {
       const ux = c[0] - a[0], uy = c[1] - a[1], uz = c[2] - a[2], vx = d[0] - b[0], vy = d[1] - b[1], vz = d[2] - b[2];
       let n = [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx];
       const l = Math.hypot(n[0], n[1], n[2]);
       if (l < 1e-9) return;
       n = n.map((v) => v / l);
-      if (n[0] * h[0] + n[1] * h[1] + n[2] * h[2] < 0) { n = n.map((v) => -v); m.triN(a, c, b, n, n, n, col); m.triN(a, d, c, n, n, n, col); }
-      else { m.triN(a, b, c, n, n, n, col); m.triN(a, c, d, n, n, n, col); }
+      if (n[0] * h[0] + n[1] * h[1] + n[2] * h[2] < 0) n = n.map((v) => -v);
+      const tri = (p, q, r) => {
+        const ex = q[0] - p[0], ey = q[1] - p[1], ez = q[2] - p[2], fx = r[0] - p[0], fy = r[1] - p[1], fz = r[2] - p[2];
+        if ((ey * fz - ez * fy) * n[0] + (ez * fx - ex * fz) * n[1] + (ex * fy - ey * fx) * n[2] < 0) m.triN(p, r, q, n, n, n, col);
+        else m.triN(p, q, r, n, n, n, col);
+      };
+      tri(a, b, c); tri(a, c, d);
     };
     const rings = st.map(ring);
     for (let i = 0; i < rings.length - 1; i++) {
@@ -528,14 +538,28 @@
         }
       }
     }
-    // the transom across the stern
-    const T = rings[0], z0 = T[0][2];
-    for (let j = 0; j < 3; j++) for (const s of [1, -1]) {
-      const a = [T[j][0] * s, T[j][1], z0], b = [T[j + 1][0] * s, T[j + 1][1], z0], c = [0, T[3][1], z0], n = [0, 0, -1];
-      const cr = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
-      if (Math.abs(cr) < 1e-9) continue;
-      if (cr > 0) m.triN(a, c, b, n, n, n, cols.side); else m.triN(a, b, c, n, n, n, cols.side);
-    }
+    // the ends, so that neither can be seen through: the transom across the stern (on an open boat also its inside,
+    // facing into the cockpit) and the stem across the bow, each fans of triangles at z from a point on the middle line
+    // to the outline pts, facing aft (dir -1) or forwards (dir 1)
+    const fan = (z, pts, apexY, dir, col) => {
+      const c = [0, apexY, z], n = [0, 0, dir];
+      for (let j = 0; j < pts.length - 1; j++) for (const s of [1, -1]) {
+        const a = [pts[j][0] * s, pts[j][1], z], b = [pts[j + 1][0] * s, pts[j + 1][1], z];
+        const cr = ((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])) * dir;
+        if (Math.abs(cr) < 1e-9) continue;
+        if (cr > 0) m.triN(a, b, c, n, n, n, col); else m.triN(a, c, b, n, n, n, col);
+      }
+    };
+    // (in the bottom's colour up to the chine and the topsides' above it, up to the deck or on an open boat the rail)
+    const end = (R, top, dir) => {
+      const z = R[0][2], chine = R[2][1];
+      fan(z, R.slice(0, 3), chine, dir, cols.bottom);
+      fan(z, [[0, chine], ...R.slice(2, top + 1)], R[top][1], dir, cols.side);
+    };
+    const T = rings[0], S = rings[rings.length - 1], open = T[5][3] === 'inner';
+    end(T, open ? 4 : T.length - 1, -1);
+    if (open) fan(T[0][2], T.slice(4), T[4][1], 1, cols.inner);
+    end(S, S.length - 1, 1);
   }
   // The boats, in their own frame: z forwards, +x the driver's left, y = 0 at the waterline. The jet ski's handlebars turn
   // with the steering like the moped's (front, about head).
@@ -551,11 +575,19 @@
       const t = clamp((z - st[i][0]) / (st[i + 1][0] - st[i][0]), 0, 1);
       return { w: lerp(st[i][1], st[i + 1][1], t), top: lerp(st[i][3], st[i + 1][3], t) };
     };
+    // a strip w x h on side s of the hull from za to zb, out from the topsides and down from the rail, turned to follow
+    // them as they narrow and rise (in pieces between the hull's stations, where they bend)
+    const onHull = (w, h, za, zb, s, out, down, col) => {
+      const cut = M.hull.find((st) => st[0] > za + 0.01 && st[0] < zb - 0.01);
+      if (cut) { onHull(w, h, za, cut[0], s, out, down, col); onHull(w, h, cut[0], zb, s, out, down, col); return; }
+      const a = hullAt(za), b = hullAt(zb), dx = s * (b.w - a.w), dy = b.top - a.top, dz = zb - za, l = Math.hypot(dx, dy, dz);
+      mg.add(new THREE.BoxGeometry(w, h, l), col, s * ((a.w + b.w) / 2 + out), (a.top + b.top) / 2 - down, (za + zb) / 2, Math.atan2(-dy, dz), Math.asin(dx / l), 0);
+    };
     // the police's blue and yellow checks, a row of them down each side just under the rail
     const checks = (z0, z1, n, h, below) => {
       for (let i = 0; i < n; i++) {
-        const za = lerp(z0, z1, i / n), zb = lerp(z0, z1, (i + 1) / n), H = hullAt((za + zb) / 2), y = H.top - below - h / 2;
-        for (const s of [1, -1]) mg.box(0.02, h, zb - za, i % 2 ? COL.polYellow : COL.polBlue, s * (H.w + 0.012), y, (za + zb) / 2);
+        const za = lerp(z0, z1, i / n), zb = lerp(z0, z1, (i + 1) / n);
+        for (const s of [1, -1]) onHull(0.02, h, za, zb, s, 0.012, below + h / 2, i % 2 ? COL.polYellow : COL.polBlue);
       }
     };
     if (M.boat === 'jetski') {
@@ -601,7 +633,7 @@
       mg.add(new THREE.TorusGeometry(0.16, 0.02, 6, 18), BLACK, 0, 1.12, 0.08, -0.9, 0, 0);
       mg.box(0.9, 0.5, 0.45, SEAT, 0, 0.47, -0.45);
       mg.box(0.9, 0.5, 0.12, SEAT, 0, 0.95, -0.66);
-      mg.box(1.5, 0.3, 0.9, 0xd9d4c6, 0, 0.37, 1.85);
+      mg.box(1.2, 0.3, 0.9, 0xd9d4c6, 0, 0.37, 1.8);
       mg.box(1.9, 0.32, 0.5, 0xd9d4c6, 0, 0.38, -2.7);
       // the outboard: the cowl high on the transom, the leg down into the water
       mg.box(0.62, 0.78, 0.7, BLACK, 0, 1.05, -3.42);
@@ -613,7 +645,7 @@
     } else if (M.boat === 'patrol') {
       // Polisen's patrol boat: a white deep vee with a dark bottom, the blue and yellow checks down its sides, a wheelhouse
       // with windows all round and POLIS on its sides, the blue light bar, a radar dome and a searchlight on its roof
-      hullLoft(mg, M.hull, { bottom: 0x2e3338, side: 0x2e3338, rail: paint, inner: 0xdadde0, floor: 0x3a3f44, deck: 0x3a3f44 }, 0.3);
+      hullLoft(mg, M.hull, { bottom: 0x2e3338, side: paint, rail: paint, inner: 0xdadde0, floor: 0x3a3f44, deck: 0x3a3f44 }, 0.3);
       checks(-4.2, 3.6, 18, 0.2, 0.08);
       const z0 = -0.95, z1 = 1.5, zt = 1.12, w = 1.05, top = 2.25;
       mg.box(2 * w, 0.92, z1 - z0, paint, 0, 0.76, (z0 + z1) / 2);
@@ -643,7 +675,7 @@
       for (const sx of [0.85, -0.85]) tubeTo(mg, [sx, top + 0.1, -0.7], [sx * 1.05, top + 1.4, -0.85], 0.012, BLACK);
       // the swim platform across the transom, and the rubbing strake round the hull
       mg.box(2.6, 0.08, 0.6, 0x3a3f44, 0, 0.32, -M.L / 2 - 0.25);
-      for (const sx of [1, -1]) for (let z = -4.3; z < 3.9; z += 0.6) { const H = hullAt(z + 0.3); mg.box(0.06, 0.06, 0.62, BLACK, sx * (H.w + 0.03), H.top - 0.02, z + 0.3); }
+      for (const sx of [1, -1]) for (let z = -4.3; z < 3.9; z += 0.6) onHull(0.06, 0.06, z - 0.01, z + 0.61, sx, 0.03, 0.02, BLACK);
       // POLIS on both sides of the wheelhouse
       const db = new Builder(), POL = [[0, 0.5], [1, 0.5], [1, 1], [0, 1]], zf = 1.25, zr = -0.55, y0 = 0.58, y1 = 1.02, X = w + 0.006;
       db.quad([X, y0, zf], [X, y0, zr], [X, y1, zr], [X, y1, zf], 0xffffff, POL, [1, 0, 0]);
@@ -693,7 +725,21 @@
       // chrome-framed screen, two rows of aquamarine leather seats and the sun pad over the engines
       const wood = paint, seam = 0xe9dfc6, leather = 0x7fb8b0;
       hullLoft(mg, M.hull, { bottom: 0xf0f0ec, side: wood, rail: CHROME, deck: wood });
-      for (let x = -1.0; x <= 1.01; x += 0.25) mg.box(0.015, 0.008, 6.4, seam, x, 0.84 - Math.abs(x) * 0.02, 0.2);
+      // the seams lie on the deck (as hullLoft cambers it), from the sun pad to the bow, round the cockpit and inside the rail
+      const deckY = (x, z) => {
+        const H = hullAt(z), a = H.w * 0.55, r = H.w - Math.min(0.05, H.w * 0.2);
+        return x < a ? lerp(H.top + 0.035, H.top + 0.025, x / a) : lerp(H.top + 0.025, H.top + 0.012, (x - a) / (r - a));
+      };
+      // (in pieces, cut also at the hull's stations where the deck bends, so that no piece sinks into it)
+      const cuts = M.hull.map((st) => st[0]).filter((z) => z > -3.0 && z < 3.9);
+      for (let z = -3.0; z < 3.9; z += 0.45) cuts.push(z);
+      cuts.push(3.9); cuts.sort((p, q) => p - q);
+      for (let x = -1.0; x <= 1.01; x += 0.25) for (let i = 0; i < cuts.length - 1; i++) {
+        const za = cuts[i], zb = cuts[i + 1], ax = Math.abs(x);
+        if (ax > Math.min(hullAt(za).w, hullAt(zb).w) - 0.1 || (za < 0.85 && zb > -1.8 && ax < 1.1)) continue;
+        const ya = deckY(ax, za) + 0.005, yb = deckY(ax, zb) + 0.005;
+        mg.add(new THREE.BoxGeometry(0.015, 0.008, Math.hypot(yb - ya, zb - za)), seam, x, (ya + yb) / 2, (za + zb) / 2, -Math.atan2(yb - ya, zb - za), 0, 0);
+      }
       // the cockpit: a well with two benches, the dashboard, the wheel
       mg.box(2.1, 0.12, 2.6, 0x5a2a12, 0, 0.66, -0.5);
       for (const z of [0.15, -1.25]) { mg.box(2.0, 0.28, 0.7, leather, 0, 0.88, z); mg.box(2.0, 0.42, 0.14, leather, 0, 1.12, z - 0.35); }
