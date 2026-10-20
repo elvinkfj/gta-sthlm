@@ -539,22 +539,27 @@
       }
     }
     // the ends, so that neither can be seen through: the transom across the stern (on an open boat also its inside,
-    // facing into the cockpit) and the stem across the bow, each a fan from the middle of the ring's points j0..j1,
-    // facing aft (dir -1) or forwards (dir 1)
-    const fan = (R, j0, j1, apexY, dir, col) => {
-      const z = R[0][2], c = [0, apexY, z], n = [0, 0, dir];
-      for (let j = j0; j < j1; j++) for (const s of [1, -1]) {
-        const a = [R[j][0] * s, R[j][1], z], b = [R[j + 1][0] * s, R[j + 1][1], z];
+    // facing into the cockpit) and the stem across the bow, each fans of triangles at z from a point on the middle line
+    // to the outline pts, facing aft (dir -1) or forwards (dir 1)
+    const fan = (z, pts, apexY, dir, col) => {
+      const c = [0, apexY, z], n = [0, 0, dir];
+      for (let j = 0; j < pts.length - 1; j++) for (const s of [1, -1]) {
+        const a = [pts[j][0] * s, pts[j][1], z], b = [pts[j + 1][0] * s, pts[j + 1][1], z];
         const cr = ((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])) * dir;
         if (Math.abs(cr) < 1e-9) continue;
         if (cr > 0) m.triN(a, b, c, n, n, n, col); else m.triN(a, c, b, n, n, n, col);
       }
     };
-    // (the transom goes up to the deck, or on an open boat up to the rail)
-    const T = rings[0], S = rings[rings.length - 1], open = T[5][3] === 'inner', tj = open ? 4 : T.length - 1;
-    fan(T, 0, tj, T[tj][1], -1, cols.side);
-    if (open) fan(T, 4, 6, T[4][1], 1, cols.inner);
-    fan(S, 0, S.length - 1, S[S.length - 1][1], 1, cols.side);
+    // (in the bottom's colour up to the chine and the topsides' above it, up to the deck or on an open boat the rail)
+    const end = (R, top, dir) => {
+      const z = R[0][2], chine = R[2][1];
+      fan(z, R.slice(0, 3), chine, dir, cols.bottom);
+      fan(z, [[0, chine], ...R.slice(2, top + 1)], R[top][1], dir, cols.side);
+    };
+    const T = rings[0], S = rings[rings.length - 1], open = T[5][3] === 'inner';
+    end(T, open ? 4 : T.length - 1, -1);
+    if (open) fan(T[0][2], T.slice(4), T[4][1], 1, cols.inner);
+    end(S, S.length - 1, 1);
   }
   // The boats, in their own frame: z forwards, +x the driver's left, y = 0 at the waterline. The jet ski's handlebars turn
   // with the steering like the moped's (front, about head).
@@ -570,16 +575,19 @@
       const t = clamp((z - st[i][0]) / (st[i + 1][0] - st[i][0]), 0, 1);
       return { w: lerp(st[i][1], st[i + 1][1], t), top: lerp(st[i][3], st[i + 1][3], t) };
     };
-    // a strip w x h on side s of the hull from za to zb, out from the topsides, turned to follow them as they narrow
-    const onHull = (w, h, za, zb, s, out, y, col) => {
-      const a = hullAt(za).w, b = hullAt(zb).w;
-      mg.add(new THREE.BoxGeometry(w, h, Math.hypot(b - a, zb - za)), col, s * ((a + b) / 2 + out), y, (za + zb) / 2, 0, s * Math.atan2(b - a, zb - za), 0);
+    // a strip w x h on side s of the hull from za to zb, out from the topsides and down from the rail, turned to follow
+    // them as they narrow and rise (in pieces between the hull's stations, where they bend)
+    const onHull = (w, h, za, zb, s, out, down, col) => {
+      const cut = M.hull.find((st) => st[0] > za + 0.01 && st[0] < zb - 0.01);
+      if (cut) { onHull(w, h, za, cut[0], s, out, down, col); onHull(w, h, cut[0], zb, s, out, down, col); return; }
+      const a = hullAt(za), b = hullAt(zb), dx = s * (b.w - a.w), dy = b.top - a.top, dz = zb - za, l = Math.hypot(dx, dy, dz);
+      mg.add(new THREE.BoxGeometry(w, h, l), col, s * ((a.w + b.w) / 2 + out), (a.top + b.top) / 2 - down, (za + zb) / 2, Math.atan2(-dy, dz), Math.asin(dx / l), 0);
     };
     // the police's blue and yellow checks, a row of them down each side just under the rail
     const checks = (z0, z1, n, h, below) => {
       for (let i = 0; i < n; i++) {
-        const za = lerp(z0, z1, i / n), zb = lerp(z0, z1, (i + 1) / n), H = hullAt((za + zb) / 2), y = H.top - below - h / 2;
-        for (const s of [1, -1]) onHull(0.02, h, za, zb, s, 0.012, y, i % 2 ? COL.polYellow : COL.polBlue);
+        const za = lerp(z0, z1, i / n), zb = lerp(z0, z1, (i + 1) / n);
+        for (const s of [1, -1]) onHull(0.02, h, za, zb, s, 0.012, below + h / 2, i % 2 ? COL.polYellow : COL.polBlue);
       }
     };
     if (M.boat === 'jetski') {
@@ -667,7 +675,7 @@
       for (const sx of [0.85, -0.85]) tubeTo(mg, [sx, top + 0.1, -0.7], [sx * 1.05, top + 1.4, -0.85], 0.012, BLACK);
       // the swim platform across the transom, and the rubbing strake round the hull
       mg.box(2.6, 0.08, 0.6, 0x3a3f44, 0, 0.32, -M.L / 2 - 0.25);
-      for (const sx of [1, -1]) for (let z = -4.3; z < 3.9; z += 0.6) onHull(0.06, 0.06, z - 0.01, z + 0.61, sx, 0.03, hullAt(z + 0.3).top - 0.02, BLACK);
+      for (const sx of [1, -1]) for (let z = -4.3; z < 3.9; z += 0.6) onHull(0.06, 0.06, z - 0.01, z + 0.61, sx, 0.03, 0.02, BLACK);
       // POLIS on both sides of the wheelhouse
       const db = new Builder(), POL = [[0, 0.5], [1, 0.5], [1, 1], [0, 1]], zf = 1.25, zr = -0.55, y0 = 0.58, y1 = 1.02, X = w + 0.006;
       db.quad([X, y0, zf], [X, y0, zr], [X, y1, zr], [X, y1, zf], 0xffffff, POL, [1, 0, 0]);
@@ -722,8 +730,12 @@
         const H = hullAt(z), a = H.w * 0.55, r = H.w - Math.min(0.05, H.w * 0.2);
         return x < a ? lerp(H.top + 0.035, H.top + 0.025, x / a) : lerp(H.top + 0.025, H.top + 0.012, (x - a) / (r - a));
       };
-      for (let x = -1.0; x <= 1.01; x += 0.25) for (let za = -3.0; za < 3.9; za += 0.45) {
-        const zb = Math.min(za + 0.45, 3.9), ax = Math.abs(x);
+      // (in pieces, cut also at the hull's stations where the deck bends, so that no piece sinks into it)
+      const cuts = M.hull.map((st) => st[0]).filter((z) => z > -3.0 && z < 3.9);
+      for (let z = -3.0; z < 3.9; z += 0.45) cuts.push(z);
+      cuts.push(3.9); cuts.sort((p, q) => p - q);
+      for (let x = -1.0; x <= 1.01; x += 0.25) for (let i = 0; i < cuts.length - 1; i++) {
+        const za = cuts[i], zb = cuts[i + 1], ax = Math.abs(x);
         if (ax > Math.min(hullAt(za).w, hullAt(zb).w) - 0.1 || (za < 0.85 && zb > -1.8 && ax < 1.1)) continue;
         const ya = deckY(ax, za) + 0.005, yb = deckY(ax, zb) + 0.005;
         mg.add(new THREE.BoxGeometry(0.015, 0.008, Math.hypot(yb - ya, zb - za)), seam, x, (ya + yb) / 2, (za + zb) / 2, -Math.atan2(yb - ya, zb - za), 0, 0);
