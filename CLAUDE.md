@@ -11,6 +11,7 @@ The game used to be one big file and was split into the files below following **
 - New code goes in the file it belongs to (a new car in `src/vehicles/models.js`, a new sound in `src/sound.js`, and so on). Update the map below when a file gets a new job.
 - A file that grows over about 1,500 lines is split, at a section header, into two files that load one after the other. Add the new `<script>` tag in `index.html` right after the old one, and update the map.
 - Leftover clean-up ideas are under "Saker att fixa senare" at the end of `PLAN.md`.
+- The big update Elvin wants next is planned in **`UPPDATERING.md`** (in Swedish). Work through it in order, one item per PR, and tick each item off when it is done.
 
 ## Language
 
