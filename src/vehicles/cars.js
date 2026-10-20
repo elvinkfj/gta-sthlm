@@ -498,26 +498,33 @@
     };
   }
   // A hull lofted through stations [z, half beam, keel y, gunwale y] (y = 0 is the waterline): a vee from the keel out to
-  // the chine, the topsides up to the gunwale, then either a closed deck with some camber or an open cockpit with a
-  // floor at floorY. cols: { bottom, side, rail, deck, inner, floor }
+  // the chine, the topsides up to the gunwale, a rail capping it, then either a closed deck with some camber or an open
+  // cockpit with a floor at floorY. cols: { bottom (the vee and the chine), side (the topsides), rail, deck, inner (the
+  // cockpit's walls), floor }
   function hullLoft(m, st, cols, floorY) {
     const ring = ([z, w, k, t]) => {
-      const pts = [[0, k, 'bottom'], [w * 0.9, lerp(k, t, 0.3), 'bottom'], [w, lerp(k, t, 0.42), 'side'], [w, t, 'rail']];
-      if (floorY !== undefined && w > 0.25) pts.push([w - 0.07, t + 0.02, 'inner'], [w - 0.1, floorY, 'floor'], [0, floorY, 'floor']);
-      else pts.push([w * 0.55, t + 0.025, 'deck'], [w * 0.0001, t + 0.035, 'deck'], [0, t + 0.035, 'deck']);
+      const pts = [[0, k, 'bottom'], [w * 0.9, lerp(k, t, 0.3), 'bottom'], [w, lerp(k, t, 0.42), 'bottom'], [w, t, 'side']];
+      if (floorY !== undefined && w > 0.25) pts.push([w - 0.07, t + 0.02, 'rail'], [w - 0.1, floorY, 'inner'], [0, floorY, 'floor']);
+      else pts.push([w - Math.min(0.05, w * 0.2), t + 0.012, 'rail'], [w * 0.55, t + 0.025, 'deck'], [0, t + 0.035, 'deck']);
       return pts.map(([x, y, tag]) => [x, y, z, tag]);
     };
-    // which way each strip faces, named by the point it ends at: the vee down, the chine and the topsides (up to the
-    // rail) out, the cap on the gunwale (up to inner), the cockpit's walls and floor and the deck up
-    const hint = { bottom: [0, -1, 0], side: [1, 0, 0], rail: [1, 0, 0], inner: [0, 1, 0], floor: [0, 1, 0], deck: [0, 1, 0] };
+    // each strip has the colour and faces the way of the point it ends at: the vee and the chine down, the topsides out,
+    // the rail, the floor and the deck up, the cockpit's walls in
+    const hint = { bottom: [0, -1, 0], side: [1, 0, 0], rail: [0, 1, 0], inner: [-1, 0, 0], floor: [0, 1, 0], deck: [0, 1, 0] };
+    // (each of its two triangles is wound to face along the strip's normal, also where the strip is twisted)
     const quad = (a, b, c, d, col, h) => {
       const ux = c[0] - a[0], uy = c[1] - a[1], uz = c[2] - a[2], vx = d[0] - b[0], vy = d[1] - b[1], vz = d[2] - b[2];
       let n = [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx];
       const l = Math.hypot(n[0], n[1], n[2]);
       if (l < 1e-9) return;
       n = n.map((v) => v / l);
-      if (n[0] * h[0] + n[1] * h[1] + n[2] * h[2] < 0) { n = n.map((v) => -v); m.triN(a, c, b, n, n, n, col); m.triN(a, d, c, n, n, n, col); }
-      else { m.triN(a, b, c, n, n, n, col); m.triN(a, c, d, n, n, n, col); }
+      if (n[0] * h[0] + n[1] * h[1] + n[2] * h[2] < 0) n = n.map((v) => -v);
+      const tri = (p, q, r) => {
+        const ex = q[0] - p[0], ey = q[1] - p[1], ez = q[2] - p[2], fx = r[0] - p[0], fy = r[1] - p[1], fz = r[2] - p[2];
+        if ((ey * fz - ez * fy) * n[0] + (ez * fx - ex * fz) * n[1] + (ex * fy - ey * fx) * n[2] < 0) m.triN(p, r, q, n, n, n, col);
+        else m.triN(p, q, r, n, n, n, col);
+      };
+      tri(a, b, c); tri(a, c, d);
     };
     const rings = st.map(ring);
     for (let i = 0; i < rings.length - 1; i++) {
@@ -616,7 +623,7 @@
     } else if (M.boat === 'patrol') {
       // Polisen's patrol boat: a white deep vee with a dark bottom, the blue and yellow checks down its sides, a wheelhouse
       // with windows all round and POLIS on its sides, the blue light bar, a radar dome and a searchlight on its roof
-      hullLoft(mg, M.hull, { bottom: 0x2e3338, side: 0x2e3338, rail: paint, inner: 0xdadde0, floor: 0x3a3f44, deck: 0x3a3f44 }, 0.3);
+      hullLoft(mg, M.hull, { bottom: 0x2e3338, side: paint, rail: paint, inner: 0xdadde0, floor: 0x3a3f44, deck: 0x3a3f44 }, 0.3);
       checks(-4.2, 3.6, 18, 0.2, 0.08);
       const z0 = -0.95, z1 = 1.5, zt = 1.12, w = 1.05, top = 2.25;
       mg.box(2 * w, 0.92, z1 - z0, paint, 0, 0.76, (z0 + z1) / 2);
