@@ -199,6 +199,13 @@ body.job #wanted, body.party #wanted { top: calc(112px + env(safe-area-inset-top
 .dala-tag { padding: 5px 11px 5px 7px; }
 .dala-tag b { color: var(--sign-yellow); font-variant-numeric: tabular-nums; }
 .dala { width: 18px; height: 18px; display: block; }
+/* the water balloons you carry */
+.wb-tag { padding: 5px 11px 5px 7px; }
+.wb-tag b { color: #8fd8ff; font-variant-numeric: tabular-nums; }
+.wb { width: 18px; height: 18px; display: block; }
+/* water on the screen when a friend's water balloon hits you: a bluish edge and drops that run down */
+#wetScreen { position: fixed; inset: 0; pointer-events: none; overflow: hidden; background: radial-gradient(ellipse at center, rgba(120, 180, 230, 0) 45%, rgba(90, 150, 210, 0.35) 100%); }
+#wetScreen i { position: absolute; border-radius: 50% 50% 46% 46% / 58% 58% 42% 42%; background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.75), rgba(190, 225, 255, 0.22) 45%, rgba(110, 160, 210, 0.32) 100%); box-shadow: inset -2px -3px 6px rgba(40, 80, 120, 0.35), 0 2px 4px rgba(0, 0, 0, 0.12); }
 /* the indicator tell-tales over the dash: green arrows that blink with the lamps (tap them on a touch screen) */
 .blinkers { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); display: flex; gap: 2px; padding: 3px 6px; border-radius: 999px; background: var(--glass); }
 .blink { pointer-events: auto; width: 28px; height: 20px; padding: 0; border: 0; background: none; color: rgba(255, 255, 255, 0.24); cursor: pointer; display: grid; place-items: center; touch-action: manipulation; }
@@ -321,6 +328,8 @@ h1 { margin: 0; font: 900 clamp(2.2rem, 9vw, 3.1rem)/0.95 var(--font-sign); lett
 #btnUse { right: calc(112px + env(safe-area-inset-right, 0px)); bottom: calc(70px + env(safe-area-inset-bottom, 0px)); background: var(--sign-yellow); }
 #btnUse.off { opacity: 0.45; }
 #btnCars { right: calc(30px + env(safe-area-inset-right, 0px)); bottom: calc(122px + env(safe-area-inset-bottom, 0px)); width: 62px; height: 62px; background: var(--snow); font-size: 0.8rem; }
+#btnThrow { right: calc(196px + env(safe-area-inset-right, 0px)); bottom: calc(166px + env(safe-area-inset-bottom, 0px)); width: 58px; height: 58px; background: #8fd8ff; font-size: 0.78rem; }
+body.driving #btnThrow { right: calc(240px + env(safe-area-inset-right, 0px)); }
 .gearbtn { width: 56px; height: 56px; background: var(--snow); font-size: 1.05rem; }
 #btnUp { right: calc(112px + env(safe-area-inset-right, 0px)); bottom: calc(160px + env(safe-area-inset-bottom, 0px)); }
 #btnDown { right: calc(174px + env(safe-area-inset-right, 0px)); bottom: calc(160px + env(safe-area-inset-bottom, 0px)); }

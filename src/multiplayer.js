@@ -650,6 +650,8 @@
       p.asleep = hide; p.model.group.visible = !hide;
       p.x = st.x; p.y = st.y; p.z = st.z; p.rot = st.rot; p.vx = st.vx; p.vz = st.vz;
       p.grounded = !!(st.f & 1); p.cuffed = !!(st.f & 4);
+      // soaked by a water balloon: they stay wet while they say so (SPLASH dries them off)
+      p.wetT = st.f & 16 ? 1 : Math.min(p.wetT || 0, 0.2);
       if (st.stars !== P.stars) { P.stars = st.stars; drawTag(P); }
     }
     // what you send 15 times a second (see take)
@@ -662,7 +664,7 @@
       const car = c ? [c.netId, c.M.id, c.color, r2(c.x), r2(c.z), r3(c.h), r2(c.vx), r2(c.vz), r3(c.steer), c.gear | 0, r2(c.thr || 0),
         (c.braking ? 1 : 0) | (c.reversing ? 2 : 0) | (c.siren ? 4 : 0) | (c.dead ? 8 : 0) | (c === driving ? 16 : 0), c.blink | 0, Math.round(c.health), r3(c.aim || 0), r1(c.slip || 0)] : 0;
       return [Math.round(performance.now()), r2(player.x), r2(player.y), r2(player.z), r3(player.rot), r2(player.vx), r2(player.vz),
-        (player.grounded ? 1 : 0) | (hidden ? 2 : 0) | (player.cuffed ? 4 : 0) | (CHUTE.open ? 8 : 0), stars(), S.ride ? S.ride.owner.id : 0, car, FLY.on ? FLY.net() : 0];
+        (player.grounded ? 1 : 0) | (hidden ? 2 : 0) | (player.cuffed ? 4 : 0) | (CHUTE.open ? 8 : 0) | (SPLASH.wet ? 16 : 0), stars(), S.ride ? S.ride.owner.id : 0, car, FLY.on ? FLY.net() : 0];
     }
     function send() {
       if (!inRoom()) return;
@@ -670,7 +672,7 @@
       if (S.host) broadcast({ t: 's', id: S.myId, d });
       else if (S.hostConn && S.hostConn.open) try { S.hostConn.send({ t: 's', d }); } catch { /* its close event deals with it */ }
     }
-    // the horn, the chat, a dent, the tank's gun and new clothes go to everyone at once
+    // the horn, the chat, a dent, the tank's gun, new clothes and water balloons go to everyone at once
     function event(k, extra) {
       if (!inRoom()) return;
       const m = Object.assign({ t: 'e', k }, extra);
@@ -685,6 +687,8 @@
       if (k === 'dent') return typeof m.c === 'string' && Array.isArray(m.a) && m.a.length === 8 ? Object.assign(e, { c: m.c.slice(0, 12), a: m.a.map((v) => num(v)) }) : null;
       if (k === 'fire') return Object.assign(e, { a: num(m.a) });
       if (k === 'look') return Object.assign(e, { look: cleanLook(m.look) });
+      if (k === 'wb') return Array.isArray(m.p) && m.p.length === 3 && Array.isArray(m.v) && m.v.length === 3 ? Object.assign(e, { p: m.p.map((v) => num(v)), v: m.v.map((v) => num(v)), c: num(m.c) }) : null;
+      if (k === 'wet') return typeof m.by === 'string' ? Object.assign(e, { by: m.by.slice(0, 64) }) : null;
       if (k === 'game') { const g = gameHooks ? gameHooks.clean(m.g) : null; return g ? Object.assign(e, { g }) : null; }
       return null;
     }
@@ -712,7 +716,9 @@
         dress(P.person.model, P.ident);
         if (atWheel) setOccupant(P.car, P.ident);
         drawTag(P); renderList();
-      } else if (m.k === 'game') {
+      } else if (m.k === 'wb') SPLASH.heard(P, m);
+      else if (m.k === 'wet') SPLASH.wetBy(P, m.by);
+      else if (m.k === 'game') {
         const g = gameHooks ? gameHooks.clean(m.g) : null;
         if (g) gameHooks.heard(P.id, g);
       }

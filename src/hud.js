@@ -30,10 +30,10 @@
     return String(c.gear + 1);
   }
   function updateHUD(dt) {
-    // at a kiosk or a balloon seller E buys, otherwise it is for the car you stand by
+    // at a kiosk, a balloon seller or a bucket of water balloons E buys, otherwise it is for the car you stand by
     // riding along with a friend, or by a friend's car you can get in
     const mpP = started ? MP.prompt() : null, flyP = started ? FLY.prompt() || CHUTE.prompt() || METRO.prompt() || RIDES.prompt() : null;
-    const liftP = started && !driving && !FLY.on ? LIFT.prompt() : null, shop = !liftP && started && !driving && !FLY.on ? VENDORS.prompt() : null;
+    const liftP = started && !driving && !FLY.on ? LIFT.prompt() : null, shop = !liftP && started && !driving && !FLY.on ? SPLASH.prompt() || VENDORS.prompt() : null;
     const prompt = mpP || flyP || liftP || shop || (started && !driving && nearCar ? (nearCar.bot ? 'Ta ' + nearCar.M.def : 'Kliv in i ' + nearCar.M.def) : null);
     if (prompt !== lastPrompt) {
       lastPrompt = prompt;
@@ -68,10 +68,10 @@
       el.btnUp.hidden = el.btnDown.hidden = !driving;
     }
     const ph = policeStop && policeStop.phase;
-    const vendor = !driving && !FLY.on && VENDORS.near;
-    const use = ph === 'talk' ? 'Skriv under' : ph === 'transport' || ph === 'park' ? 'Hoppa fram' : ph === 'jail' ? 'Sov' : mpP ? (MP.ride ? 'Kliv ur' : 'Åk med') : flyP || FLY.on ? (flyP === 'Flyg helikoptern' ? 'Flyg' : !flyP || flyP === 'Kliv ur' ? 'Kliv ur' : flyP === 'Gå ur kön' ? 'Kön' : flyP.startsWith('Åk tunnelbana') ? 'T-bana' : flyP.startsWith('Åk upp') || flyP.startsWith('Hoppa') ? 'Hoppa' : 'Åk') : driving ? 'Kliv ur' : liftP ? 'Hissen' : vendor ? (vendor.seller ? 'Köp glass' : 'Köp ballong') : nearCar && nearCar.bot ? 'Ta bilen' : 'Kliv in';
+    const bucket = !driving && !FLY.on && SPLASH.near, vendor = !bucket && !driving && !FLY.on && VENDORS.near;
+    const use = ph === 'talk' ? 'Skriv under' : ph === 'transport' || ph === 'park' ? 'Hoppa fram' : ph === 'jail' ? 'Sov' : mpP ? (MP.ride ? 'Kliv ur' : 'Åk med') : flyP || FLY.on ? (flyP === 'Flyg helikoptern' ? 'Flyg' : !flyP || flyP === 'Kliv ur' ? 'Kliv ur' : flyP === 'Gå ur kön' ? 'Kön' : flyP.startsWith('Åk tunnelbana') ? 'T-bana' : flyP.startsWith('Åk upp') || flyP.startsWith('Hoppa') ? 'Hoppa' : 'Åk') : driving ? 'Kliv ur' : liftP ? 'Hissen' : bucket ? 'Köp 5 st' : vendor ? (vendor.seller ? 'Köp glass' : 'Köp ballong') : nearCar && nearCar.bot ? 'Ta bilen' : 'Kliv in';
     if (use !== lastUse) { el.btnUse.textContent = use; lastUse = use; }
-    el.btnUse.classList.toggle('off', !mpP && !flyP && !driving && !nearCar && !vendor && !liftP && !['talk', 'transport', 'park', 'jail'].includes(ph));
+    el.btnUse.classList.toggle('off', !mpP && !flyP && !driving && !nearCar && !vendor && !bucket && !liftP && !['talk', 'transport', 'park', 'jail'].includes(ph));
     if (driving) {
       const c = driving, vf = c.vx * Math.sin(c.h) + c.vz * Math.cos(c.h);
       const kmh = Math.round(Math.abs(vf) * 3.6), rf = clamp(c.rpm / (c.M.red * 1.04), 0, 1);

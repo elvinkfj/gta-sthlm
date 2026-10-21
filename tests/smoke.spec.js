@@ -333,3 +333,63 @@ test('gröna lund: åk karusellen, med kameran i sadeln', async () => {
   expect(r.bad).toEqual([]);
   expect(errors).toEqual([]);
 });
+
+test('vattenballonger: köp i hinken, blöt en gubbe och en polis, och bli träffad av en vän', async () => {
+  const r = await page.evaluate(() => {
+    const t = gubbeTest, s = {};
+    t.hold(true);
+    if (t.state().driving) t.press('KeyE');
+    if (t.wanted) t.endChase(false);
+    t.jobs.reward(100);
+    // at the bucket beside the balloon seller in Kungsträdgården
+    const b = SPLASH.debug.buckets[1], dx = b.x - b.s.p.x, dz = b.z - b.s.p.z, d = Math.hypot(dx, dz);
+    t.teleport(b.x + (dx / d) * 0.9, b.z + (dz / d) * 0.9); t.run(0.3, 1 / 60, false);
+    s.prompt = t.state().prompt;
+    const cash = t.jobs.earned;
+    t.press('KeyE');
+    s.paid = cash - t.jobs.earned; s.count = SPLASH.count;
+    // one throw over the grass, to see where it lands
+    const throwFrom = () => { t.teleport(40, -470); t.look(0.3, 0.3); t.run(0.6, 1 / 60, false); t.press('KeyF'); };
+    const fly = (who) => { for (let i = 0; i < 400 && SPLASH.debug.flying.length; i++) { if (who) { who.x = s.land.x; who.z = s.land.z; } t.run(1 / 60, 1 / 60, false); } };
+    throwFrom(); fly(null);
+    s.land = SPLASH.debug.lastSplash; s.far = Math.hypot(s.land.x - player.x, s.land.z - player.z);
+    // someone standing there gets soaked and runs off
+    const walker = makePerson(makeIdentity(), s.land.x, s.land.z, { state: 'wander', wx: 0, wz: 0, t: 30, dodgeT: 0 });
+    walker.keep = true;
+    throwFrom(); fly(walker);
+    s.walkerWet = walker.wetT > 0; s.walkerRuns = walker.ai.state === 'flee';
+    removePerson(walker);
+    // and a police officer there starts a chase
+    const cop = makePerson(makeIdentity({ police: true }), s.land.x, s.land.z, { state: 'cop', role: 'test', dodgeT: 0 });
+    cop.keep = true;
+    throwFrom(); fly(cop);
+    s.copWet = cop.wetT > 0; s.chase = t.wanted ? [...t.wanted.kinds] : [];
+    removePerson(cop);
+    t.endChase(false);
+    // a friend's balloon, straight at you
+    const P = t.mp.debug.addPlayer('test-friend', 'Kalle', {}, VERSION.nr), v = 12, tt = 6 / v;
+    SPLASH.heard(P, { p: [player.x + 6, 1.6, player.z], v: [-v, 0.5 * 9.81 * tt - 0.3 / tt, 0], c: 2 });
+    fly(null);
+    s.meWet = SPLASH.wet; s.screen = !document.getElementById('wetScreen').hidden; s.toast = t.state().toast;
+    t.mp.debug.S.players.delete('test-friend');
+    s.left = SPLASH.count;
+    s.bad = t.state().bad;
+    t.hold(false);
+    return s;
+  });
+  expect(r.prompt).toBe('Köp 5 vattenballonger · 25 kr');
+  expect(r.paid).toBe(25);
+  expect(r.count).toBe(5);
+  expect(r.land.kind).toBe('ground');
+  expect(r.far).toBeGreaterThan(10);
+  expect(r.walkerWet).toBe(true);
+  expect(r.walkerRuns).toBe(true);
+  expect(r.copWet).toBe(true);
+  expect(r.chase).toContain('ballong');
+  expect(r.meWet).toBe(true);
+  expect(r.screen).toBe(true);
+  expect(r.toast).toContain('Kalle träffade dig');
+  expect(r.left).toBe(2);
+  expect(r.bad).toEqual([]);
+  expect(errors).toEqual([]);
+});
