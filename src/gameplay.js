@@ -27,7 +27,7 @@
   }
 
   function findNearCar() {
-    if (driving || MP.ride || FLY.on || !started || (policeStop && policeStop.locked)) return null;
+    if (driving || MP.ride || FLY.on || CHUTE.on || !started || (policeStop && policeStop.locked)) return null;
     let best = null, bd = Infinity;
     for (const c of cars) {
       // (a friend's car you can only ride along in, and the sjöpolis's and the navy's boats can't be taken)
@@ -364,6 +364,7 @@
     closePicker();
     if (policeStop && policeStop.locked) return;
     if (FLY.on) { toast('Landa och kliv ur helikoptern först.'); return; }
+    if (CHUTE.on) { toast('Vänta tills du har landat.'); return; }
     let spot = null;
     // riding in a friend's boat out on the water: a car has to wait for a quay, a boat is put beside theirs
     if (MP.ride) {
@@ -464,6 +465,7 @@
     else if (policeStop && policeStop.riding) { player.x = policeStop.car.x; player.z = policeStop.car.z; player.vx = player.vz = 0; }
     else if (MP.ride) { const c = MP.ride; player.x = c.x; player.z = c.z; player.y = 0; player.vx = c.vx; player.vz = c.vz; player.vy = 0; player.rot = c.h; }
     else if (FLY.on) { const H = FLY.heli; player.x = H.x; player.z = H.z; player.y = H.y; player.vx = H.vx; player.vz = H.vz; player.vy = 0; player.rot = H.h; }
+    else if (CHUTE.on) CHUTE.step(dt);
     else personMove(player, dt, pIntent);
     for (const p of persons) {
       // someone who climbed out of a wreck during this step gets their first plan next frame
@@ -582,10 +584,10 @@
     let tx, ty, tz, want;
     if (fly) { tx = fly.x; ty = fly.y + 2.2; tz = fly.z; want = 17 + Math.hypot(fly.vx, fly.vz) * 0.08; }
     else if (car) { tx = car.x; ty = car.M.boat ? WATER_Y + (car.M.boat === 'jetski' ? 1.6 : 2.0) : car.M.bus ? 3.2 : car.M.moped ? 1.45 : 1.7; tz = car.z; want = (car.M.bus ? 15 : car.M.moped ? 5.2 : car.M.boat === 'jetski' ? 6.5 : car.M.boat ? 11 : 9.5) + Math.abs(vf) * 0.05; }
-    else { tx = player.x; ty = player.y + 1.55; tz = player.z; want = STATION.inside(player.x, player.z) ? 4.2 : 6; }
+    else { tx = player.x; ty = player.y + 1.55; tz = player.z; want = CHUTE.on ? (CHUTE.open ? 13 : 9) : STATION.inside(player.x, player.z) ? 4.2 : 6; }
     const kh = 1 - Math.exp(-(car || fly ? 10 : 14) * dt);
     // indoors the camera comes in close and stays between the floor and the ceiling
-    const span = car || fly ? null : indoorSpan(player.x, player.z, player.y);
+    const span = car || fly || CHUTE.on ? null : indoorSpan(player.x, player.z, player.y);
     if (span) want = 3.2;
     camTarget.x += (tx - camTarget.x) * kh;
     camTarget.z += (tz - camTarget.z) * kh;
@@ -594,6 +596,7 @@
     if (!started) camYaw += dt * 0.1;
     else if (car && performance.now() - lastLook > 1500 && Math.abs(vf) > 1) camYaw = lerpAngle(camYaw, car.h, 1 - Math.exp(-2.5 * dt));
     else if (fly && performance.now() - lastLook > 1500) camYaw = lerpAngle(camYaw, fly.h, 1 - Math.exp(-2 * dt));
+    else if (CHUTE.open && performance.now() - lastLook > 1500) camYaw = lerpAngle(camYaw, player.rot, 1 - Math.exp(-1.5 * dt));
     const cp = Math.cos(camPitch), sp = Math.sin(camPitch);
     const t = camClip(camTarget.x, camTarget.y, camTarget.z, camTarget.x - Math.sin(camYaw) * cp * camDist, camTarget.z - Math.cos(camYaw) * cp * camDist);
     clipT = t < clipT ? t : Math.min(t, clipT + dt * 1.5);
@@ -604,7 +607,7 @@
     if (!car && !fly && (STATION.inside(player.x, player.z) || STATION.inside(cx, cz))) cy = Math.min(cy, STATION.GH - 0.3);
     if (span) cy = clamp(cy, span.floor + 0.4, span.ceil - 0.15);
     // so close that the camera would be inside your head: hide the body
-    if (!car && !fly) player.model.group.visible = dist > 1.15;
+    if (!car && !fly && !CHUTE.on) player.model.group.visible = dist > 1.15;
     if (shake > 0.001) {
       cx += (Math.random() - 0.5) * shake; cy += (Math.random() - 0.5) * shake; cz += (Math.random() - 0.5) * shake;
       shake *= Math.exp(-7 * dt);

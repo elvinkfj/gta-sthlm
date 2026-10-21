@@ -21,6 +21,7 @@
       STATION.update(dt, player.x, player.z);
       nearCar = findNearCar();
       animate(dt);
+      CHUTE.update(dt, inp);
       VENDORS.update(dt);
     }
     PARTY.update();
@@ -125,7 +126,7 @@
     state() {
       const bad = [];
       for (const c of cars) { if (!isFinite(c.x + c.z + c.h + c.vx + c.vz)) bad.push('nan-car'); else if (!c.remote && !(c.M.boat ? boatFits(c.M, c.x, c.z, c.h) : fitsM(c.M, c.x, c.z, c.h))) bad.push('car-off ' + c.M.id + ' ' + c.x.toFixed(1) + ',' + c.z.toFixed(1)); }
-      for (const p of persons) { if (!isFinite(p.x + p.z + p.y)) bad.push('nan-person'); else if (!p.remote && !walkable(p.x, p.z) && !(p === player && (driving || MP.ride) && (driving || MP.ride).M.boat) && !(p === player && policeStop && policeStop.phase === 'water') && !(p === player && FLY.on)) bad.push('person-off ' + p.x.toFixed(1) + ',' + p.z.toFixed(1)); }
+      for (const p of persons) { if (!isFinite(p.x + p.z + p.y)) bad.push('nan-person'); else if (!p.remote && !walkable(p.x, p.z) && !(p === player && (driving || MP.ride) && (driving || MP.ride).M.boat) && !(p === player && policeStop && policeStop.phase === 'water') && !(p === player && (FLY.on || CHUTE.on))) bad.push('person-off ' + p.x.toFixed(1) + ',' + p.z.toFixed(1)); }
       const bots = cars.filter((c) => c.bot);
       return {
         player: { x: +player.x.toFixed(2), y: +player.y.toFixed(2), z: +player.z.toFixed(2) },

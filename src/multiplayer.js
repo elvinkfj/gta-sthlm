@@ -499,6 +499,7 @@
       removePerson(P.person);
       if (P.mesh && P.mesh.parent) P.mesh.parent.remove(P.mesh);
       if (P.heli) { scene.remove(P.heli.group, P.heli.beam, P.heli.patch); P.heli.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
+      if (P.chute) { scene.remove(P.chute); P.chute.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
       scene.remove(P.tag); P.tag.material.map.dispose(); P.tag.material.dispose();
       if (announce) toast(P.name + ' lämnade rummet.');
       renderList(); hud();
@@ -545,7 +546,7 @@
       if (stars) { g.fillStyle = '#f7c600'; g.font = '900 38px Arial, sans-serif'; g.fillText(stars, x0 + 66 + bw + tw + 14, 49); }
       P.tag.material.map.needsUpdate = true;
     }
-    // d: [time, x, y, z, heading, vx, vz, flags (1 on the ground, 2 in a vehicle, 4 handcuffed), stars, riding with (id or 0), car or 0]
+    // d: [time, x, y, z, heading, vx, vz, flags (1 on the ground, 2 in a vehicle, 4 handcuffed, 8 under a parachute), stars, riding with (id or 0), car or 0]
     // car: [id, model, colour, x, z, heading, vx, vz, steering, gear, throttle, flags (1 brakes, 2 reversing, 4 blue lights,
     //       8 engine dead, 16 at the wheel), blinkers, engine health, turret, wheel slip]
     // then, flying the helicopter (FLY), [x, y, z, heading, pitch, roll, rotor] (left out by games from before it)
@@ -555,7 +556,7 @@
       if (!isFinite(t) || (a.length && t <= a[a.length - 1].t)) return false;
       const pos = (v) => clamp(num(v), -9000, 9000), vel = (v) => clamp(num(v), -150, 150);
       const s = {
-        t, x: pos(d[1]), y: clamp(num(d[2]), -10, 80), z: pos(d[3]), rot: num(d[4]), vx: vel(d[5]), vz: vel(d[6]), f: num(d[7]) | 0,
+        t, x: pos(d[1]), y: clamp(num(d[2]), -10, 400), z: pos(d[3]), rot: num(d[4]), vx: vel(d[5]), vz: vel(d[6]), f: num(d[7]) | 0,
         stars: clamp(num(d[8]) | 0, 0, 5), ride: typeof d[9] === 'string' ? d[9] : '', c: null, hc: null
       };
       const hc = d[11];
@@ -637,6 +638,11 @@
         P.spin = (P.spin || 0) + dt * 41 * hc.rot;
         M.rotor.rotation.y = P.spin; M.tail.rotation.x = P.spin * 5.3; M.beacon.visible = clock % 1.2 < 0.12;
       } else if (P.heli) P.heli.group.visible = false;
+      // under a parachute: the canopy over them
+      if (st.f & 8) {
+        if (!P.chute) P.chute = CHUTE.canopy();
+        P.chute.visible = true; P.chute.position.set(st.x, st.y, st.z); P.chute.rotation.y = st.rot;
+      } else if (P.chute) P.chute.visible = false;
       const p = P.person, hide = !!(st.f & 2) || !!st.ride;
       p.asleep = hide; p.model.group.visible = !hide;
       p.x = st.x; p.y = st.y; p.z = st.z; p.rot = st.rot; p.vx = st.vx; p.vz = st.vz;
@@ -653,7 +659,7 @@
       const car = c ? [c.netId, c.M.id, c.color, r2(c.x), r2(c.z), r3(c.h), r2(c.vx), r2(c.vz), r3(c.steer), c.gear | 0, r2(c.thr || 0),
         (c.braking ? 1 : 0) | (c.reversing ? 2 : 0) | (c.siren ? 4 : 0) | (c.dead ? 8 : 0) | (c === driving ? 16 : 0), c.blink | 0, Math.round(c.health), r3(c.aim || 0), r1(c.slip || 0)] : 0;
       return [Math.round(performance.now()), r2(player.x), r2(player.y), r2(player.z), r3(player.rot), r2(player.vx), r2(player.vz),
-        (player.grounded ? 1 : 0) | (hidden ? 2 : 0) | (player.cuffed ? 4 : 0), stars(), S.ride ? S.ride.owner.id : 0, car, FLY.on ? FLY.net() : 0];
+        (player.grounded ? 1 : 0) | (hidden ? 2 : 0) | (player.cuffed ? 4 : 0) | (CHUTE.open ? 8 : 0), stars(), S.ride ? S.ride.owner.id : 0, car, FLY.on ? FLY.net() : 0];
     }
     function send() {
       if (!inRoom()) return;
@@ -753,7 +759,7 @@
     }
     // a friend's car with them at the wheel, near enough to get in, and not going too fast to
     function rideable() {
-      if (driving || S.ride || FLY.on || !started || (policeStop && policeStop.locked) || player.y > 1.5) return null;
+      if (driving || S.ride || FLY.on || CHUTE.on || !started || (policeStop && policeStop.locked) || player.y > 1.5) return null;
       let best = null, bd = Infinity;
       for (const P of S.players.values()) {
         const c = P.car;
@@ -828,7 +834,7 @@
       const spot = spotNear(at.x, at.z);
       if (!spot) { status('Hittade ingen plats bredvid ' + P.name + ' just nu. Försök igen om en stund.', true); return; }
       if (S.ride) unride(true);
-      FLY.bail();
+      FLY.bail(); CHUTE.bail();
       if (driving && !exitCar()) { closePanel(); return; }
       player.x = spot.x; player.z = spot.z; player.y = 0; player.vx = player.vz = player.vy = 0;
       player.rot = camYaw = Math.atan2(at.x - spot.x, at.z - spot.z);

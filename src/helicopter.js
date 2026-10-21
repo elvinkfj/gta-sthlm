@@ -87,9 +87,18 @@
           : 'Helikoptern! Rotorn varvar upp. Mellanslag stiger, Shift sjunker, W och S flyger framåt och bakåt, A och D svänger. E kliver ur när du har landat.');
       } else toast('Rotorn varvar upp …');
     }
+    // high enough to jump with the parachute: the ground (or the water) far enough below
+    const canJump = () => H.y - (walkable(H.x, H.z) ? 0 : WATER_Y) >= 8 && (!H.ground || H.y > 1);
     function leave() {
-      if (!H.ground) { toast(isTouch ? 'Landa först. Håll in ▼ för att sjunka.' : 'Landa först. Håll in Shift för att sjunka.'); return; }
-      if (H.y > 1) { toast(H.onKak ? 'Här uppe kan du inte kliva ur. Flyg ner och landa på marken.' : 'Landa på marken först, så att du kan kliva ur.'); return; }
+      // up in the air, or on a roof: out with the parachute (the helicopter sinks and sets itself down)
+      if (canJump()) {
+        if (!CHUTE.jumpFrom(H.x, H.y - 0.3, H.z, H.vx, H.vz, H.h)) { toast('Härifrån går det inte att hoppa.'); return; }
+        on = false;
+        toast(isTouch ? 'Du hoppade! Tryck på Skärm för att veckla ut fallskärmen.' : 'Du hoppade! Tryck Mellanslag för att veckla ut fallskärmen.');
+        return;
+      }
+      if (!H.ground) { toast(isTouch ? 'För lågt för att hoppa. Landa först, håll in ▼ för att sjunka.' : 'För lågt för att hoppa. Landa först, håll in Shift för att sjunka.'); return; }
+      if (H.y > 1) { toast('Landa på marken först, så att du kan kliva ur.'); return; }
       const out = exitSpot();
       if (!out) { toast(walkable(H.x, H.z) ? 'Det finns ingen plats att kliva ur här.' : 'Landa på land, så att du kan kliva ur.'); return; }
       on = false;
@@ -197,7 +206,7 @@
         E.dash.hidden = !on;
         document.body.classList.toggle('flying', on);
         E.up.hidden = E.down.hidden = !on && !driving;
-        E.jump.textContent = on ? 'Upp' : driving ? 'Broms' : 'Hoppa';
+        E.jump.textContent = on ? 'Upp' : driving ? 'Broms' : CHUTE.on ? 'Skärm' : 'Hoppa';
         E.help.textContent = isTouch ? '▲ stiger · ▼ sjunker' : 'Mellanslag stiger · Shift sjunker · A D svänger';
         upHeld = downHeld = false;
       }
@@ -226,7 +235,8 @@
     return {
       update, hud, use, bail, drawMini, drawBig,
       get on() { return on; }, get heli() { return H; },
-      prompt() { return on ? (H.ground && H.y < 1 && exitSpot() ? 'Kliv ur' : null) : near() ? 'Flyg helikoptern' : null; },
+      prompt() { return on ? (canJump() ? 'Hoppa ut med fallskärm' : H.ground && H.y < 1 && exitSpot() ? 'Kliv ur' : null) : near() ? 'Flyg helikoptern' : null; },
+      heightAt,
       // where your helicopter is, for your friends: [x, y, z, heading, pitch, roll, rotor] (see MP's state)
       net() { const r2 = (v) => Math.round(v * 100) / 100, r3 = (v) => Math.round(v * 1000) / 1000; return [r2(H.x), r2(H.y), r2(H.z), r3(H.h), r3(H.pitch), r3(H.roll), r2(H.rotor)]; },
       // the rotor's sound: how loud, from where
