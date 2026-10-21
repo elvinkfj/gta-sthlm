@@ -41,6 +41,7 @@ The game is these files, loaded in this order:
 - `src/activities.js` (about 1,180 lines): Högvakten and the Dalahäst hunt, jobs and street races, ice cream kiosks and balloon sellers.
 - `src/helicopter.js` (about 250 lines): the helicopter you fly yourself, its pad on Skeppsbron and the landing on Kaknästornet.
 - `src/parachute.js` (about 220 lines): jumping with a parachute, from the helicopter or from the top of Kaknästornet and a Hötorgsskrapa.
+- `src/metro.js` (about 170 lines): the tunnelbana: the board at the T signs, the lines, the ride and fare dodging.
 - `src/gameplay.js` (about 610 lines): input state, the car picker, traffic upkeep, one simulation step, moving the meshes and the camera.
 - `src/hud.js` (about 390 lines): on-screen text, the minimap and the big map.
 - `src/sound.js` (about 360 lines): synthesised engine sounds and effects.
@@ -79,6 +80,7 @@ Line numbers drift with every change, so search instead of trusting numbers. Eac
 | `src/activities.js` | `Högvakten and the Dalahäst hunt`, `jobs and street races`, `ice cream kiosks and balloon sellers` | Side activities | `JOBS`, `VENDORS` |
 | `src/helicopter.js` | `the helicopter you fly` | The red Bell 429 (the police helicopter's model, `buildHeli(true)`), its flying, landing on roofs, the pad and its HUD box. While you fly, `driving` is null and the player follows it, like riding along. | `FLY` |
 | `src/parachute.js` | `the parachute` | Freefall and the canopy, steering, landing (hard, soft, in the water, on a roof), the towers to jump from. While you jump, `CHUTE.step` moves the player in place of `personMove`. Uses `FLY.heightAt` for the roofs. | `CHUTE` |
+| `src/metro.js` | `the tunnelbana` | The stations are the T signs (`mapLabels` of kind `tbana`), the green, red and blue lines with changes, the board (pauses the game like the car picker), the ride as an overlay, the ticket from the Kassa and the inspectors | `METRO` |
 | `src/gameplay.js` | `game state`, `car picker`, `traffic upkeep` | Input state, picking a car, keeping traffic around the player | `keys`, `readInput`, `chooseModel`, `manageTraffic` |
 | `src/gameplay.js` | `simulation step`, `visuals` | One physics step, moving meshes, the camera | `physicsStep`, `animate`, `updateCamera` |
 | `src/hud.js` | `HUD`, `minimap`, `the big map` | On-screen text and both maps | `updateHUD`, `drawMap`, `bigmap`, `drawBigmap` |

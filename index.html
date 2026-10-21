@@ -87,6 +87,7 @@
     <span class="key">J</span><span>Jobb: taxi i taxin, paket i Sprintern, busslinje i bussen, mat på mopeden, rånare i polisbilen, båttaxi i motorbåtarna. Vid en gul ljuspelare: starta gatlopp. Vid bilskroten i Hammarby hamn: sälj en bil du tagit</span>
     <span class="key">Helikopter</span><span>Står på plattan i slutet av parkeringen vid Skeppsbron. E kliver in. Mellanslag stiger, Shift sjunker, W och S flyger, A och D svänger. Landa på marken och tryck E för att kliva ur. Prova att landa på Kaknästornet!</span>
     <span class="key">Fallskärm</span><span>Tryck E i helikoptern uppe i luften, eller vid foten av Kaknästornet eller Hötorgsskrapan vid Sveavägen, så hoppar du. Mellanslag vecklar ut fallskärmen. A och D svänger, W glider fortare och S långsammare</span>
+    <span class="key">T-bana</span><span>Gå fram till en blå T-skylt och tryck E. Välj station (eller tryck 1–9), betala 39 kr och åk. Utan pengar kan du planka, men då kan det bli biljettkontroll</span>
     <span class="key">Glass</span><span>Glasskiosk och ballongförsäljare vid Skeppsbron, i Kungsträdgården, på Medborgarplatsen och på Djurgården. Gå fram och tryck E för att köpa</span>
     <span class="key">V</span><span>Släpp en ballong</span>
     <span class="key">R</span><span>Ställ bilen på gatan igen, eller båten ute på öppet vatten</span>
@@ -148,6 +149,23 @@
   </div>
 </div>
 
+<div id="metro" hidden role="dialog" aria-modal="true" aria-labelledby="metroTitle">
+  <div class="sign metro-sign">
+    <div class="sign-inner">
+      <div class="mp-head">
+        <h2><span class="metro-t" aria-hidden="true">T</span><span id="metroTitle">Slussen</span></h2>
+        <button id="metroClose" class="btn-sign picker-close" type="button">Stäng</button>
+      </div>
+      <p id="metroInfo" class="metro-info"></p>
+      <ol id="metroList" aria-label="Stationer"></ol>
+    </div>
+  </div>
+</div>
+<div id="metroRide" hidden aria-live="polite">
+  <div class="metro-led"><span id="metroLine">Gröna linjen</span><b id="metroNext">Nästa: Slussen</b></div>
+  <div class="metro-window"><div class="metro-tunnel"></div></div>
+  <div class="metro-progress"><i id="metroBar"></i></div>
+</div>
 <div id="mp" hidden role="dialog" aria-modal="true" aria-labelledby="mpTitle">
   <div class="sign mp-sign">
     <div class="sign-inner">
@@ -251,6 +269,7 @@
 <script src="src/activities.js"></script>
 <script src="src/helicopter.js"></script>
 <script src="src/parachute.js"></script>
+<script src="src/metro.js"></script>
 <script src="src/gameplay.js"></script>
 <script src="src/hud.js"></script>
 <script src="src/sound.js"></script>

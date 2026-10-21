@@ -33,7 +33,7 @@ Lekarna läggs i en ny fil, `src/party.js`, som laddas direkt efter `src/multipl
 
 - [x] **Flyga helikopter.** En helikopterplatta (förslag: på Kaknästornet och vid Skeppsbron) med en helikopter du kan flyga själv. Polisens helikopter finns redan, så modellen kan användas igen. (Klar: `src/helicopter.js`. Plattan står vid Skeppsbron, och på Kaknästornet finns en landningsring runt masten.)
 - [x] **Fallskärm.** Hoppa ur helikoptern eller från Kaknästornet och Hötorgsskraporna. Fallskärmen vecklas ut med en knapp, och du styr när du glider ner. (Klar: `src/parachute.js`. Hötorgsskrapan är den södra av de fem.)
-- [ ] **Tunnelbanan.** Gå ner i en tunnelbaneuppgång och välj en annan station. Tåget åker genom en tunnel och du kommer upp vid den stationen.
+- [x] **Tunnelbanan.** Gå ner i en tunnelbaneuppgång och välj en annan station. Tåget åker genom en tunnel och du kommer upp vid den stationen. (Klar: `src/metro.js`. Biljetten kostar 39 kr, och utan pengar kan man planka.)
 - [ ] **Gröna Lunds attraktioner.** Gå fram till fritt fall-tornet, karusellen eller berg-och-dalbanan och tryck E för att åka. Kameran sitter i vagnen.
 
 ## Del 6: Storyn

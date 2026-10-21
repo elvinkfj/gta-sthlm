@@ -3,7 +3,7 @@
   /* ================= game state ================= */
   let started = false, pickerOpen = false, nearCar = null;
   // the car picker and the big map both pause the game
-  const paused = () => pickerOpen || bigmap.open || MP.panelOpen;
+  const paused = () => pickerOpen || bigmap.open || MP.panelOpen || METRO.boardOpen;
   let camYaw = player.rot, camPitch = 0.3, camDist = 6, lastLook = -1e9, clipT = 1;
   const camTarget = new THREE.Vector3(player.x, 1.6, player.z);
   let jumpQueued = false;
@@ -11,7 +11,7 @@
   let touchBrake = false, isTouch = window.matchMedia('(pointer: coarse)').matches;
 
   function readInput() {
-    if (!started || paused() || inCustody() || (JOBS.job && JOBS.job.kind === 'race' && JOBS.job.t < 0) || PARTY.hold()) return { fwd: 0, right: 0, run: false, brake: !!driving };
+    if (!started || paused() || inCustody() || (JOBS.job && JOBS.job.kind === 'race' && JOBS.job.t < 0) || PARTY.hold() || METRO.riding) return { fwd: 0, right: 0, run: false, brake: !!driving };
     const k = keys;
     const fwd = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0) - joy.y;
     const right = (k.KeyD || k.ArrowRight ? 1 : 0) - (k.KeyA || k.ArrowLeft ? 1 : 0) + joy.x;
@@ -27,7 +27,7 @@
   }
 
   function findNearCar() {
-    if (driving || MP.ride || FLY.on || CHUTE.on || !started || (policeStop && policeStop.locked)) return null;
+    if (driving || MP.ride || FLY.on || CHUTE.on || METRO.riding || !started || (policeStop && policeStop.locked)) return null;
     let best = null, bd = Infinity;
     for (const c of cars) {
       // (a friend's car you can only ride along in, and the sjöpolis's and the navy's boats can't be taken)
@@ -365,6 +365,7 @@
     if (policeStop && policeStop.locked) return;
     if (FLY.on) { toast('Landa och kliv ur helikoptern först.'); return; }
     if (CHUTE.on) { toast('Vänta tills du har landat.'); return; }
+    if (METRO.riding) return;
     let spot = null;
     // riding in a friend's boat out on the water: a car has to wait for a quay, a boat is put beside theirs
     if (MP.ride) {
@@ -607,7 +608,7 @@
     if (!car && !fly && (STATION.inside(player.x, player.z) || STATION.inside(cx, cz))) cy = Math.min(cy, STATION.GH - 0.3);
     if (span) cy = clamp(cy, span.floor + 0.4, span.ceil - 0.15);
     // so close that the camera would be inside your head: hide the body
-    if (!car && !fly && !CHUTE.on) player.model.group.visible = dist > 1.15;
+    if (!car && !fly && !CHUTE.on && !METRO.riding) player.model.group.visible = dist > 1.15;
     if (shake > 0.001) {
       cx += (Math.random() - 0.5) * shake; cy += (Math.random() - 0.5) * shake; cz += (Math.random() - 0.5) * shake;
       shake *= Math.exp(-7 * dt);

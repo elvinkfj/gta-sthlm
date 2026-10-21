@@ -22,6 +22,7 @@
       nearCar = findNearCar();
       animate(dt);
       CHUTE.update(dt, inp);
+      METRO.update(dt);
       VENDORS.update(dt);
     }
     PARTY.update();
