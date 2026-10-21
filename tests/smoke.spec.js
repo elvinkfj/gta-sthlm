@@ -160,3 +160,39 @@ test('gatlopp mot varandra: alla till start, först i mål vinner', async () => 
   expect(r2.closed).toBeNull();
   expect(errors).toEqual([]);
 });
+
+test('kurragömma: den som letar blundar, och hittar den som är nära', async () => {
+  // a pretend room: you seek first, Oscar hides 12 m away
+  const r = await page.evaluate(() => {
+    gubbeTest.hold(true);
+    if (driving) gubbeTest.press('KeyE');
+    Object.assign(MP.debug.S, { code: 'TEST', host: true, myId: 'me', hostId: 'me', name: 'Elvin' });
+    const P = MP.debug.addPlayer('f1', 'Oscar', {});
+    const fx = gubbeTest.state().player.x - 12, fz = gubbeTest.state().player.z;
+    const feed = () => MP.debug.take(P, [performance.now(), fx, 0, fz, 0, 0, 0, 1, 0, 0, 0]);
+    feed(); gubbeTest.run(0.2, 1 / 60, false); feed();
+    PARTY.debug.begin(['me', 'f1'], 'hide'); feed(); gubbeTest.run(0.1, 1 / 60, false);
+    const G = () => PARTY.debug.G, blind = () => !document.getElementById('partyBlind').hidden, s = {};
+    s.count = G().ph; s.hold = PARTY.hold(); s.blind = blind(); s.hidden = P.badge.hide && !P.tag.visible;
+    PARTY.debug.advance(60.5); feed(); gubbeTest.run(0.1, 1 / 60, false);
+    s.hunt = G().ph; s.blindAfter = blind();
+    gubbeTest.teleport(fx + 6, fz); feed(); gubbeTest.run(0.05, 1 / 60, false);
+    s.far = G().out.slice();
+    gubbeTest.teleport(fx + 2.5, fz); feed(); gubbeTest.run(0.05, 1 / 60, false);
+    s.near = G().out.slice(); s.after = G().ph;
+    PARTY.debug.stopGame();
+    MP.debug.leave();
+    gubbeTest.hold(false);
+    return s;
+  });
+  expect(r.count).toBe('count');
+  expect(r.hold).toBe(true);
+  expect(r.blind).toBe(true);
+  expect(r.hidden).toBe(true);
+  expect(r.hunt).toBe('hunt');
+  expect(r.blindAfter).toBe(false);
+  expect(r.far).toEqual([false, false]);
+  expect(r.near).toEqual([false, true]);
+  expect(r.after).toBe('end');
+  expect(errors).toEqual([]);
+});

@@ -424,6 +424,14 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
 #party.race { box-shadow: 0 0 0 2px var(--sign-yellow); }
 #party.race .job-icon { background: var(--sign-yellow); color: var(--asphalt); }
 #partyBig { top: 30%; }
+/* kurragömma: the one who seeks counts with the screen dark (the panels and the minimap stay on top) */
+#partyBlind {
+  position: fixed; inset: 0; display: grid; place-content: center; justify-items: center; gap: 10px; padding: 16px; text-align: center;
+  background: #05080b; color: var(--snow); pointer-events: none;
+}
+#partyBlind b { font: 900 clamp(1.6rem, 5vw, 2.6rem)/1.1 var(--font-sign); }
+#partyBlind span { font: 700 clamp(3rem, 12vw, 6rem)/1 var(--font-gauge); color: var(--sign-yellow); font-variant-numeric: tabular-nums; }
+#partyBlind small { font-size: 1rem; opacity: 0.8; }
 #partyBoard {
   position: fixed; left: 50%; top: 60%; transform: translate(-50%, -50%); pointer-events: none;
   min-width: min(320px, calc(100vw - 32px)); max-width: calc(100vw - 32px); box-sizing: border-box; padding: 16px 20px 14px; border-radius: 14px;

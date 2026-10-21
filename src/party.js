@@ -6,21 +6,26 @@
   // Polis och tjuv: one of you is the police and chases the others, and you take turns being the police. Every second a
   // thief is free gives them a point, and when the police catch a thief the police get the seconds that were left. A thief
   // is caught when the police (in a car or on foot) touch them, as the police's own game sees it.
+  // Kurragömma goes the same way, but the one who seeks first counts to 60 in the dark while the others hide, and then
+  // can't see them on the maps or their names through the walls. Coming near enough to someone finds them.
   // Gatlopp mot varandra: everyone is put on a starting grid at one of the street races, and you race it at the same time.
   // Each game runs its own race (JOBS) and tells the one who has the room how far it has got, and its time at the finish.
   const PARTY = (() => {
     // seconds: the police count before the hunt, the hunt, the pause between rounds, the results at the end; on the grid
-    // before a race, the longest a race may go on, and how long the others have left once the first one is home
-    const COUNT = 10, HUNT = 180, BREAK = 7, RESULT = 15, REACH = 0.6, GRID = 15, RACE_MAX = 600, AFTER = 60;
-    const PHASES = { cnr: ['count', 'hunt', 'end', 'over'], race: ['grid', 'race', 'over'] };
+    // before a race, the longest a race may go on, and how long the others have left once the first one is home. Kurragömma:
+    // the counting in the dark, the seeking, and how near is near enough to find someone
+    const COUNT = 10, HUNT = 180, BREAK = 7, RESULT = 15, REACH = 0.6, GRID = 15, RACE_MAX = 600, AFTER = 60, HIDE = 60, SEEK = 240, FIND = 3;
+    const PHASES = { cnr: ['count', 'hunt', 'end', 'over'], hide: ['count', 'hunt', 'end', 'over'], race: ['grid', 'race', 'over'] };
+    const countOf = (n) => (n === 'hide' ? HIDE : COUNT), huntOf = (n) => (n === 'hide' ? SEEK : HUNT), gameName = (n) => (n === 'hide' ? 'Kurragömma' : 'Polis och tjuv');
     const E = {
       panel: $('party'), icon: $('partyIcon'), title: $('partyTitle'), sub: $('partySub'), clock: $('partyClock'), big: $('partyBig'),
-      board: $('partyBoard'), boardTitle: $('partyBoardTitle'), boardList: $('partyBoardList'), start: $('gameCnr'), races: $('gameRaces'), stop: $('gameStop'), hint: $('mpGamesHint')
+      board: $('partyBoard'), boardTitle: $('partyBoardTitle'), boardList: $('partyBoardList'), start: $('gameCnr'), startHide: $('gameHide'), races: $('gameRaces'),
+      stop: $('gameStop'), hint: $('mpGamesHint'), blind: $('partyBlind'), blindClock: $('partyBlindClock')
     };
     // G: the game as it stands (kept by the one who has the room, or as it last came from them), or null. n: which game,
-    // ph: its phase, t: seconds left of it, ids: who plays. Polis och tjuv: sc their points, out caught this round, r of R
-    // the round, cop who is the police this round. Gatlopp: race, prog how far each has got (checkpoints), fin their time
-    // at the finish (0 still racing, -1 out)
+    // ph: its phase, t: seconds left of it, ids: who plays. Polis och tjuv and kurragömma: sc their points, out caught (or
+    // found) this round, r of R the round, cop who is the police (or seeks) this round. Gatlopp: race, prog how far each has
+    // got (checkpoints), fin their time at the finish (0 still racing, -1 out)
     let G = null, seen = null, last = performance.now(), sendT = 0, bigT = 0, beepAt = 0, lastHud = '', lastTags = '', lastSign = '';
     const names = new Map(), asked = new Map();
     // your own race: your place on the grid and the car put there, how far you have got, your time at the finish
@@ -47,7 +52,7 @@
       if (!PHASES[g.n]) return { a: 'state', n: '' };
       const ids = (Array.isArray(g.ids) ? g.ids : []).slice(0, 8).map(str), list = (v) => (Array.isArray(v) ? v : []);
       const s = { a: 'state', n: g.n, ph: PHASES[g.n].includes(g.ph) ? g.ph : 'over', t: clamp(num(g.t), 0, 900), ids };
-      if (g.n === 'cnr') {
+      if (g.n !== 'race') {
         const R = clamp(num(g.R) | 0, 1, 8), sc = list(g.sc), out = list(g.out);
         return Object.assign(s, { r: clamp(num(g.r) | 0, 1, R), R, cop: str(g.cop), sc: ids.map((_, i) => clamp(num(sc[i]), 0, 99999)), out: ids.map((_, i) => !!out[i]) });
       }
@@ -91,13 +96,14 @@
       G = game;
       changed();
     }
-    // order: who is the police in which round (for the tests); otherwise drawn at random
-    function begin(order) {
+    // n: polis och tjuv (cnr) or kurragömma (hide). order: who is the police, or seeks, in which round (for the tests);
+    // otherwise drawn at random
+    function begin(order, n = 'cnr') {
       const ids = players();
       if (!ids) return;
       const cops = Array.isArray(order) ? order.filter((id) => ids.includes(id)) : ids.slice();
       if (!Array.isArray(order)) for (let i = cops.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [cops[i], cops[j]] = [cops[j], cops[i]]; }
-      open({ a: 'state', n: 'cnr', ph: 'count', r: 1, R: cops.length, cop: cops[0], t: COUNT, ids, sc: ids.map(() => 0), out: ids.map(() => false), cops });
+      open({ a: 'state', n, ph: 'count', r: 1, R: cops.length, cop: cops[0], t: countOf(n), ids, sc: ids.map(() => 0), out: ids.map(() => false), cops });
     }
     function beginRace(id) {
       const ids = players(), race = JOBS.RACES.find((r) => r.id === id);
@@ -113,11 +119,11 @@
       let r = G.r;
       while (r < G.R && !G.ids.includes(G.cops[r])) r++;
       if (r >= G.R) { over(); return; }
-      Object.assign(G, { ph: 'count', r: r + 1, cop: G.cops[r], t: COUNT, out: G.ids.map(() => false) });
+      Object.assign(G, { ph: 'count', r: r + 1, cop: G.cops[r], t: countOf(G.n), out: G.ids.map(() => false) });
       changed();
     }
     function caught(from, who) {
-      if (!G || G.n !== 'cnr' || G.ph !== 'hunt' || from !== G.cop || who === G.cop) return;
+      if (!G || G.n === 'race' || G.ph !== 'hunt' || from !== G.cop || who === G.cop) return;
       const i = G.ids.indexOf(who), c = G.ids.indexOf(G.cop);
       if (i < 0 || G.out[i]) return;
       G.out[i] = true;
@@ -159,7 +165,7 @@
         else close();
         return;
       }
-      // without the police the round is over
+      // without the police (or the one who seeks) the round is over
       if ((G.ph === 'count' || G.ph === 'hunt') && !G.ids.includes(G.cop)) { endRound(); return; }
       if (G.ph === 'hunt') {
         const k = Math.min(dt, G.t);
@@ -167,7 +173,7 @@
         if (thieves().every(isOut)) { endRound(); return; }
       }
       if (!due(dt)) return;
-      if (G.ph === 'count') { G.ph = 'hunt'; G.t = HUNT; changed(); }
+      if (G.ph === 'count') { G.ph = 'hunt'; G.t = huntOf(G.n); changed(); }
       else if (G.ph === 'hunt') endRound();
       else if (G.ph === 'end') nextRound();
       else close();
@@ -178,7 +184,7 @@
       toast('Du avslutade leken.');
     }
 
-    /* ---------- polis och tjuv: catching (the police's own game) ---------- */
+    /* ---------- polis och tjuv and kurragömma: catching (the police's, or the seeker's, own game) ---------- */
     // where you are: in a car (its length and width) or on foot
     function myBody() {
       const c = driving || MP.ride;
@@ -204,7 +210,7 @@
       for (const f of MP.friends()) {
         const i = G.ids.indexOf(f.id);
         if (i < 0 || G.out[i] || !f.at || (asked.get(f.id) || 0) > now) continue;
-        if (Math.abs(f.at.y - me.y) > 2.5 || gap(me, f.at) > REACH) continue;
+        if (Math.abs(f.at.y - me.y) > 2.5 || gap(me, f.at) > (G.n === 'hide' ? FIND : REACH)) continue;
         // (asked once: the answer comes with how the game stands)
         asked.set(f.id, now + 1500);
         tell({ a: 'catch', who: f.id });
@@ -299,7 +305,7 @@
     function show() {
       const was = seen && seen.n === G.n ? seen : null, fresh = !was || was.ph !== G.ph || was.r !== G.r;
       seen = { n: G.n, ph: G.ph, r: G.r };
-      if (G.n === 'cnr') {
+      if (G.n !== 'race') {
         Object.assign(seen, { out: new Set(G.ids.filter((id, i) => G.out[i])), copSc: G.sc[G.ids.indexOf(G.cop)] || 0 });
         showCnr(was, fresh);
       } else {
@@ -308,29 +314,37 @@
       }
     }
     function showCnr(was, fresh) {
-      const me = MP.myId, iCop = G.cop === me, mineIn = G.ids.includes(me);
+      const me = MP.myId, iCop = G.cop === me, mineIn = G.ids.includes(me), hide = G.n === 'hide', who = nameOf(G.cop);
       if (fresh && G.ph === 'count') {
         beepAt = 0;
         if (mineIn && JOBS.job) JOBS.key();
-        if (iCop) { big('DU ÄR POLIS!', 'Räkna till ' + COUNT + ', sedan jagar du de andra.', 3.5); copCar(); toast('Du är polis! Ta tjuvarna genom att köra in i dem eller springa ikapp dem.'); }
-        else if (mineIn) big('SPRING!', nameOf(G.cop) + ' är polis och kommer efter dig om ' + COUNT + ' sekunder.', 3.5);
-        else toast(nameOf(G.cop) + ' är polis i polis och tjuv. Du är med nästa gång.');
+        if (hide) {
+          // (the dark screen says it all)
+          if (iCop) toast('Du letar! De andra gömmer sig medan du blundar.');
+          else if (mineIn) big('GÖM DIG!', who + ' blundar i ' + HIDE + ' sekunder. Hitta ett bra gömställe!', 3.5);
+          else toast(who + ' letar i kurragömma. Du är med nästa gång.');
+        } else if (iCop) { big('DU ÄR POLIS!', 'Räkna till ' + COUNT + ', sedan jagar du de andra.', 3.5); copCar(); toast('Du är polis! Ta tjuvarna genom att köra in i dem eller springa ikapp dem.'); }
+        else if (mineIn) big('SPRING!', who + ' är polis och kommer efter dig om ' + COUNT + ' sekunder.', 3.5);
+        else toast(who + ' är polis i polis och tjuv. Du är med nästa gång.');
         beep([523, 659], 0.04, 0.3);
       } else if (fresh && G.ph === 'hunt') {
-        if (iCop) big('JAGA!', 'Kör in i tjuvarna eller spring ikapp dem.', 2.2);
-        else if (mineIn) big('POLISEN KOMMER!', 'Håll dig undan ' + nameOf(G.cop) + '.', 2.2);
+        if (hide && iCop) { big('LETA!', 'Gå eller kör nära någon så har du hittat hen.', 2.2); toast('De andra syns inte på kartan nu. Leta med ögonen!'); }
+        else if (hide && mineIn) big('NU KOMMER JAG!', who + ' letar efter dig. Håll dig gömd!', 2.2);
+        else if (iCop) big('JAGA!', 'Kör in i tjuvarna eller spring ikapp dem.', 2.2);
+        else if (mineIn) big('POLISEN KOMMER!', 'Håll dig undan ' + who + '.', 2.2);
         beep([784, 1047], 0.05, 0.45);
       } else if (fresh && G.ph === 'end') {
         const all = thieves().length > 0 && thieves().every(isOut);
-        big(all ? 'ALLA TAGNA!' : 'TIDEN ÄR UTE!', G.r < G.R ? 'Nästa runda börjar snart.' : 'Det var sista rundan.', 3);
+        big(all ? (hide ? 'ALLA HITTADE!' : 'ALLA TAGNA!') : 'TIDEN ÄR UTE!', G.r < G.R ? 'Nästa runda börjar snart.' : 'Det var sista rundan.', 3);
         beep([659, 523], 0.04, 0.4);
       } else if (fresh && G.ph === 'over') results();
-      // thieves caught since then
+      // thieves caught (or hiders found) since then
       if (was && was.r === G.r) for (const id of G.ids) {
         if (!isOut(id) || was.out.has(id)) continue;
-        if (id === me) { big('TAGEN!', nameOf(G.cop) + ' tog dig. Vänta på nästa runda.', 3); beep([392, 311, 233], 0.05, 0.5); }
-        else if (iCop) { toast('Du tog ' + nameOf(id) + '! Du får sekunderna som var kvar: ' + Math.round(seen.copSc - was.copSc) + ' p.'); beep([880, 1175], 0.05, 0.3); }
-        else toast(nameOf(G.cop) + ' tog ' + nameOf(id) + '!');
+        const pts = Math.round(seen.copSc - was.copSc);
+        if (id === me) { big(hide ? 'HITTAD!' : 'TAGEN!', who + (hide ? ' hittade dig.' : ' tog dig.') + ' Vänta på nästa runda.', 3); beep([392, 311, 233], 0.05, 0.5); }
+        else if (iCop) { toast((hide ? 'Du hittade ' : 'Du tog ') + nameOf(id) + '! Du får sekunderna som var kvar: ' + pts + ' p.'); beep([880, 1175], 0.05, 0.3); }
+        else toast(who + (hide ? ' hittade ' : ' tog ') + nameOf(id) + '!');
       }
     }
     function showRace(was, fresh) {
@@ -359,11 +373,11 @@
     // the results at the end, best first
     function results() {
       let rows, title, line;
-      if (G.n === 'cnr') {
+      if (G.n !== 'race') {
         rows = G.ids.map((id, i) => ({ id, sc: Math.floor(G.sc[i]) })).sort((a, b) => b.sc - a.sc).map((r) => ({ ...r, v: r.sc + ' p' }));
         const tie = rows.length > 1 && rows[0].sc === rows[1].sc;
-        title = 'Polis och tjuv: ' + (!rows.length ? '' : tie ? 'oavgjort!' : rows[0].id === MP.myId ? 'du vann!' : nameOf(rows[0].id) + ' vann!');
-        line = 'Polis och tjuv är slut.';
+        title = gameName(G.n) + ': ' + (!rows.length ? '' : tie ? 'oavgjort!' : rows[0].id === MP.myId ? 'du vann!' : nameOf(rows[0].id) + ' vann!');
+        line = gameName(G.n) + ' är slut.';
       } else {
         rows = standings().map((s) => ({ id: s.id, v: s.fin > 0 ? fmtRace(s.fin) : 'kom inte i mål', home: s.fin > 0 }));
         title = raceOf().name + ': ' + (!rows.length || !rows[0].home ? 'ingen kom i mål' : rows[0].id === MP.myId ? 'du vann!' : nameOf(rows[0].id) + ' vann!');
@@ -388,7 +402,8 @@
       E.big.hidden = true;
       tags(); hud();
     }
-    // the signs over the others' heads: who is the police, a thief or caught; or their place in the race
+    // the signs over the others' heads: who is the police, a thief or caught; who seeks, hides or has been found (and to the
+    // one who seeks, those hiding have no sign and no dot on the maps); or their place in the race
     function tags() {
       const on = !!G && G.ph !== 'over', order = on && G.n === 'race' ? standings() : null;
       const key = !on ? '' : order ? order.map((s) => s.id + s.fin).join() : G.cop + ':' + G.ids.join() + ':' + G.out.join();
@@ -398,7 +413,10 @@
         const i = on ? G.ids.indexOf(f.id) : -1;
         if (i < 0 || (order && G.ph === 'grid')) MP.badge(f.id, '');
         else if (order) { const p = order.findIndex((s) => s.id === f.id) + 1, fin = G.fin[i]; MP.badge(f.id, fin < 0 ? 'UTE' : ord(p), fin < 0 ? '#5b6168' : fin > 0 ? '#1f7a3a' : '#0a5ba8'); }
-        else if (f.id === G.cop) MP.badge(f.id, 'POLIS', '#1d3f9e', true);
+        else if (G.n === 'hide') {
+          if (f.id === G.cop) MP.badge(f.id, 'LETAR', '#6a3d9a', true);
+          else MP.badge(f.id, G.out[i] ? 'HITTAD' : 'GÖMD', G.out[i] ? '#5b6168' : '#2e8b57', false, !G.out[i] && G.cop === MP.myId);
+        } else if (f.id === G.cop) MP.badge(f.id, 'POLIS', '#1d3f9e', true);
         else MP.badge(f.id, G.out[i] ? 'TAGEN' : 'TJUV', G.out[i] ? '#5b6168' : '#b3122b');
       }
     }
@@ -406,6 +424,10 @@
     // shows your place instead)
     function hud() {
       const on = !!G && G.ph !== 'over' && !(JOBS.job && JOBS.job.party);
+      // the one who seeks counts in the dark
+      const blind = !!G && G.n === 'hide' && G.ph === 'count' && G.cop === MP.myId;
+      E.blind.hidden = !blind;
+      if (blind) E.blindClock.textContent = fmt(G.t);
       document.body.classList.toggle('party', on);
       E.panel.hidden = !on;
       E.board.hidden = !G || G.ph !== 'over';
@@ -421,15 +443,20 @@
         else sub = 'Du är ute' + (lead && lead.id !== me ? '. ' + nameOf(lead.id) + (lead.fin > 0 ? ' vann' : ' leder') : '');
         clock = G.ph === 'grid' || home ? fmt(G.t) : '';
       } else {
-        const free = thieves().filter((id) => !isOut(id)).length;
+        const free = thieves().filter((id) => !isOut(id)).length, who = nameOf(G.cop), hide = G.n === 'hide';
         role = i < 0 ? 'watch' : G.cop === me ? 'cop' : G.out[i] ? 'out' : 'thief';
-        if (role === 'watch') sub = nameOf(G.cop) + ' är polis. Du är med nästa gång';
+        if (hide) {
+          if (role === 'watch') sub = who + ' letar. Du är med nästa gång';
+          else if (role === 'cop') sub = G.ph === 'count' ? 'Du blundar … de andra gömmer sig' : G.ph === 'end' ? 'Rundan är slut' : 'Du letar: ' + free + ' kvar att hitta';
+          else if (role === 'out') sub = 'Du är hittad. Vänta på nästa runda';
+          else sub = G.ph === 'count' ? 'Göm dig! ' + who + ' blundar' : G.ph === 'end' ? 'Du klarade dig!' : 'Håll dig gömd för ' + who;
+        } else if (role === 'watch') sub = who + ' är polis. Du är med nästa gång';
         else if (role === 'cop') sub = G.ph === 'count' ? 'Räkna till ' + COUNT + ' … tjuvarna sticker' : G.ph === 'end' ? 'Rundan är slut' : 'Du är polis: ' + (free === 1 ? '1 tjuv' : free + ' tjuvar') + ' kvar att ta';
         else if (role === 'out') sub = 'Du är tagen. Vänta på nästa runda';
-        else sub = G.ph === 'end' ? 'Du klarade dig!' : 'Du är tjuv: håll dig undan ' + nameOf(G.cop);
+        else sub = G.ph === 'end' ? 'Du klarade dig!' : 'Du är tjuv: håll dig undan ' + who;
         if (i >= 0) sub += ' · ' + Math.floor(G.sc[i]) + ' p';
-        title = 'Polis och tjuv, runda ' + G.r + ' av ' + G.R; clock = G.ph === 'end' ? '' : fmt(G.t);
-        icon = role === 'cop' ? '★' : role === 'out' ? '✕' : role === 'thief' ? 'T' : 'P';
+        title = gameName(G.n) + ', runda ' + G.r + ' av ' + G.R; clock = G.ph === 'end' ? '' : fmt(G.t);
+        icon = role === 'cop' ? (hide ? '?' : '★') : role === 'out' ? '✕' : role === 'thief' ? (hide ? 'G' : 'T') : 'P';
       }
       const key = role + title + sub + clock;
       if (key === lastHud) return;
@@ -437,7 +464,7 @@
       E.panel.classList.toggle('thief', role === 'thief'); E.panel.classList.toggle('out', role === 'out'); E.panel.classList.toggle('race', role === 'race');
       E.icon.textContent = icon; E.title.textContent = title; E.sub.textContent = sub; E.clock.textContent = clock;
     }
-    // the games on the room sign: one button for Polis och tjuv, one for each street race
+    // the games on the room sign: one button for Polis och tjuv, one for Kurragömma, one for each street race
     const raceButtons = JOBS.RACES.map((r) => {
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'btn-sign small'; b.textContent = r.name;
@@ -448,18 +475,19 @@
     function sign() {
       if (!MP.panelOpen) { lastSign = ''; return; }
       const n = MP.inRoom ? MP.friends().filter((f) => f.at).length + 1 : 0;
-      const hint = G ? (G.n === 'race' ? 'Gatloppet ' + raceOf().name + ' pågår.' : 'Polis och tjuv pågår, runda ' + G.r + ' av ' + G.R + '.')
+      const hint = G ? (G.n === 'race' ? 'Gatloppet ' + raceOf().name + ' pågår.' : gameName(G.n) + ' pågår, runda ' + G.r + ' av ' + G.R + '.')
         : !MP.host ? 'Den som har rummet startar lekarna.' : n < 2 ? 'Det behövs minst två i rummet för att leka.' : '';
       const key = MP.host + ':' + !!G + ':' + n + ':' + hint;
       if (key === lastSign) return;
       lastSign = key;
-      E.start.hidden = !MP.host || !!G; E.start.disabled = n < 2;
+      E.start.hidden = E.startHide.hidden = !MP.host || !!G; E.start.disabled = E.startHide.disabled = n < 2;
       E.races.hidden = !MP.host || !!G;
       for (const b of raceButtons) b.disabled = n < 2;
       E.stop.hidden = !MP.host || !G;
       E.hint.textContent = hint;
     }
     E.start.addEventListener('click', () => begin());
+    E.startHide.addEventListener('click', () => begin(null, 'hide'));
     E.stop.addEventListener('click', stopGame);
 
     /* ---------- every frame ---------- */
@@ -482,7 +510,10 @@
         hunt(now);
         // the last seconds of the count
         const n = Math.ceil(G.t);
-        if (G.ph === 'count' && n <= 3 && n > 0 && n !== beepAt && G.ids.includes(MP.myId)) { beepAt = n; big(String(n), '', 0.9); beep([440], 0.04, 0.15); }
+        if (G.ph === 'count' && n <= 3 && n > 0 && n !== beepAt && G.ids.includes(MP.myId)) {
+          beepAt = n; beep([440], 0.04, 0.15);
+          if (G.n !== 'hide' || G.cop !== MP.myId) big(String(n), '', 0.9);
+        }
       }
       if (bigT > 0 && (bigT -= dt) <= 0) E.big.hidden = true;
       tags(); hud(); sign();
@@ -490,10 +521,11 @@
 
     return {
       update, busy,
-      // the police stand still while they count, and everyone waits on the grid before a race
+      // the police stand still while they count (and the one who seeks while they count in the dark), and everyone waits on
+      // the grid before a race
       hold() { return !!G && G.ids.includes(MP.myId) && (G.n === 'race' ? G.ph === 'grid' : G.ph === 'count' && G.cop === MP.myId); },
       // J: no jobs in the middle of a game
-      noJobs() { if (!busy()) return false; toast(G.n === 'race' ? 'Inga jobb mitt i gatloppet!' : 'Inga jobb mitt i polis och tjuv!'); return true; },
+      noJobs() { if (!busy()) return false; toast('Inga jobb mitt i ' + (G.n === 'race' ? 'gatloppet' : gameName(G.n).toLowerCase()) + '!'); return true; },
       // your place in the race, for the race's own panel
       place() { return G && G.n === 'race' && G.ids.includes(MP.myId) ? ord(placeOf(MP.myId)) + ' av ' + G.ids.length : ''; },
       // for the tests

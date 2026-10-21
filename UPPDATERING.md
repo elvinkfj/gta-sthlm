@@ -10,7 +10,7 @@ Lekarna läggs i en ny fil, `src/party.js`, som laddas direkt efter `src/multipl
 
 - [x] **Polis och tjuv.** En spelare är polis och får en polisbil med blåljus, de andra är tjuvar. Polisen tar en tjuv genom att köra in i hen eller springa ikapp. En runda är 3 minuter. Tjuvarna får poäng för varje sekund de är fria, och polisen får sekunderna som var kvar för varje tjuv hen tar. Sedan byter ni roller. Poängen står uppe på skärmen. (Klar: `src/party.js`.)
 - [x] **Gatlopp mot varandra.** Den som har rummet väljer ett av de fyra gatloppen. Alla flyttas till startpelaren och får samma nedräkning. Under loppet syns vem som leder (1:a, 2:a, 3:a…), och i mål kommer en prispall med tiderna. (Klar: `src/party.js`, med loppen från `JOBS`.)
-- [ ] **Kurragömma.** En letar, de andra gömmer sig. De som gömmer sig har 60 sekunder på sig medan den som letar har svart skärm. Sedan syns de inte på kartan och namnet syns inte genom husen. Den som letar hittar någon genom att gå eller köra nära nog. Sista som hittas vinner.
+- [x] **Kurragömma.** En letar, de andra gömmer sig. De som gömmer sig har 60 sekunder på sig medan den som letar har svart skärm. Sedan syns de inte på kartan och namnet syns inte genom husen. Den som letar hittar någon genom att gå eller köra nära nog. Sista som hittas vinner. (Klar: `src/party.js`. Rundan är fyra minuter, och poängen räknas som i polis och tjuv.)
 
 ## Del 2: Köra snabbare och snyggare
 

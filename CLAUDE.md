@@ -45,7 +45,7 @@ The game is these files, loaded in this order:
 - `src/input.js` (about 150 lines): keyboard, touch and the start screen.
 - `src/post.js` (about 320 lines): graphics quality levels and post-processing.
 - `src/multiplayer.js` (about 1,070 lines): playing with friends.
-- `src/party.js` (about 510 lines): games with friends: Polis och tjuv and Gatlopp mot varandra.
+- `src/party.js` (about 540 lines): games with friends: Polis och tjuv, Kurragömma and Gatlopp mot varandra.
 - `src/main.js` (about 160 lines): the main loop, adaptive resolution and the test hooks. Loaded last.
 
 Each part of the JavaScript starts with a section header comment. Grep for the header (or a name from the table) and read only that range:
@@ -82,7 +82,7 @@ Line numbers drift with every change, so search instead of trusting numbers. Eac
 | `src/input.js` | `input` | Keyboard, touch and the start screen | `startGame` |
 | `src/post.js` | `post-processing` | Graphics quality levels and effects | `POST` |
 | `src/multiplayer.js` | `playing with friends` | Multiplayer over WebRTC (PeerJS), with MQTT as fallback. Libraries load only when used. | `MP` |
-| `src/party.js` | `games with friends` | Games for everyone in a room (Polis och tjuv, Gatlopp mot varandra). The one who has the room keeps the score and sends it to the others as `game` events. A race against friends is an ordinary street race in each game (`JOBS.partyRace`) that reports its progress and time. | `PARTY` |
+| `src/party.js` | `games with friends` | Games for everyone in a room (Polis och tjuv, Kurragömma, Gatlopp mot varandra). Kurragömma is Polis och tjuv with a dark screen while the seeker counts, and the hiders' signs and map dots hidden from the seeker (`MP.badge(…, hide)`). The one who has the room keeps the score and sends it to the others as `game` events. A race against friends is an ordinary street race in each game (`JOBS.partyRace`) that reports its progress and time. | `PARTY` |
 | `src/main.js` | `loop` | The main loop, adaptive resolution and the test hooks | `tick`, `frame`, `window.gubbeTest` |
 
 ## How the parts depend on each other
