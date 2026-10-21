@@ -170,6 +170,8 @@
     if (seen) startChase(kind, over);
   }
   function startChase(kind, over) {
+    // in a game with friends the police leave you alone
+    if (PARTY.busy()) return;
     if (!wanted) {
       wanted = { kinds: new Set(), counts: {}, bonus: 0, stars: 1, starT: 0, over: 0, lostT: 0, searchT: 0, stopT: 0, t: 0, fleeT: 0, seen: playerTarget(), inSight: true };
       toast(kind === 'fart' ? 'Polisen såg dig köra för fort. Stanna bilen!' : 'Polisen är efter dig!');

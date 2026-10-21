@@ -31,6 +31,11 @@ test('sidan laddar utan fel', async () => {
   expect(errors).toEqual([]);
 });
 
+test('versionen står i hörnet', async () => {
+  const v = await page.evaluate(() => document.getElementById('version').textContent);
+  expect(v).toMatch(/^Version \d+ · /);
+});
+
 test('spelet startar och kan köra 10 sekunder', async () => {
   const state = await page.evaluate(() => { gubbeTest.start(); return gubbeTest.run(10); });
   expect(state.bad).toEqual([]);
@@ -86,8 +91,12 @@ test('polis och tjuv: polisen tar tjuven och leken räknar poäng', async () => 
     const fx = gubbeTest.state().player.x - 6, fz = gubbeTest.state().player.z + 4;
     const feed = () => MP.debug.take(P, [performance.now(), fx, 0, fz, 0, 0, 0, 1, 0, 0, 0]);
     feed(); gubbeTest.run(0.2, 1 / 60, false); feed();
+    // the police are after you when the game starts: they give up, and leave you alone while you play
+    gubbeTest.startChase('fart', 20);
+    const chased = !!gubbeTest.wanted;
     PARTY.debug.begin(['me', 'f1']);
-    const G = () => PARTY.debug.G, s = {};
+    const G = () => PARTY.debug.G, s = { chased };
+    s.chaseOver = gubbeTest.wanted; gubbeTest.startChase('stöld', 0); s.noNewChase = gubbeTest.wanted;
     s.count = G().ph; s.hold = PARTY.hold(); s.car = gubbeTest.state().driving;
     PARTY.debug.advance(10.5); feed(); gubbeTest.run(0.1, 1 / 60, false);
     s.hunt = G().ph; s.holdAfter = PARTY.hold();
@@ -102,6 +111,9 @@ test('polis och tjuv: polisen tar tjuven och leken räknar poäng', async () => 
     gubbeTest.hold(false);
     return s;
   });
+  expect(r.chased).toBe(true);
+  expect(r.chaseOver).toBeNull();
+  expect(r.noNewChase).toBeNull();
   expect(r.count).toBe('count');
   expect(r.hold).toBe(true);
   expect(r.car).toBe('polis');

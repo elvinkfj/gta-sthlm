@@ -346,7 +346,7 @@
           try { conn = await relayKnock(code, me); } finally { knocking = false; }
           if (!conn || !live() || S.myId !== me) return;
         }
-        const hi = () => conn.send({ t: 'hi', v: PROTO, name: S.name, look: look() });
+        const hi = () => conn.send({ t: 'hi', v: PROTO, name: S.name, look: look(), ver: VERSION.nr });
         if (conn === S.hostConn) { hi(); return; }
         if (S.hostConn && S.hostConn !== conn) try { S.hostConn.close(); } catch { /* gone already */ }
         S.hostConn = conn;
@@ -389,7 +389,10 @@
         if (!begun) relayOnly();
       });
     }
-    const info = (P) => ({ id: P.id, name: P.name, look: P.look });
+    const info = (P) => ({ id: P.id, name: P.name, look: P.look, ver: P.ver });
+    const meInfo = () => ({ id: S.myId, name: S.name, look: look(), ver: VERSION.nr });
+    // their version, when it isn't yours (0: from before the versions were shown)
+    const otherVer = (P) => (P.ver === VERSION.nr ? '' : P.ver ? 'version ' + P.ver : 'äldre version');
     function broadcast(m, except) {
       for (const [id, c] of S.conns) if (id !== except && c.open) try { c.send(m); } catch { /* its close event drops it */ }
     }
@@ -407,16 +410,16 @@
         if (P) {
           const old = S.conns.get(id);
           if (old !== conn) { S.conns.set(id, conn); if (old) try { old.close(); } catch { /* gone already */ } }
-          conn.send({ t: 'welcome', v: PROTO, host: S.myId, players: [{ id: S.myId, name: S.name, look: look() }, ...[...S.players.values()].filter((p) => p !== P).map(info)] });
+          conn.send({ t: 'welcome', v: PROTO, host: S.myId, players: [meInfo(), ...[...S.players.values()].filter((p) => p !== P).map(info)] });
           return;
         }
         const no = m.v !== PROTO ? 'old' : S.players.size + 1 >= MAX ? 'full' : '';
         if (no) { try { conn.send({ t: 'no', why: no }); } catch { /* gone already */ } setTimeout(() => conn.close(), 1000); return; }
         S.conns.set(id, conn);
-        const np = addPlayer(id, m.name, m.look);
-        conn.send({ t: 'welcome', v: PROTO, host: S.myId, players: [{ id: S.myId, name: S.name, look: look() }, ...[...S.players.values()].filter((p) => p !== np).map(info)] });
+        const np = addPlayer(id, m.name, m.look, m.ver);
+        conn.send({ t: 'welcome', v: PROTO, host: S.myId, players: [meInfo(), ...[...S.players.values()].filter((p) => p !== np).map(info)] });
         broadcast({ t: 'join', ...info(np) }, id);
-        toast(np.name + ' kom in i rummet.');
+        toast(np.name + ' kom in i rummet.' + (otherVer(np) ? ' Hen har ' + otherVer(np) + ', du har version ' + VERSION.nr + '.' : ''));
         return;
       }
       if (!P) return;
@@ -436,7 +439,7 @@
         if (inRoom()) return;
         clearTimeout(wait);
         S.host = false; S.hostId = String(m.host || conn.peer);
-        for (const i of Array.isArray(m.players) ? m.players.slice(0, MAX) : []) if (i && typeof i.id === 'string' && i.id !== S.myId && !S.players.has(i.id)) addPlayer(i.id, i.name, i.look);
+        for (const i of Array.isArray(m.players) ? m.players.slice(0, MAX) : []) if (i && typeof i.id === 'string' && i.id !== S.myId && !S.players.has(i.id)) addPlayer(i.id, i.name, i.look, i.ver);
         enter(code);
         return;
       }
@@ -445,7 +448,7 @@
       const P = S.players.get(m.id);
       if (m.t === 's') { if (P) take(P, m.d); }
       else if (m.t === 'e') { if (P) heard(P, m); }
-      else if (m.t === 'join') { if (!P && typeof m.id === 'string' && m.id !== S.myId && S.players.size + 1 < MAX) toast(addPlayer(m.id, m.name, m.look).name + ' kom in i rummet.'); }
+      else if (m.t === 'join') { if (!P && typeof m.id === 'string' && m.id !== S.myId && S.players.size + 1 < MAX) { const np = addPlayer(m.id, m.name, m.look, m.ver); toast(np.name + ' kom in i rummet.' + (otherVer(np) ? ' Hen har ' + otherVer(np) + ', du har version ' + VERSION.nr + '.' : '')); } }
       else if (m.t === 'left') { if (P) removePlayer(P.id, true); }
     }
     function hostGone() {
@@ -480,11 +483,11 @@
     window.addEventListener('pageshow', (e) => { if (e.persisted && inRoom()) { leave(); status('Du lämnade rummet.'); } });
 
     /* ---------- the other players ---------- */
-    function addPlayer(id, name, lk) {
+    function addPlayer(id, name, lk, ver) {
       const L = cleanLook(lk), ident = makeIdentity(L);
       const person = makePerson(ident, player.x, player.z, null);
       person.remote = true; person.keep = true; person.asleep = true; person.model.group.visible = false;
-      const P = { id, name: cleanName(name) || 'Vän', look: L, ident, person, car: null, snaps: [], offset: null, st: null, stars: 0, tag: makeTag(), tagKey: '', mesh: null, seat: null, badge: null };
+      const P = { id, name: cleanName(name) || 'Vän', look: L, ident, person, car: null, snaps: [], offset: null, st: null, stars: 0, tag: makeTag(), tagKey: '', mesh: null, seat: null, badge: null, ver: Number.isInteger(ver) ? ver : 0 };
       drawTag(P);
       if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { P.tagKey = ''; drawTag(P); }).catch(() => {});
       S.players.set(id, P);
@@ -966,8 +969,15 @@
         }
         E.list.append(li);
       };
-      row(S.name, playerId.shirt, S.host ? 'du, har rummet' : 'du', null);
-      for (const P of S.players.values()) row(P.name, P.look.shirt, P.id === S.hostId ? 'har rummet' : '', P);
+      row(S.name, playerId.shirt, (S.host ? 'du, har rummet' : 'du') + ', version ' + VERSION.nr, null);
+      for (const P of S.players.values()) row(P.name, P.look.shirt, [P.id === S.hostId ? 'har rummet' : '', otherVer(P)].filter(Boolean).join(', '), P);
+      // someone on another version of the game: things may be missing or go wrong between you
+      if ([...S.players.values()].some(otherVer)) {
+        const li = document.createElement('li');
+        li.className = 'mp-warn';
+        li.textContent = 'Ni har olika versioner av spelet. Den som har en äldre version behöver hämta den nya och ladda om sidan, annars kan saker saknas eller bli fel mellan er.';
+        E.list.append(li);
+      }
     }
     function hud() {
       const n = S.players.size + 1;
