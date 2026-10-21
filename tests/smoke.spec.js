@@ -263,3 +263,31 @@ test('fallskärm: hoppa från Kaknästornet, veckla ut och landa mjukt', async (
   expect(r.bad).toEqual([]);
   expect(errors).toEqual([]);
 });
+
+test('tunnelbanan: från Slussen till Hötorget, med biljett', async () => {
+  const r = await page.evaluate(() => {
+    const t = gubbeTest, D = METRO.debug, s = {};
+    t.hold(true);
+    if (t.state().driving) t.press('KeyE');
+    const A = D.STOPS.find((x) => x.name === 'Slussen'), B = D.STOPS.find((x) => x.name === 'Hötorget');
+    t.teleport(A.x + 1.5, A.z); t.run(0.2, 1 / 60, false);
+    s.prompt = METRO.prompt();
+    t.press('KeyE');
+    s.board = METRO.boardOpen;
+    const cash = t.jobs.earned;
+    D.go(B);
+    s.riding = METRO.riding; s.paid = cash - t.jobs.earned;
+    t.run(10, 1 / 60, false);
+    s.arrived = !METRO.riding && Math.hypot(player.x - B.x, player.z - B.z) < 13;
+    s.bad = t.state().bad;
+    t.hold(false);
+    return s;
+  });
+  expect(r.prompt).toBe('Åk tunnelbana från Slussen');
+  expect(r.board).toBe(true);
+  expect(r.riding).toBe(true);
+  expect(r.paid === 39 || r.paid === 0).toBe(true);
+  expect(r.arrived).toBe(true);
+  expect(r.bad).toEqual([]);
+  expect(errors).toEqual([]);
+});

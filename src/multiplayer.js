@@ -655,7 +655,7 @@
       const c = driving || (S.lastCar && S.lastCar.group.parent ? S.lastCar : null);
       if (!c) S.lastCar = null;
       if (c && !c.netId) c.netId = Math.random().toString(36).slice(2, 10);
-      const hidden = !!driving || !!S.ride || FLY.on || !!(policeStop && policeStop.riding);
+      const hidden = !!driving || !!S.ride || FLY.on || METRO.riding || !!(policeStop && policeStop.riding);
       const car = c ? [c.netId, c.M.id, c.color, r2(c.x), r2(c.z), r3(c.h), r2(c.vx), r2(c.vz), r3(c.steer), c.gear | 0, r2(c.thr || 0),
         (c.braking ? 1 : 0) | (c.reversing ? 2 : 0) | (c.siren ? 4 : 0) | (c.dead ? 8 : 0) | (c === driving ? 16 : 0), c.blink | 0, Math.round(c.health), r3(c.aim || 0), r1(c.slip || 0)] : 0;
       return [Math.round(performance.now()), r2(player.x), r2(player.y), r2(player.z), r3(player.rot), r2(player.vx), r2(player.vz),
@@ -834,7 +834,7 @@
       const spot = spotNear(at.x, at.z);
       if (!spot) { status('Hittade ingen plats bredvid ' + P.name + ' just nu. Försök igen om en stund.', true); return; }
       if (S.ride) unride(true);
-      FLY.bail(); CHUTE.bail();
+      FLY.bail(); CHUTE.bail(); METRO.bail();
       if (driving && !exitCar()) { closePanel(); return; }
       player.x = spot.x; player.z = spot.z; player.y = 0; player.vx = player.vz = player.vy = 0;
       player.rot = camYaw = Math.atan2(at.x - spot.x, at.z - spot.z);

@@ -183,3 +183,4 @@ För varje PR: flytta koden oförändrad, kör testet, uppdatera kartan i `CLAUD
 - Gröna Lund använder `curve` och `tubeTo`, som ligger bland bilarna. De flyttades till `src/core.js` för att filen ska kunna laddas. Leta efter fler sådana hjälpfunktioner som borde ligga i `core.js`. (PR 8)
 - `src/core.js` använder `CELL_W` och `FLOOR_H` från `src/city/map.js` inuti en funktion. Det fungerar, men ett "kärn"-ställe borde inte bero på kartan. (PR 8)
 - "initial traffic" (bilarna, poliserna och båtarna som finns när spelet startar) ligger sist i `src/police-stops.js`, eftersom den måste köras på samma ställe i ordningen som förut. Den hör egentligen inte till polisen. (PR 14)
+- Mariatorget och Rådhuset finns i listan över tunnelbanestationer i `src/city/blocks.js`, men får ingen T-skylt, eftersom koden inte hittar någon trottoar inom 30 meter från deras koordinater. Därför går det inte att åka tunnelbana dit. Flytta koordinaterna eller sök längre bort. (Tunnelbanan)

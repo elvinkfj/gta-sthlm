@@ -22,6 +22,7 @@
       nearCar = findNearCar();
       animate(dt);
       CHUTE.update(dt, inp);
+      METRO.update(dt);
       VENDORS.update(dt);
     }
     PARTY.update();
@@ -33,18 +34,30 @@
     updateAudio(dt);
   }
   // dynamic resolution: render fewer pixels when the frame rate drops, and creep back up when there is room
-  let dpr = MAX_DPR, perfSum = 0, perfN = 0, holdUp = 0, qualityDropped = false;
+  let dpr = MAX_DPR, perfSum = 0, perfN = 0, holdUp = 0, autoLevel = null, levelWait = 0;
   function adaptQuality(raw) {
     perfSum += Math.min(raw, 0.1); perfN++;
     if (perfSum < 2) return;
-    const avg = perfSum / perfN;
-    perfSum = 0; perfN = 0; holdUp -= 2;
+    const avg = perfSum / perfN, minDpr = POST.level === 0 ? 0.55 : 0.7;
+    perfSum = 0; perfN = 0; holdUp -= 2; levelWait -= 2;
     let next = dpr;
-    // still too slow at the lowest resolution: one step down in graphics quality (Q brings it back)
-    if (avg > 1 / 32 && dpr <= 0.7 && POST.level > 0 && !qualityDropped) { qualityDropped = true; POST.setLevel(POST.level - 1); holdUp = 20; }
-    else if (avg > 1 / 40 && dpr > 0.7) { next = Math.max(0.7, dpr - 0.2); holdUp = 20; }
+    // still too slow at the lowest resolution: the graphics quality goes down a step at a time, a few seconds apart, all
+    // the way to the simplest (but not once you have chosen it yourself with Q), and then the resolution a little further
+    const ours = autoLevel === null || autoLevel === POST.level;
+    if (avg > 1 / 32 && dpr <= 0.7 && POST.level > 0 && ours && levelWait <= 0) { POST.setLevel(POST.level - 1); autoLevel = POST.level; levelWait = 6; holdUp = 20; }
+    else if (avg > 1 / 40 && dpr > minDpr) { next = Math.max(minDpr, dpr - 0.2); holdUp = 20; }
     else if (avg < 1 / 55 && dpr < MAX_DPR && holdUp <= 0) next = Math.min(MAX_DPR, dpr + 0.1);
     if (next !== dpr) { dpr = next; renderer.setPixelRatio(dpr); renderer.setSize(window.innerWidth, window.innerHeight); }
+  }
+  // a browser that doesn't use the graphics card (hardware acceleration switched off) draws everything on the processor,
+  // and then nothing runs smoothly: the start sign says so, and how to switch it on
+  {
+    let soft = false;
+    try {
+      const gl = renderer.getContext(), ext = gl.getExtension('WEBGL_debug_renderer_info');
+      soft = /swiftshader|llvmpipe|softpipe|software|basic render/i.test(String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER)));
+    } catch { /* can't tell: say nothing */ }
+    $('slowGpu').hidden = !soft;
   }
   let last = performance.now(), testHold = false;
   function frame(now) {

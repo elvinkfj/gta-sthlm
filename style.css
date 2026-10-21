@@ -224,6 +224,7 @@ body.job #wanted, body.party #wanted { top: calc(112px + env(safe-area-inset-top
 .sign { width: min(480px, 100%); box-sizing: border-box; background: var(--sign-blue); border-radius: 16px; padding: 7px; box-shadow: 0 22px 60px rgba(4, 20, 40, 0.45); animation: rise 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 @keyframes rise { from { transform: translateY(16px); } to { transform: none; } }
 .sign-inner { border: 3px solid var(--snow); border-radius: 11px; padding: 20px 22px 22px; display: grid; gap: 14px; }
+.slow-gpu { margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--sign-red); font-weight: 700; font-size: 0.9rem; line-height: 1.4; }
 .route { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 0.78rem; letter-spacing: 0.16em; text-transform: uppercase; }
 .route b { display: inline-grid; place-items: center; min-width: 2.1rem; height: 1.7rem; padding: 0 0.45rem; border-radius: 5px; background: var(--snow); color: var(--sign-blue); font: 900 1.05rem/1 var(--font-sign); letter-spacing: 0; }
 .dist { display: grid; grid-template-columns: 1fr auto; gap: 2px 18px; font-weight: 700; font-size: 1.02rem; font-variant-numeric: tabular-nums; }
@@ -424,6 +425,44 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
   body.touch.driving #btnFriends { top: calc(140px + env(safe-area-inset-top, 0px)); right: calc(16px + env(safe-area-inset-right, 0px)); }
 }
 #mpList li > span:nth-child(2) { min-width: 0; overflow-wrap: anywhere; }
+/* ---------- the tunnelbana: the board at the entrance, and the ride seen from inside the car ---------- */
+#metro { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; box-sizing: border-box; overflow-y: auto; background: rgba(6, 16, 26, 0.55); }
+.metro-sign { width: min(460px, 100%); }
+.metro-sign h2 { margin: 0; display: flex; align-items: center; gap: 12px; font: 900 1.9rem/1 var(--font-sign); }
+.metro-t { width: 1.3em; height: 1.3em; display: grid; place-items: center; border-radius: 50%; background: var(--snow); color: #1f6bc4; font-size: 0.9em; }
+.metro-info { margin: 0; font-size: 0.92rem; line-height: 1.4; }
+#metroList { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.metro-stop {
+  width: 100%; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; padding: 10px 12px; border: 0; border-radius: 9px;
+  background: rgba(255, 255, 255, 0.12); color: var(--snow); font: inherit; text-align: left; cursor: pointer; touch-action: manipulation;
+}
+.metro-stop:hover, .metro-stop:focus-visible { background: rgba(255, 255, 255, 0.24); outline: none; }
+.metro-stop b { font-weight: 900; font-size: 1.05rem; white-space: pre; }
+.metro-stop small { font-weight: 700; opacity: 0.85; }
+.metro-dots { display: flex; gap: 4px; }
+.metro-dots i { width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 0 2px var(--snow); }
+#metroRide { position: fixed; inset: 0; display: grid; grid-template-rows: auto 1fr auto; gap: 18px; padding: 22px; box-sizing: border-box; background: #1c2126; }
+body.metro #touch, body.metro #hud { visibility: hidden; }
+.metro-led { justify-self: center; display: flex; align-items: center; gap: 14px; padding: 10px 18px; border-radius: 10px; background: #050505; box-shadow: inset 0 0 0 3px #3a3f45; max-width: 100%; box-sizing: border-box; }
+.metro-led span { padding: 4px 10px; border-radius: 6px; font-weight: 900; font-size: 0.85rem; color: #fff; white-space: nowrap; }
+.metro-led b { font: 700 clamp(1rem, 3.5vw, 1.6rem)/1.2 var(--font-gauge); color: #ffb000; letter-spacing: 0.04em; }
+/* the window: tunnel lights rushing past in the dark */
+.metro-window { border-radius: 40px; overflow: hidden; box-shadow: inset 0 0 0 12px #c9ccd0, inset 0 0 0 16px #8a9096; background: #07090b; position: relative; }
+.metro-tunnel {
+  position: absolute; inset: 16px;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 220px, rgba(255, 220, 150, 0) 220px, rgba(255, 220, 150, 0.95) 290px, rgba(255, 220, 150, 0) 360px, transparent 360px 480px) 0 30% / 480px 8px repeat-x,
+    repeating-linear-gradient(90deg, transparent 0 200px, rgba(255, 220, 150, 0) 200px, rgba(255, 220, 150, 0.16) 290px, rgba(255, 220, 150, 0) 380px, transparent 380px 480px) 0 29% / 480px 46px repeat-x,
+    linear-gradient(transparent 0 56%, #2c333a 56% 57%, transparent 57% 60%, #2c333a 60% 61%, transparent 61%),
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.35) 0 4px, transparent 4px 96px) 0 0 / 96px 100%,
+    linear-gradient(#08090b, #1d2329 42%, #15191d 70%, #08090b);
+  animation: tunnelRush 0.32s linear infinite, tunnelSway 0.21s ease-in-out infinite alternate;
+}
+@keyframes tunnelRush { from { background-position: 0 30%, 0 29%, 0 0, 0 0, 0 0; } to { background-position: -480px 30%, -480px 29%, 0 0, -96px 0, 0 0; } }
+@keyframes tunnelSway { to { transform: translateY(2px); } }
+.metro-progress { height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.15); overflow: hidden; }
+.metro-progress i { display: block; height: 100%; width: 0; background: #ffb000; }
+@media (prefers-reduced-motion: reduce) { .metro-tunnel { animation: none; } }
 /* ---------- games with friends: the games on the room sign, the panel at the top and the results ---------- */
 .mp-games { display: grid; gap: 10px; padding-top: 12px; border-top: 2px solid rgba(255, 255, 255, 0.35); }
 .mp-games-head { font-weight: 700; font-size: 0.74rem; letter-spacing: 0.16em; text-transform: uppercase; }
