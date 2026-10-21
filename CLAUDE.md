@@ -23,7 +23,7 @@ The game used to be one big file and was split into the files below following **
 
 The game is these files, loaded in this order:
 
-- `index.html` (about 220 lines): only the HTML for the HUD, maps, start sign and car picker, plus the `<link>` and `<script>` tags.
+- `index.html` (about 250 lines): only the HTML for the HUD, maps, start sign and car picker, plus the `<link>` and `<script>` tags.
 - `style.css` (about 410 lines): all the styles.
 - `lib/three.min.js`: Three.js r128.
 - `src/core.js` (about 580 lines): helpers, seeded random, the Three.js check, renderer and scene, geometry helpers, textures.
@@ -44,7 +44,8 @@ The game is these files, loaded in this order:
 - `src/sound.js` (about 360 lines): synthesised engine sounds and effects.
 - `src/input.js` (about 150 lines): keyboard, touch and the start screen.
 - `src/post.js` (about 320 lines): graphics quality levels and post-processing.
-- `src/multiplayer.js` (about 980 lines): playing with friends.
+- `src/multiplayer.js` (about 1,070 lines): playing with friends.
+- `src/party.js` (about 290 lines): games with friends, so far Polis och tjuv.
 - `src/main.js` (about 160 lines): the main loop, adaptive resolution and the test hooks. Loaded last.
 
 Each part of the JavaScript starts with a section header comment. Grep for the header (or a name from the table) and read only that range:
@@ -81,6 +82,7 @@ Line numbers drift with every change, so search instead of trusting numbers. Eac
 | `src/input.js` | `input` | Keyboard, touch and the start screen | `startGame` |
 | `src/post.js` | `post-processing` | Graphics quality levels and effects | `POST` |
 | `src/multiplayer.js` | `playing with friends` | Multiplayer over WebRTC (PeerJS), with MQTT as fallback. Libraries load only when used. | `MP` |
+| `src/party.js` | `games with friends` | Games for everyone in a room (Polis och tjuv). The one who has the room keeps the score and sends it to the others as `game` events. | `PARTY` |
 | `src/main.js` | `loop` | The main loop, adaptive resolution and the test hooks | `tick`, `frame`, `window.gubbeTest` |
 
 ## How the parts depend on each other
@@ -90,6 +92,7 @@ Line numbers drift with every change, so search instead of trusting numbers. Eac
 - Car physics and `makeCar` are used by the player, traffic, police, boats (`WATER`) and multiplayer.
 - `tick` in the `loop` section calls everything once per frame: input, AI, physics steps, police, helicopter, jobs, vendors, camera, HUD, maps and sound.
 - Multiplayer (`MP`) reads the player, `MODEL` and `makeCar` to show friends and their cars.
+- The games (`PARTY`) talk to `MP` only through `MP.games(...)`, `MP.event('game', …)`, `MP.friends()` and `MP.badge(...)`.
 
 ## Adding a car (the most common request)
 

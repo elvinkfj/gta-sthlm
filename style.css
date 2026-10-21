@@ -140,24 +140,24 @@ body.touch #liftPanel { bottom: auto; top: calc(190px + env(safe-area-inset-top,
 @keyframes beacon { 50% { background: var(--sign-red); box-shadow: 0 0 12px 4px rgba(200, 16, 46, 0.8); } }
 .tag.fine { padding: 5px 11px; }
 #wanted.calm { animation: none; box-shadow: 0 0 0 2px #2f6bff; }
-body.job #wanted { top: calc(112px + env(safe-area-inset-top, 0px)); }
-/* the job you are on: what to do, how far, the clock */
-#job {
+body.job #wanted, body.party #wanted { top: calc(112px + env(safe-area-inset-top, 0px)); }
+/* the job you are on: what to do, how far, the clock (and in the same place a game with friends) */
+#job, #party {
   position: absolute; left: 50%; top: calc(58px + env(safe-area-inset-top, 0px)); transform: translateX(-50%);
   display: flex; align-items: center; gap: 11px; padding: 7px 15px 7px 9px; border-radius: 9px; background: var(--glass);
   box-shadow: 0 0 0 2px var(--sign-yellow); white-space: nowrap;
 }
-#job b { display: block; font-weight: 900; font-size: 0.95rem; }
-#job small { display: block; font-size: 0.76rem; opacity: 0.9; font-variant-numeric: tabular-nums; }
+#job b, #party b { display: block; font-weight: 900; font-size: 0.95rem; }
+#job small, #party small { display: block; font-size: 0.76rem; opacity: 0.9; font-variant-numeric: tabular-nums; }
 .job-icon { width: 30px; height: 30px; border-radius: 7px; display: grid; place-items: center; background: var(--sign-yellow); color: var(--asphalt); font: 900 0.95rem/1 var(--font-sign); }
-#jobClock { font: 700 1.25rem/1 var(--font-gauge); font-variant-numeric: tabular-nums; margin-left: 4px; }
-#jobClock:empty { display: none; }
-#bigText {
+#jobClock, #partyClock { font: 700 1.25rem/1 var(--font-gauge); font-variant-numeric: tabular-nums; margin-left: 4px; }
+#jobClock:empty, #partyClock:empty { display: none; }
+#bigText, #partyBig {
   position: fixed; left: 50%; top: 34%; transform: translate(-50%, -50%); pointer-events: none; text-align: center;
   font: 900 clamp(2.4rem, 9vw, 5.4rem)/1 var(--font-sign); color: var(--sign-yellow); letter-spacing: 0.02em;
   text-shadow: 0 4px 0 rgba(0, 0, 0, 0.35), 0 0 24px rgba(0, 0, 0, 0.45); white-space: pre-line;
 }
-#bigText small { display: block; font-size: 0.32em; color: var(--snow); margin-top: 0.5em; letter-spacing: 0.04em; }
+#bigText small, #partyBig small { display: block; font-size: 0.32em; color: var(--snow); margin-top: 0.5em; letter-spacing: 0.04em; }
 .tag.cash b { color: #7be08f; margin-left: 2px; font-variant-numeric: tabular-nums; }
 #btnJob { right: calc(30px + env(safe-area-inset-right, 0px)); bottom: calc(196px + env(safe-area-inset-bottom, 0px)); width: 62px; height: 62px; background: var(--sign-yellow); font-size: 0.8rem; }
 
@@ -340,11 +340,11 @@ body.touch .tk-sign .key { display: none; }
 }
 /* on a narrow screen the job panel goes under the street sign on the right, and the police panel under that */
 @media (max-width: 760px) {
-  #job { top: calc(210px + env(safe-area-inset-top, 0px)); left: auto; right: calc(16px + env(safe-area-inset-right, 0px)); transform: none; max-width: calc(100vw - 32px); }
-  #job small { white-space: normal; }
-  body.job #wanted, body.job.touch #wanted { top: calc(276px + env(safe-area-inset-top, 0px)); }
-  body.touch.driving #job { top: calc(226px + env(safe-area-inset-top, 0px)); }
-  body.job.touch.driving #wanted { top: calc(292px + env(safe-area-inset-top, 0px)); }
+  #job, #party { top: calc(210px + env(safe-area-inset-top, 0px)); left: auto; right: calc(16px + env(safe-area-inset-right, 0px)); transform: none; max-width: calc(100vw - 32px); }
+  #job small, #party small { white-space: normal; }
+  body.job #wanted, body.job.touch #wanted, body.party #wanted, body.party.touch #wanted { top: calc(276px + env(safe-area-inset-top, 0px)); }
+  body.touch.driving #job, body.touch.driving #party { top: calc(226px + env(safe-area-inset-top, 0px)); }
+  body.job.touch.driving #wanted, body.party.touch.driving #wanted { top: calc(292px + env(safe-area-inset-top, 0px)); }
 }
 /* ---------- playing with friends: the room sign, the chat and the friends button ---------- */
 .start-actions { display: flex; flex-wrap: wrap; gap: 10px 12px; margin-top: 4px; }
@@ -410,4 +410,27 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
   body.touch.driving #btnFriends { top: calc(140px + env(safe-area-inset-top, 0px)); right: calc(16px + env(safe-area-inset-right, 0px)); }
 }
 #mpList li > span:nth-child(2) { min-width: 0; overflow-wrap: anywhere; }
+/* ---------- games with friends: the games on the room sign, the panel at the top and the results ---------- */
+.mp-games { display: grid; gap: 10px; padding-top: 12px; border-top: 2px solid rgba(255, 255, 255, 0.35); }
+.mp-games-head { font-weight: 700; font-size: 0.74rem; letter-spacing: 0.16em; text-transform: uppercase; }
+.mp-games-rules, .mp-games-hint { margin: 0; font-size: 0.88rem; line-height: 1.4; }
+.mp-games-hint { font-weight: 700; }
+.mp-games-hint:empty { display: none; }
+#party { box-shadow: 0 0 0 2px #2f6bff; }
+#party.thief { box-shadow: 0 0 0 2px var(--sign-red); }
+#party .job-icon { background: #2f6bff; color: var(--snow); }
+#party.thief .job-icon { background: var(--sign-red); }
+#party.out .job-icon { background: #5b6168; }
+#partyBig { top: 30%; }
+#partyBoard {
+  position: fixed; left: 50%; top: 48%; transform: translate(-50%, -50%); pointer-events: none;
+  min-width: min(320px, calc(100vw - 32px)); max-width: calc(100vw - 32px); box-sizing: border-box; padding: 16px 20px 14px; border-radius: 14px;
+  background: var(--sign-blue); box-shadow: inset 0 0 0 4px var(--sign-blue), inset 0 0 0 7px var(--snow), 0 12px 30px rgba(0, 0, 0, 0.4);
+}
+#partyBoard > b { display: block; font: 900 1.5rem/1.1 var(--font-sign); margin-bottom: 8px; }
+#partyBoard ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; counter-reset: place; }
+#partyBoard li { display: flex; align-items: center; gap: 10px; font-weight: 900; font-size: 1.05rem; counter-increment: place; }
+#partyBoard li::before { content: counter(place) "."; width: 1.6em; opacity: 0.8; }
+#partyBoard li:first-child { color: var(--sign-yellow); font-size: 1.25rem; }
+#partyBoard li span:last-child { margin-left: auto; font-family: var(--font-gauge); font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: reduce) { .sign { animation: none; } #hud { transition: none; } #limit.over, #wanted, .beacon, #ticket { animation: none; } #limit.over { box-shadow: inset 0 0 0 7px var(--sign-red), 0 0 0 4px var(--sign-red); } }

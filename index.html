@@ -28,6 +28,9 @@
   <div id="loc"><span id="locStreet"></span><span id="locDistrict">Norrmalm</span></div>
   <div id="job" hidden><span class="job-icon" id="jobIcon">T</span><span><b id="jobTitle"></b><small id="jobHint"></small></span><span id="jobClock"></span></div>
   <div id="bigText" hidden></div>
+  <div id="party" hidden><span class="job-icon" id="partyIcon">P</span><span><b id="partyTitle"></b><small id="partySub"></small></span><span id="partyClock"></span></div>
+  <div id="partyBig" hidden></div>
+  <div id="partyBoard" hidden role="status"><b id="partyBoardTitle">Polis och tjuv</b><ol id="partyBoardList"></ol></div>
   <div id="wanted" hidden><span class="beacon" aria-hidden="true"></span><span><b id="wantedTitle">Polisen jagar dig</b><small id="wantedHint">Kör in till kanten och stanna</small></span></div>
   <div id="ticket" hidden role="dialog" aria-labelledby="tkTitle">
     <div class="tk-head"><span class="tk-badge">POLISEN</span><span id="tkTitle">Föreläggande av ordningsbot</span></div>
@@ -161,6 +164,12 @@
         <div class="mp-code"><span>Rumskod</span><b id="mpCodeBig">ABCD</b><small id="mpCodeHint">Skicka koden till dina vänner, så kan de gå med.</small></div>
         <div class="mp-actions" id="mpShare"><button id="mpCopy" class="btn-sign small alt" type="button">Kopiera länken</button></div>
         <ul id="mpList" aria-label="Spelare i rummet"></ul>
+        <div class="mp-games" id="mpGames">
+          <span class="mp-games-head">Lekar</span>
+          <p class="mp-games-rules"><b>Polis och tjuv:</b> en av er är polis och jagar de andra. Polisen tar en tjuv genom att köra in i hen eller springa ikapp. Varje sekund en tjuv är fri ger tjuven 1 poäng, och tar polisen tjuven får polisen sekunderna som var kvar. Alla får vara polis en gång.</p>
+          <div class="mp-actions"><button id="gameCnr" class="btn-sign" type="button">Starta polis och tjuv</button><button id="gameStop" class="btn-sign small alt" type="button" hidden>Avsluta leken</button></div>
+          <p class="mp-games-hint" id="mpGamesHint"></p>
+        </div>
         <div class="mp-chat">
           <div id="mpChatLog" aria-live="polite"></div>
           <form class="mp-say" id="mpSay" autocomplete="off"><input id="mpSayInput" class="mp-input" maxlength="120" placeholder="Skriv till dina vänner …" aria-label="Meddelande till dina vänner" enterkeyhint="send"><button class="btn-sign small" type="submit">Skicka</button></form>
@@ -236,6 +245,7 @@
 <script src="src/input.js"></script>
 <script src="src/post.js"></script>
 <script src="src/multiplayer.js"></script>
+<script src="src/party.js"></script>
 <script src="src/main.js"></script>
 </body>
 </html>

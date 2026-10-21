@@ -62,7 +62,7 @@
     else if (code === 'KeyL') toggleSiren();
     else if (code === 'KeyK') openBigmap();
     else if (code === 'KeyQ') POST.cycle();
-    else if (code === 'KeyJ') JOBS.key();
+    else if (code === 'KeyJ') { if (!PARTY.noJobs()) JOBS.key(); }
     else if (code === 'KeyV') VENDORS.letGo();
     else if (code === 'KeyZ') setBlink(1);
     else if (code === 'KeyX') setBlink(2);
@@ -130,7 +130,7 @@
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.btnJump.addEventListener(ev, () => { touchBrake = false; });
   el.btnUse.addEventListener('pointerdown', (e) => { e.preventDefault(); if (!useKey() && !MP.use() && !LIFT.use() && !VENDORS.use()) toggleCar(); });
   $('btnCars').addEventListener('pointerdown', (e) => { e.preventDefault(); openPicker(); });
-  $('btnJob').addEventListener('pointerdown', (e) => { e.preventDefault(); if (!tankFire()) JOBS.key(); });
+  $('btnJob').addEventListener('pointerdown', (e) => { e.preventDefault(); if (!tankFire() && !PARTY.noJobs()) JOBS.key(); });
   el.btnUp.addEventListener('pointerdown', (e) => { e.preventDefault(); playerShift(1); });
   el.blinkL.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); setBlink(1); });
   el.blinkR.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); setBlink(2); });

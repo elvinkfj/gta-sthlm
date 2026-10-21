@@ -22,6 +22,7 @@
       animate(dt);
       VENDORS.update(dt);
     }
+    PARTY.update();
     updateCamera(dt);
     updateHUD(dt);
     drawMap();

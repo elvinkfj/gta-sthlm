@@ -76,3 +76,42 @@ test('alla bilar och båtar går att bygga', async () => {
   expect(built.built).toBe(built.ids);
   expect(errors).toEqual([]);
 });
+
+test('polis och tjuv: polisen tar tjuven och leken räknar poäng', async () => {
+  // a pretend room with one friend, Oscar, standing a little way off; you have the room and are the police first
+  const r = await page.evaluate(() => {
+    gubbeTest.hold(true);
+    Object.assign(MP.debug.S, { code: 'TEST', host: true, myId: 'me', hostId: 'me', name: 'Elvin' });
+    const P = MP.debug.addPlayer('f1', 'Oscar', {});
+    const fx = gubbeTest.state().player.x - 6, fz = gubbeTest.state().player.z + 4;
+    const feed = () => MP.debug.take(P, [performance.now(), fx, 0, fz, 0, 0, 0, 1, 0, 0, 0]);
+    feed(); gubbeTest.run(0.2, 1 / 60, false); feed();
+    PARTY.debug.begin(['me', 'f1']);
+    const G = () => PARTY.debug.G, s = {};
+    s.count = G().ph; s.hold = PARTY.hold(); s.car = gubbeTest.state().driving;
+    PARTY.debug.advance(10.5); feed(); gubbeTest.run(0.1, 1 / 60, false);
+    s.hunt = G().ph; s.holdAfter = PARTY.hold();
+    PARTY.debug.advance(20); feed();
+    const c = driving;
+    c.x = fx + 3; c.z = fz; c.h = -Math.PI / 2; c.vx = c.vz = 0;
+    feed(); gubbeTest.run(0.05, 1 / 60, false);
+    s.after = G().ph; s.out = G().out.slice(); s.sc = G().sc.map(Math.round);
+    PARTY.debug.stopGame();
+    s.stopped = PARTY.debug.G;
+    MP.debug.leave();
+    gubbeTest.hold(false);
+    return s;
+  });
+  expect(r.count).toBe('count');
+  expect(r.hold).toBe(true);
+  expect(r.car).toBe('polis');
+  expect(r.hunt).toBe('hunt');
+  expect(r.holdAfter).toBe(false);
+  expect(r.after).toBe('end');
+  expect(r.out).toEqual([false, true]);
+  // Oscar was free for about 20 seconds, and the police got the rest of the round
+  expect(r.sc[1]).toBeGreaterThanOrEqual(20);
+  expect(r.sc[0] + r.sc[1]).toBeGreaterThanOrEqual(178);
+  expect(r.stopped).toBeNull();
+  expect(errors).toEqual([]);
+});

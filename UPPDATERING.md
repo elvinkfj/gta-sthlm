@@ -8,7 +8,7 @@ Varje punkt blir en egen PR. Vi tar dem i ordning och bockar av när de är klar
 
 Lekarna läggs i en ny fil, `src/party.js`, som laddas direkt efter `src/multiplayer.js`. Den som har rummet startar en lek från rumsskylten (P), och alla i rummet är med.
 
-- [ ] **Polis och tjuv.** En spelare är polis och får en polisbil med blåljus, de andra är tjuvar. Polisen tar en tjuv genom att köra in i hen eller stå tätt intill tills tjuven står still. En runda är 5 minuter. Tjuvarna får poäng för varje sekund de är fria, polisen för varje tjuv hen tar. Sedan byter ni roller. Poängen står uppe på skärmen.
+- [x] **Polis och tjuv.** En spelare är polis och får en polisbil med blåljus, de andra är tjuvar. Polisen tar en tjuv genom att köra in i hen eller springa ikapp. En runda är 3 minuter. Tjuvarna får poäng för varje sekund de är fria, och polisen får sekunderna som var kvar för varje tjuv hen tar. Sedan byter ni roller. Poängen står uppe på skärmen. (Klar: `src/party.js`.)
 - [ ] **Gatlopp mot varandra.** Den som har rummet väljer ett av de fyra gatloppen. Alla flyttas till startpelaren och får samma nedräkning. Under loppet syns vem som leder (1:a, 2:a, 3:a…), och i mål kommer en prispall med tiderna.
 - [ ] **Kurragömma.** En letar, de andra gömmer sig. De som gömmer sig har 60 sekunder på sig medan den som letar har svart skärm. Sedan syns de inte på kartan och namnet syns inte genom husen. Den som letar hittar någon genom att gå eller köra nära nog. Sista som hittas vinner.
 
