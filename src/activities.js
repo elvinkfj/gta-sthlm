@@ -419,8 +419,9 @@
       removeCar(c);
       pay(kr, 'Bilskroten köpte ' + M.def + '.');
     }
-    function startRace(r) {
-      job = { kind: 'race', race: r, car: driving, i: 1, t: -3.5, offT: 0 };
+    // party: a race against friends (PARTY), told the time at the finish
+    function startRace(r, party) {
+      job = { kind: 'race', race: r, car: driving, i: 1, t: -3.5, offT: 0, party };
       goalBeam.visible = true;
       route = null;
       big('3', r.name);
@@ -441,7 +442,7 @@
       if (bigT > 0 && (bigT -= dt) <= 0) el2.big.hidden = true;
       // near a race start in a car, with nothing else on: say so once
       nearRace = null;
-      if (driving && !job) for (const r of RACES) if (Math.hypot(r.pts[0].x - driving.x, r.pts[0].z - driving.z) < 11) nearRace = r;
+      if (driving && !job && !PARTY.busy()) for (const r of RACES) if (Math.hypot(r.pts[0].x - driving.x, r.pts[0].z - driving.z) < 11) nearRace = r;
       if (nearRace && nearRace !== update.lastNear) toast('Gatlopp: ' + nearRace.name + (records[nearRace.id] ? ', rekord ' + fmtTime(records[nearRace.id]) : '') + '. Tryck J för att starta.');
       update.lastNear = nearRace;
       for (const b of startBeams) b.visible = !job || job.kind !== 'race';
@@ -481,6 +482,7 @@
             const t = job.t, rec = records[R.id], best = !rec || t < rec;
             if (best) records[R.id] = t;
             save();
+            if (job.party) job.party(t);
             big('MÅL! ' + fmtTime(t), best ? (rec ? 'Nytt rekord! Förra: ' + fmtTime(rec) : 'Första rekordet på ' + R.name) : 'Rekord: ' + fmtTime(rec), 4);
             pay(best ? 600 : 250, R.name + ' klart.');
             end();
@@ -672,7 +674,7 @@
       let icon, title, hint, clockTxt = '';
       if (job.kind === 'race') {
         icon = '⚑'; title = 'Gatlopp: ' + job.race.name;
-        hint = job.t < 0 ? 'Gör dig redo …' : 'Kontroll ' + Math.min(job.i, job.race.pts.length - 1) + ' av ' + (job.race.pts.length - 1) + ' · ' + fmtDist(d) + (records[job.race.id] ? ' · rekord ' + fmtTime(records[job.race.id]) : '');
+        hint = job.t < 0 ? 'Gör dig redo …' : (job.party ? PARTY.place() + ' · ' : '') + 'Kontroll ' + Math.min(job.i, job.race.pts.length - 1) + ' av ' + (job.race.pts.length - 1) + ' · ' + fmtDist(d) + (records[job.race.id] ? ' · rekord ' + fmtTime(records[job.race.id]) : '');
         clockTxt = job.t < 0 ? '' : fmtTime(job.t);
       } else if (job.kind === 'taxi') {
         icon = 'T'; title = job.phase === 'ride' ? 'Taxi till ' + job.goal.name : 'Taxi: hämta kunden';
@@ -759,6 +761,8 @@
     }
     return {
       key, update, hud, drawMini, drawBig, entered, RACES, PLACES,
+      // a street race against friends: the race r, with done(time) at the finish (any job you are on ends)
+      partyRace(r, done) { if (job) end(); startRace(r, done); },
       // paying out of the Kassa: false (and nothing taken) when there is not enough
       spend(kr) { if (earned < kr) return false; earned -= kr; save(); return true; },
       // money from elsewhere (the Dalahästar's finder's fee), without a word of its own
