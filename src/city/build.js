@@ -165,12 +165,16 @@
   const GREEN_ISLANDS = ['Skeppsholmen', 'Kastellholmen', 'Djurgården', 'Långholmen'];
   /* ---------- Gröna Lund: the amusement park on Djurgården's shore ---------- */
   // A Ferris wheel turning slowly on its A-frames, the free-fall tower whose ring of seats climbs to the top and drops,
-  // a carousel and a roller coaster, behind the gate with the sign. The moving parts turn in TIVOLI.update.
+  // a carousel and a roller coaster with its train, behind the gate with the sign. The moving parts turn in
+  // TIVOLI.update; you can ride them all (RIDES, src/rides.js), which is why the wheel's speed, the tower's cycle and the
+  // train can be read and set from outside.
   const TIVOLI = (() => {
-    const T = { wheel: null, gondolas: [], ring: null, carousel: null, t: 0, ringY: 2 };
+    // wheelA, wheelSpeed: the wheel's angle and how fast it turns; fall: where the tower is in its cycle (see update)
+    const T = { wheel: null, gondolas: [], ring: null, carousel: null, coaster: null, t: 0, ringY: 2, wheelA: 0, wheelSpeed: 0.07, fall: 0 };
     const mat = std({ vertexColors: true, roughness: 0.45, metalness: 0.25 });
     const mesh = (m, x, y, z) => { const o = new THREE.Mesh(m.build(), mat); o.position.set(x, y, z); o.castShadow = true; o.receiveShadow = true; scene.add(o); return o; };
     const WHEEL = { x: 1330, z: 455, R: 16, y: 19 }, TOWER = { x: 1405, z: 575, h: 80 }, CAROUSEL = { x: 1370, z: 540 };
+    Object.assign(T, { WHEEL, TOWER, CAROUSEL });
     T.build = () => {
       // the Ferris wheel: A-frames either side, and the wheel (rims, spokes, hub) in a group that turns
       {
@@ -239,6 +243,20 @@
           addCircle(q.x, q.z, 0.3, q.y);
         }
         const o = new THREE.Mesh(m.build(), mat); o.castShadow = true; scene.add(o);
+        // the train: three cars, red, yellow and blue, two seats in each, with a lap bar; the station at the lowest point
+        const L = curve.getLength(), cars = [];
+        let su = 0, low = Infinity;
+        for (let i = 0; i < 200; i++) { const y = curve.getPointAt(i / 200).y; if (y < low) { low = y; su = i / 200; } }
+        [0xd8203a, 0xf2c200, 0x1f6bd8].forEach((c, k) => {
+          const g = new Merger();
+          g.box(1.5, 0.6, 2.1, c, 0, 0.75, 0); g.box(1.5, 0.7, 0.2, c, 0, 1.3, -0.95); g.box(1.5, 0.7, 0.2, c, 0, 1.3, 0.05);
+          g.box(1.3, 0.12, 0.12, 0xd6d8da, 0, 1.25, 0.6); g.box(1.3, 0.12, 0.12, 0xd6d8da, 0, 1.25, -0.4);
+          if (k === 0) g.box(1.5, 0.45, 0.5, c, 0, 0.9, 1.25);
+          g.box(1.6, 0.2, 2.2, 0x2a2e33, 0, 0.35, 0);
+          cars.push(mesh(g, 0, 0, 0));
+        });
+        // s: how far along the track from the station; stopT: seconds left standing at the station
+        T.coaster = { curve, L, su, cars, s: 0, v: 0, stopT: 6 };
       }
       // the gate on the road, its sign lit
       {
@@ -255,15 +273,20 @@
       }
       mapLabels.push(['Gröna Lund', 1330, 530, 'landmark']);
     };
+    // where the train is at s metres from the station, and which way it points
+    const _q = new THREE.Vector3();
+    T.trackAt = (s) => { const C = T.coaster, u = (((C.su + s / C.L) % 1) + 1) % 1; return { p: C.curve.getPointAt(u), d: C.curve.getTangentAt(u) }; };
     T.update = (dt) => {
       T.t += dt;
       if (!T.wheel) return;
-      const a = T.t * 0.07;
+      T.wheelA += dt * T.wheelSpeed;
+      const a = T.wheelA;
       T.wheel.rotation.z = a;
       T.gondolas.forEach((g, k) => { const b = a + (k / T.gondolas.length) * TAU; g.position.set(WHEEL.x + Math.cos(b) * WHEEL.R, WHEEL.y + Math.sin(b) * WHEEL.R, WHEEL.z); });
       T.carousel.rotation.y = T.t * 0.6;
-      // the free fall: up slowly, a wait at the top, the drop, then the brakes
-      const c = T.t % 22, top = TOWER.h - 6;
+      // the free fall: up slowly, a wait at the top, the drop, then the brakes, and a few seconds at the bottom
+      T.fall = (T.fall + dt) % 22;
+      const c = T.fall, top = TOWER.h - 6;
       let y;
       if (c < 9) y = lerp(2, top, c / 9);
       else if (c < 12) y = top;
@@ -271,6 +294,21 @@
       else if (c < 17) y = lerp(14, 2, (c - 15) / 2);
       else y = 2;
       T.ring.position.y = y;
+      // the train: rolls by its own weight (fast low down, slow at the top), brakes into the station after two laps and
+      // stands there a few seconds, then sets off again
+      const C = T.coaster;
+      if (C.stopT > 0) { C.stopT -= dt; C.v = 0; }
+      else {
+        const h = T.trackAt(C.s).p.y, free = Math.sqrt(25 + 2 * 9.81 * Math.max(0, 21 - h)), left = 2 * C.L - C.s;
+        const want = left < 30 ? Math.min(free, 1 + left * 0.6) : free;
+        C.v += clamp(want - C.v, -12 * dt, 6 * dt);
+        C.s += C.v * dt;
+        if (C.s >= 2 * C.L) { C.s = 0; C.v = 0; C.stopT = 6; }
+      }
+      C.cars.forEach((m, k) => {
+        const { p, d } = T.trackAt(C.s - k * 2.4);
+        m.position.copy(p); m.lookAt(_q.copy(p).add(d));
+      });
     };
     return T;
   })();

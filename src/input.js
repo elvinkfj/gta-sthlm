@@ -48,7 +48,7 @@
     if (repeat) return;
     // under arrest most keys do nothing: you can still look at the map, the help and the sound, and E moves things on
     if (policeStop && policeStop.locked && !['KeyE', 'Enter', 'KeyH', 'KeyT', 'KeyK', 'KeyQ'].includes(code) && !(policeStop.phase === 'jail' && code === 'Space')) return;
-    if (code === 'KeyE' || code === 'Enter') { if (!useKey() && !MP.use() && !FLY.use() && !CHUTE.use() && !METRO.use() && !LIFT.use() && !VENDORS.use()) toggleCar(); }
+    if (code === 'KeyE' || code === 'Enter') { if (!useKey() && !MP.use() && !FLY.use() && !CHUTE.use() && !METRO.use() && !RIDES.use() && !LIFT.use() && !VENDORS.use()) toggleCar(); }
     else if (/^(Digit|Numpad)[0-5]$/.test(code)) LIFT.digit(Number(code.slice(-1)));
     else if (code === 'Space') { if (!CHUTE.pull()) jumpQueued = true; }
     else if (code === 'KeyH') el.help.hidden = !el.help.hidden;
@@ -129,7 +129,7 @@
   stick.addEventListener('pointercancel', endStick);
   el.btnJump.addEventListener('pointerdown', (e) => { e.preventDefault(); if (CHUTE.pull()) return; touchBrake = true; jumpQueued = true; });
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.btnJump.addEventListener(ev, () => { touchBrake = false; });
-  el.btnUse.addEventListener('pointerdown', (e) => { e.preventDefault(); if (!useKey() && !MP.use() && !FLY.use() && !CHUTE.use() && !METRO.use() && !LIFT.use() && !VENDORS.use()) toggleCar(); });
+  el.btnUse.addEventListener('pointerdown', (e) => { e.preventDefault(); if (!useKey() && !MP.use() && !FLY.use() && !CHUTE.use() && !METRO.use() && !RIDES.use() && !LIFT.use() && !VENDORS.use()) toggleCar(); });
   $('btnCars').addEventListener('pointerdown', (e) => { e.preventDefault(); openPicker(); });
   $('btnJob').addEventListener('pointerdown', (e) => { e.preventDefault(); if (!tankFire() && !PARTY.noJobs()) JOBS.key(); });
   el.btnUp.addEventListener('pointerdown', (e) => { e.preventDefault(); playerShift(1); });

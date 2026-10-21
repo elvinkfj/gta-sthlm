@@ -56,6 +56,7 @@
   <div id="toast" hidden></div>
   <div id="prompt" hidden><span class="key">E</span><span id="promptText">Kliv in</span></div>
   <div id="limit" hidden aria-label="Hastighetsgräns"><span id="limitNum">40</span></div>
+  <div id="rideDash" hidden><b id="rideName">Gröna Lund</b><small id="rideInfo"></small></div>
   <div id="chuteDash" hidden><b id="chuteAlt">Höjd 0 m</b><small id="chuteHelp"></small></div>
   <div id="heliDash" hidden><div class="speed"><span id="heliKmh">0</span><small>km/h</small></div><b id="heliAlt">Höjd 0 m</b><small id="heliHelp"></small></div>
   <div id="dash" hidden>
@@ -88,6 +89,7 @@
     <span class="key">Helikopter</span><span>Står på plattan i slutet av parkeringen vid Skeppsbron. E kliver in. Mellanslag stiger, Shift sjunker, W och S flyger, A och D svänger. Landa på marken och tryck E för att kliva ur. Prova att landa på Kaknästornet!</span>
     <span class="key">Fallskärm</span><span>Tryck E i helikoptern uppe i luften, eller vid foten av Kaknästornet eller Hötorgsskrapan vid Sveavägen, så hoppar du. Mellanslag vecklar ut fallskärmen. A och D svänger, W glider fortare och S långsammare</span>
     <span class="key">T-bana</span><span>Gå fram till en blå T-skylt och tryck E. Välj station (eller tryck 1–9), betala 39 kr och åk. Utan pengar kan du planka, men då kan det bli biljettkontroll</span>
+    <span class="key">Gröna Lund</span><span>Gå fram till pariserhjulet, fritt fall-tornet, karusellen eller berg-och-dalbanan och tryck E. En åktur kostar 30 kr, och kameran sitter i vagnen. Titta runt med musen</span>
     <span class="key">Glass</span><span>Glasskiosk och ballongförsäljare vid Skeppsbron, i Kungsträdgården, på Medborgarplatsen och på Djurgården. Gå fram och tryck E för att köpa</span>
     <span class="key">V</span><span>Släpp en ballong</span>
     <span class="key">R</span><span>Ställ bilen på gatan igen, eller båten ute på öppet vatten</span>
@@ -272,6 +274,7 @@
 <script src="src/helicopter.js"></script>
 <script src="src/parachute.js"></script>
 <script src="src/metro.js"></script>
+<script src="src/rides.js"></script>
 <script src="src/gameplay.js"></script>
 <script src="src/hud.js"></script>
 <script src="src/sound.js"></script>

@@ -11,7 +11,7 @@
   let touchBrake = false, isTouch = window.matchMedia('(pointer: coarse)').matches;
 
   function readInput() {
-    if (!started || paused() || inCustody() || (JOBS.job && JOBS.job.kind === 'race' && JOBS.job.t < 0) || PARTY.hold() || METRO.riding) return { fwd: 0, right: 0, run: false, brake: !!driving };
+    if (!started || paused() || inCustody() || (JOBS.job && JOBS.job.kind === 'race' && JOBS.job.t < 0) || PARTY.hold() || METRO.riding || RIDES.on) return { fwd: 0, right: 0, run: false, brake: !!driving };
     const k = keys;
     const fwd = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0) - joy.y;
     const right = (k.KeyD || k.ArrowRight ? 1 : 0) - (k.KeyA || k.ArrowLeft ? 1 : 0) + joy.x;
@@ -27,7 +27,7 @@
   }
 
   function findNearCar() {
-    if (driving || MP.ride || FLY.on || CHUTE.on || METRO.riding || !started || (policeStop && policeStop.locked)) return null;
+    if (driving || MP.ride || FLY.on || CHUTE.on || METRO.riding || RIDES.on || !started || (policeStop && policeStop.locked)) return null;
     let best = null, bd = Infinity;
     for (const c of cars) {
       // (a friend's car you can only ride along in, and the sjöpolis's and the navy's boats can't be taken)
@@ -365,7 +365,7 @@
     if (policeStop && policeStop.locked) return;
     if (FLY.on) { toast('Landa och kliv ur helikoptern först.'); return; }
     if (CHUTE.on) { toast('Vänta tills du har landat.'); return; }
-    if (METRO.riding) return;
+    if (METRO.riding || RIDES.on) return;
     let spot = null;
     // riding in a friend's boat out on the water: a car has to wait for a quay, a boat is put beside theirs
     if (MP.ride) {
@@ -467,6 +467,8 @@
     else if (MP.ride) { const c = MP.ride; player.x = c.x; player.z = c.z; player.y = 0; player.vx = c.vx; player.vz = c.vz; player.vy = 0; player.rot = c.h; }
     else if (FLY.on) { const H = FLY.heli; player.x = H.x; player.z = H.z; player.y = H.y; player.vx = H.vx; player.vz = H.vz; player.vy = 0; player.rot = H.h; }
     else if (CHUTE.on) CHUTE.step(dt);
+    // (on a ride at Gröna Lund RIDES puts you in your seat, or you stand in the queue)
+    else if (RIDES.on) { player.vx = player.vz = player.vy = 0; }
     else personMove(player, dt, pIntent);
     for (const p of persons) {
       // someone who climbed out of a wreck during this step gets their first plan next frame
@@ -577,6 +579,17 @@
     return Math.max(0.1, tmin);
   }
   function updateCamera(dt) {
+    // on a ride at Gröna Lund the camera sits in your seat
+    const seatView = RIDES.view();
+    if (seatView) {
+      const p = seatView.pos, d = seatView.dir;
+      camera.position.copy(p); camTarget.copy(p);
+      camera.lookAt(p.x + d.x, p.y + d.y, p.z + d.z);
+      sky.position.copy(camera.position);
+      sun.position.copy(camTarget).add(SUN_OFF);
+      sun.target.position.copy(camTarget);
+      return;
+    }
     // in the back of a police car, or riding along with a friend, the camera follows the car just as when you drive
     const car = driving || (policeStop && policeStop.riding ? policeStop.car : null) || MP.ride;
     // in the helicopter the camera hangs behind it and turns with it
