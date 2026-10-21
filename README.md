@@ -19,6 +19,7 @@ I spelet ser ni varandra gå, springa och hoppa, med namnet ovanför huvudet. Na
 - **Åk med:** gå fram till en väns bil, båt eller moped när vännen sitter vid ratten och tryck E (Åk med på mobilen). Du sätter dig bredvid föraren, och fler får plats i baksätet och i bussen. E igen kliver ur, och i farten hoppar du ur och slår i marken. Ur en båt kliver du bara i land vid en kaj.
 - **Gå till en vän:** i rumsskylten (P) står alla i rummet. Gå till ställer dig på trottoaren bredvid den vännen, var i stan hen än är.
 - **Chatt:** tryck Y, skriv och tryck Enter. Meddelandena syns nere till vänster en stund. I rumsskylten kan du också chatta, och där står de senaste meddelandena kvar.
+- **Polis och tjuv:** den som har rummet trycker **Starta polis och tjuv** i rumsskylten (P). En av er blir polis och får en polisbil med blåljuset på, och de andra är tjuvar. Polisen står still och räknar till tio medan tjuvarna sticker, och sedan börjar jakten. Polisen tar en tjuv genom att köra in i hen eller springa ikapp. En runda är tre minuter. Varje sekund en tjuv är fri ger tjuven 1 poäng, och tar polisen en tjuv får polisen sekunderna som var kvar av rundan. Alla får vara polis en gång, och sist visas vem som vann. Skylten ovanför huvudet visar vem som är polis, tjuv och tagen, och polisen har en blinkande ring på kartorna. Mitt i en lek går det inte att ta jobb eller använda Gå till. Kommer någon in i rummet under leken är hen med nästa gång.
 
 Var och en har sin egen trafik, sin egen polis och sina egna dalahästar, så en vän kan köra genom en bil som bara du ser. Stänger den som har rummet sitt spel stängs rummet för alla, och då kan någon annan skapa ett nytt.
 
@@ -49,7 +50,7 @@ Spelarnas webbläsare pratar direkt med varandra (WebRTC). Den fria servern hos 
 | T | Ljud av och på |
 | Q | Grafikkvalitet: hög, mellan eller enkel |
 | H | Visa hjälp |
-| P | Spela med vänner: skapa ett rum, gå med i en väns rum eller gå till en vän |
+| P | Spela med vänner: skapa ett rum, gå med i en väns rum, gå till en vän eller starta polis och tjuv |
 | Y | Chatta med vännerna i rummet |
 
 På mobil och surfplatta finns en styrspak och knappar på skärmen, ▲ ▼ för att växla när du kör och en Jobb-knapp (som skjuter när du kör stridsvagnen). Blinkersen slår du på och av genom att trycka på pilarna bredvid hastighetsmätaren. Knappen Vänner bredvid kartan öppnar rumsskylten.

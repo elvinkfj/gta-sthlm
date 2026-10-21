@@ -34,6 +34,8 @@
     const cleanText = (t) => String(t || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 120);
     const r1 = (v) => Math.round(v * 10) / 10, r2 = (v) => Math.round(v * 100) / 100, r3 = (v) => Math.round(v * 1000) / 1000;
     const inRoom = () => !!S.code;
+    // the games you play together (src/party.js): what a game message may hold, what to do with one, and whether one is on
+    let gameHooks = null;
 
     /* ---------- how you look ---------- */
     const look = () => ({ skin: playerId.skin, shirt: playerId.shirt, pants: playerId.pants, hair: playerId.hair, hat: playerId.hat, hatColor: playerId.hatColor, sleeves: playerId.sleeves });
@@ -482,7 +484,7 @@
       const L = cleanLook(lk), ident = makeIdentity(L);
       const person = makePerson(ident, player.x, player.z, null);
       person.remote = true; person.keep = true; person.asleep = true; person.model.group.visible = false;
-      const P = { id, name: cleanName(name) || 'Vän', look: L, ident, person, car: null, snaps: [], offset: null, st: null, stars: 0, tag: makeTag(), tagKey: '', mesh: null, seat: null };
+      const P = { id, name: cleanName(name) || 'Vän', look: L, ident, person, car: null, snaps: [], offset: null, st: null, stars: 0, tag: makeTag(), tagKey: '', mesh: null, seat: null, badge: null };
       drawTag(P);
       if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { P.tagKey = ''; drawTag(P); }).catch(() => {});
       S.players.set(id, P);
@@ -507,7 +509,8 @@
       removeCar(c);
       P.car = null;
     }
-    // the name over a friend's head (or car), and their stars when the police are after them; seen through walls
+    // the name over a friend's head (or car), and their stars when the police are after them; seen through walls. In a game
+    // their part in it goes before the name, and the sign takes its colour
     function makeTag() {
       const cv = document.createElement('canvas');
       cv.width = 512; cv.height = 96;
@@ -521,20 +524,24 @@
       return s;
     }
     function drawTag(P) {
-      const key = P.name + ':' + P.look.shirt + ':' + P.stars;
+      const b = P.badge, key = P.name + ':' + P.look.shirt + ':' + P.stars + ':' + (b ? b.text + b.bg : '');
       if (key === P.tagKey) return;
       P.tagKey = key;
       const cv = P.tag.material.map.image, g = cv.getContext('2d'), stars = '★'.repeat(P.stars);
       g.clearRect(0, 0, cv.width, cv.height);
+      g.font = '900 34px Overpass, Arial, sans-serif';
+      const bw = b ? Math.min(150, g.measureText(b.text).width) + 14 : 0;
       g.font = '900 46px Overpass, Arial, sans-serif';
-      const tw = Math.min(330, g.measureText(P.name).width);
+      const tw = Math.min(330 - bw, g.measureText(P.name).width);
       g.font = '900 38px Arial, sans-serif';
-      const sw = stars ? g.measureText(stars).width + 14 : 0, w = Math.min(cv.width - 8, 86 + tw + sw), x0 = (cv.width - w) / 2;
-      roundRect(g, x0, 8, w, 78, 24); g.fillStyle = '#0a5ba8'; g.fill(); g.lineWidth = 6; g.strokeStyle = '#ffffff'; g.stroke();
+      const sw = stars ? g.measureText(stars).width + 14 : 0, w = Math.min(cv.width - 8, 86 + bw + tw + sw), x0 = (cv.width - w) / 2;
+      roundRect(g, x0, 8, w, 78, 24); g.fillStyle = b ? b.bg : '#0a5ba8'; g.fill(); g.lineWidth = 6; g.strokeStyle = '#ffffff'; g.stroke();
       g.beginPath(); g.arc(x0 + 40, 47, 15, 0, TAU); g.fillStyle = hex(P.look.shirt); g.fill(); g.lineWidth = 4; g.stroke();
-      g.textBaseline = 'middle'; g.fillStyle = '#ffffff'; g.font = '900 46px Overpass, Arial, sans-serif';
-      g.fillText(P.name, x0 + 66, 50, 330);
-      if (stars) { g.fillStyle = '#f7c600'; g.font = '900 38px Arial, sans-serif'; g.fillText(stars, x0 + 66 + tw + 14, 49); }
+      g.textBaseline = 'middle';
+      if (b) { g.fillStyle = '#f7c600'; g.font = '900 34px Overpass, Arial, sans-serif'; g.fillText(b.text, x0 + 66, 50, 150); }
+      g.fillStyle = '#ffffff'; g.font = '900 46px Overpass, Arial, sans-serif';
+      g.fillText(P.name, x0 + 66 + bw, 50, 330 - bw);
+      if (stars) { g.fillStyle = '#f7c600'; g.font = '900 38px Arial, sans-serif'; g.fillText(stars, x0 + 66 + bw + tw + 14, 49); }
       P.tag.material.map.needsUpdate = true;
     }
     // d: [time, x, y, z, heading, vx, vz, flags (1 on the ground, 2 in a vehicle, 4 handcuffed), stars, riding with (id or 0), car or 0]
@@ -653,6 +660,7 @@
       if (k === 'dent') return typeof m.c === 'string' && Array.isArray(m.a) && m.a.length === 8 ? Object.assign(e, { c: m.c.slice(0, 12), a: m.a.map((v) => num(v)) }) : null;
       if (k === 'fire') return Object.assign(e, { a: num(m.a) });
       if (k === 'look') return Object.assign(e, { look: cleanLook(m.look) });
+      if (k === 'game') { const g = gameHooks ? gameHooks.clean(m.g) : null; return g ? Object.assign(e, { g }) : null; }
       return null;
     }
     function heard(P, m) {
@@ -679,6 +687,9 @@
         dress(P.person.model, P.ident);
         if (atWheel) setOccupant(P.car, P.ident);
         drawTag(P); renderList();
+      } else if (m.k === 'game') {
+        const g = gameHooks ? gameHooks.clean(m.g) : null;
+        if (g) gameHooks.heard(P.id, g);
       }
     }
 
@@ -793,6 +804,7 @@
     // straight to a friend: out of your car and onto the pavement beside them
     function goTo(P) {
       if (policeStop && policeStop.locked) { status('Det går inte nu, du är gripen.', true); return; }
+      if (gameHooks && gameHooks.busy()) { status('Det går inte mitt i en lek. Vänta tills den är slut.', true); return; }
       // (the game stands still behind the sign: bring everyone up to date first)
       update(0);
       if (!P.st) { status(P.name + ' har inte kommit in i spelet än.', true); return; }
@@ -1017,6 +1029,7 @@
           if (d > R) { x = px + (dx / d) * R; z = pz + (dz / d) * R; }
           g.beginPath(); g.arc(x, z, 6 * u, 0, TAU);
           g.fillStyle = hex(P.look.shirt); g.fill(); g.lineWidth = 2.2 * u; g.strokeStyle = '#ffffff'; g.stroke();
+          if (P.badge && P.badge.ring) { g.beginPath(); g.arc(x, z, 10.5 * u, 0, TAU); g.lineWidth = 3 * u; g.strokeStyle = Math.floor(clock * 4) % 2 ? '#e0102e' : '#2f6bff'; g.stroke(); }
         }
       },
       drawBig(g, toX, toY, text) {
@@ -1025,10 +1038,31 @@
           const c = P.car && P.car.occupant === P.ident ? P.car : null, X = toX(c ? c.x : P.person.x), Y = toY(c ? c.z : P.person.z);
           g.beginPath(); g.arc(X, Y, 7.5, 0, TAU);
           g.fillStyle = hex(P.look.shirt); g.fill(); g.lineWidth = 2.5; g.strokeStyle = '#ffffff'; g.stroke();
-          text(P.name, X, Y - 16, '800 13px Overpass, sans-serif', '#0a5ba8');
+          if (P.badge && P.badge.ring) { g.beginPath(); g.arc(X, Y, 12.5, 0, TAU); g.lineWidth = 3.5; g.strokeStyle = Math.floor(clock * 4) % 2 ? '#e0102e' : '#2f6bff'; g.stroke(); }
+          text((P.badge ? P.badge.text + ' ' : '') + P.name, X, Y - 16, '800 13px Overpass, sans-serif', P.badge ? P.badge.bg : '#0a5ba8');
         }
       },
+      // for the games you play together (src/party.js)
+      games(hooks) { gameHooks = hooks; },
+      get inRoom() { return inRoom(); }, get host() { return S.host; }, get myId() { return S.myId; }, get hostId() { return S.hostId; }, get myName() { return S.name; },
+      // everyone else in the room, and where you see them: in a car (its length and width) or on foot
+      friends() {
+        return [...S.players.values()].map((P) => {
+          const st = P.st, wheel = P.car && P.car.occupant === P.ident ? P.car : null, c = st ? wheel || (st.ride ? carOf(st.ride) : null) : null;
+          const at = !st ? null : c ? { x: c.x, y: 0, z: c.z, h: c.h, L: c.M.L, W: c.M.W } : { x: P.person.x, y: P.person.y, z: P.person.z, h: 0, L: 0, W: 0 };
+          return { id: P.id, name: P.name, shirt: P.look.shirt, at };
+        });
+      },
+      // their part in a game, on the sign over their head and on the maps (ring: a flashing ring round their dot)
+      badge(id, text, bg, ring) {
+        const P = S.players.get(id);
+        if (!P) return;
+        P.badge = text ? { text, bg, ring: !!ring } : null;
+        drawTag(P);
+      },
+      // a line in the chat from the game itself
+      note(text) { chat('Leken', 0xf7c600, text); },
       // for the tests
-      debug: { S, get players() { return [...S.players.values()]; }, hostRoom, joinRoom, leave, say, goTo, seatsOf }
+      debug: { S, get players() { return [...S.players.values()]; }, hostRoom, joinRoom, leave, say, goTo, seatsOf, addPlayer, take }
     };
   })();

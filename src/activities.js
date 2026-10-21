@@ -750,7 +750,8 @@
     // say what J does the first time you sit in a car that has a job
     function entered(c) {
       const k = kindOf(c);
-      if (k && !job && !(hinted[k])) {
+      // (not in a game with friends, where J does nothing)
+      if (k && !job && !(hinted[k]) && !PARTY.busy()) {
         hinted[k] = true;
         setTimeout(() => toast({ taxi: 'Tryck J för att köra taxi.', paket: 'Tryck J för att köra ut paket.', buss: 'Tryck J för att köra en busslinje.', mat: 'Tryck J för att köra ut mat.',
           polis: 'Tryck J för ett polisuppdrag: stoppa en rånare.', battaxi: 'Tryck J för att köra båttaxi mellan bryggorna.' }[k]), 2600);
