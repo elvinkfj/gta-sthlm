@@ -38,7 +38,8 @@ The game is these files, loaded in this order:
 - `src/traffic.js` (about 300 lines): the traffic AI and the pedestrians.
 - `src/police.js` (about 870 lines): wanted stars, chases, the sjöpolis and the navy, the helicopter.
 - `src/police-stops.js` (about 740 lines): police on the ground (stops, arrests, the cells), then the traffic spawned at start.
-- `src/activities.js` (about 1,170 lines): Högvakten and the Dalahäst hunt, jobs and street races, ice cream kiosks and balloon sellers.
+- `src/activities.js` (about 1,180 lines): Högvakten and the Dalahäst hunt, jobs and street races, ice cream kiosks and balloon sellers.
+- `src/helicopter.js` (about 240 lines): the helicopter you fly yourself, its pad on Skeppsbron and the landing on Kaknästornet.
 - `src/gameplay.js` (about 610 lines): input state, the car picker, traffic upkeep, one simulation step, moving the meshes and the camera.
 - `src/hud.js` (about 390 lines): on-screen text, the minimap and the big map.
 - `src/sound.js` (about 360 lines): synthesised engine sounds and effects.
@@ -75,6 +76,7 @@ Line numbers drift with every change, so search instead of trusting numbers. Eac
 | `src/police-stops.js` | `police on the ground…` | Stops, constables on foot, arrests and the cells | `policeStop`, `beginStop`, `useKey` |
 | `src/police-stops.js` | `initial traffic` | Spawns traffic, police and moored boats at start | |
 | `src/activities.js` | `Högvakten and the Dalahäst hunt`, `jobs and street races`, `ice cream kiosks and balloon sellers` | Side activities | `JOBS`, `VENDORS` |
+| `src/helicopter.js` | `the helicopter you fly` | The red Bell 429 (the police helicopter's model, `buildHeli(true)`), its flying, landing on roofs, the pad and its HUD box. While you fly, `driving` is null and the player follows it, like riding along. | `FLY` |
 | `src/gameplay.js` | `game state`, `car picker`, `traffic upkeep` | Input state, picking a car, keeping traffic around the player | `keys`, `readInput`, `chooseModel`, `manageTraffic` |
 | `src/gameplay.js` | `simulation step`, `visuals` | One physics step, moving meshes, the camera | `physicsStep`, `animate`, `updateCamera` |
 | `src/hud.js` | `HUD`, `minimap`, `the big map` | On-screen text and both maps | `updateHUD`, `drawMap`, `bigmap`, `drawBigmap` |

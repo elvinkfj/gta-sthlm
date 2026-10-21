@@ -118,6 +118,13 @@ body.touch #liftPanel { bottom: auto; top: calc(190px + env(safe-area-inset-top,
 .hp { height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.14); overflow: hidden; }
 .hp i { display: block; height: 100%; width: 100%; border-radius: inherit; background: #4cc26a; }
 
+/* the helicopter: speed and height where the car's dashboard goes */
+#heliDash {
+  position: absolute; right: calc(18px + env(safe-area-inset-right, 0px)); bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  width: 230px; box-sizing: border-box; padding: 14px 16px 12px; border-radius: 14px; background: var(--glass); display: grid; gap: 6px;
+}
+#heliDash > b { font-weight: 900; font-size: 1rem; color: var(--sign-yellow); }
+#heliDash > small { font-size: 0.72rem; font-weight: 700; opacity: 0.8; }
 /* Swedish speed limit sign (C31): yellow face, red ring */
 #limit {
   position: absolute; right: calc(262px + env(safe-area-inset-right, 0px)); bottom: calc(22px + env(safe-area-inset-bottom, 0px));
@@ -315,6 +322,9 @@ body.touch .tags { display: none; }
 body.touch #stars svg { width: 22px; height: 22px; }
 body.touch.driving #stars { top: calc(132px + env(safe-area-inset-top, 0px)); }
 body.touch #map { width: 118px; height: 118px; }
+/* on a phone the helicopter's box sits on the left, above the stick */
+body.touch #heliDash { right: auto; left: calc(14px + env(safe-area-inset-left, 0px)); bottom: calc(176px + env(safe-area-inset-bottom, 0px)); width: 150px; padding: 8px 10px; }
+body.touch #heliDash .speed { font-size: 2rem; }
 body.touch #dash { right: auto; bottom: auto; width: 160px; padding: 10px 12px; left: calc(14px + env(safe-area-inset-left, 0px)); top: calc(14px + env(safe-area-inset-top, 0px)); }
 body.touch .blinkers { top: auto; bottom: 0; left: calc(100% + 8px); transform: none; gap: 8px; padding: 4px 8px; }
 body.touch .blink { width: 40px; height: 28px; }

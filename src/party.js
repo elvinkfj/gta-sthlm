@@ -305,6 +305,8 @@
     function show() {
       const was = seen && seen.n === G.n ? seen : null, fresh = !was || was.ph !== G.ph || was.r !== G.r;
       seen = { n: G.n, ph: G.ph, r: G.r };
+      // (no helicopter in a game: down to the ground with you)
+      if (fresh && (G.ph === 'count' || G.ph === 'grid') && G.ids.includes(MP.myId)) FLY.bail();
       if (G.n !== 'race') {
         Object.assign(seen, { out: new Set(G.ids.filter((id, i) => G.out[i])), copSc: G.sc[G.ids.indexOf(G.cop)] || 0 });
         showCnr(was, fresh);

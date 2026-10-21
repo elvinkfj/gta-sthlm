@@ -679,8 +679,9 @@
   // straight. Lose it and it searches where it saw you last; when the chase is over it climbs away.
   const HELI = { speed: 46, alt: 36, radius: 52, eye: 120 };
   let heli = null, heliModel = null;
-  function buildHeli() {
-    const BLUE = 0x163d8c, WHITE = 0xf1f2ef, YEL = 0xf2c200, DARK = 0x24272b, ROTOR = 0x2b2e33;
+  // civil: red on top with a dark band instead of the checks and no POLIS, for the helicopter you fly yourself (FLY)
+  function buildHeli(civil) {
+    const BLUE = civil ? 0xc8102e : 0x163d8c, WHITE = 0xf1f2ef, YEL = 0xf2c200, DARK = 0x24272b, ROTOR = 0x2b2e33;
     const m = new Merger(), gl = new Merger(), lamp = new Merger();
     // one triangle at a time, coloured by where its middle is (so the checks stay sharp) or sent to the glass
     const put = (geo, colOf, glassOf) => {
@@ -704,7 +705,7 @@
     const prof = [[0.0, -1.75], [0.3, -1.68], [0.58, -1.42], [0.78, -0.85], [0.86, -0.2], [0.87, 0.7], [0.84, 1.5], [0.76, 2.15], [0.6, 2.65], [0.4, 2.98], [0.18, 3.18], [0.0, 3.24]];
     const cab = new THREE.LatheGeometry(prof.map(([r, y]) => new THREE.Vector2(r, y)), 28);
     cab.rotateX(Math.PI / 2); cab.scale(0.92, 1.12, 1); cab.translate(0, 1.42, 0);
-    const checks = (y, z) => (Math.floor((z + 20) / 0.42) + (y > 1.06 ? 1 : 0)) % 2 ? BLUE : YEL;
+    const checks = (y, z) => (civil ? DARK : (Math.floor((z + 20) / 0.42) + (y > 1.06 ? 1 : 0)) % 2 ? BLUE : YEL);
     put(cab, (x, y, z) => (y > 1.5 ? BLUE : y > 0.86 && y < 1.26 && z < 2.55 && z > -1.45 ? checks(y, z) : WHITE), (x, y, z) =>
       // windscreen over the nose, and the side windows of the cockpit and the cabin with a pillar between the doors
       (z > 1.55 && y > 1.38 && Math.abs(x) < 0.82 && !(Math.abs(x) < 0.04 && z > 2.2)) || (Math.abs(x) > 0.55 && y > 1.38 && y < 2.12 && z > -1.05 && z < 1.55 && Math.abs(z - 0.32) > 0.07));
@@ -748,7 +749,8 @@
     // (plain standard materials like the rest of the city's, so nothing new has to be compiled when it turns up)
     const mat = std({ vertexColors: true, roughness: 0.3, metalness: 0.15, envMapIntensity: 1.2 });
     const shell = new THREE.Mesh(m.build(), mat); shell.castShadow = true;
-    body.add(shell, new THREE.Mesh(gl.build(), glassMat), new THREE.Mesh(lamp.build(), new THREE.MeshBasicMaterial({ vertexColors: true })), new THREE.Mesh(db.build(), decalMat));
+    body.add(shell, new THREE.Mesh(gl.build(), glassMat), new THREE.Mesh(lamp.build(), new THREE.MeshBasicMaterial({ vertexColors: true })));
+    if (!civil) body.add(new THREE.Mesh(db.build(), decalMat));
     // the rotors spin in their own groups; a faint disc stands for the blur of the blades
     const blades = new Merger();
     for (let k = 0; k < 4; k++) {

@@ -14,8 +14,8 @@ Lekarna läggs i en ny fil, `src/party.js`, som laddas direkt efter `src/multipl
 
 ## Del 2: Köra snabbare och snyggare
 
-- [ ] **Nitro.** En knapp (förslag: Shift i bilen) ger en kraftig spark framåt, med blå låga ur avgasröret och ett eget ljud. En mätare visar hur mycket nitro som är kvar, och den fylls på sakta.
-- [ ] **Verkstaden.** En verkstad i stan (förslag: på Söder) där du köper ny färg, andra fälgar, sänkt fjädring, bättre motor och nitro för pengarna i Kassan. Det du köper sparas för den bilen.
+- [ ] ~~**Nitro.**~~ Elvin valde att hoppa över nitron. (Det som stod: en knapp (förslag: Shift i bilen) ger en kraftig spark framåt, med blå låga ur avgasröret och ett eget ljud. En mätare visar hur mycket nitro som är kvar, och den fylls på sakta.)
+- [ ] **Verkstaden.** En verkstad i stan (förslag: på Söder) där du köper ny färg, andra fälgar, sänkt fjädring och bättre motor för pengarna i Kassan. Det du köper sparas för den bilen.
 
 ## Del 3: Stan lever
 
@@ -31,7 +31,7 @@ Lekarna läggs i en ny fil, `src/party.js`, som laddas direkt efter `src/multipl
 
 ## Del 5: Upp i luften och under jorden
 
-- [ ] **Flyga helikopter.** En helikopterplatta (förslag: på Kaknästornet och vid Skeppsbron) med en helikopter du kan flyga själv. Polisens helikopter finns redan, så modellen kan användas igen.
+- [x] **Flyga helikopter.** En helikopterplatta (förslag: på Kaknästornet och vid Skeppsbron) med en helikopter du kan flyga själv. Polisens helikopter finns redan, så modellen kan användas igen. (Klar: `src/helicopter.js`. Plattan står vid Skeppsbron, och på Kaknästornet finns en landningsring runt masten.)
 - [ ] **Fallskärm.** Hoppa ur helikoptern eller från Kaknästornet och Hötorgsskraporna. Fallskärmen vecklas ut med en knapp, och du styr när du glider ner.
 - [ ] **Tunnelbanan.** Gå ner i en tunnelbaneuppgång och välj en annan station. Tåget åker genom en tunnel och du kommer upp vid den stationen.
 - [ ] **Gröna Lunds attraktioner.** Gå fram till fritt fall-tornet, karusellen eller berg-och-dalbanan och tryck E för att åka. Kameran sitter i vagnen.

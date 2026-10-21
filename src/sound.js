@@ -268,9 +268,13 @@
       S.g.gain.setTargetAtTime(0.045 * sl + (siren === driving ? 0.02 : 0), t, 0.05);
       if (S.p) S.p.pan.setTargetAtTime(sp, t, 0.05);
     } else S.g.gain.setTargetAtTime(0, t, 0.08);
-    // the helicopter overhead, heard from far off
-    const R = audio.rotor;
-    if (heli && !quiet) {
+    // the helicopter overhead, heard from far off; your own, when its rotor turns, louder still
+    const R = audio.rotor, own = FLY.sound();
+    const ownLv = own ? own.rotor * Math.pow(clamp(1 - Math.hypot(own.x - camera.position.x, own.y - camera.position.y, own.z - camera.position.z) / 400, 0, 1), 2) : 0;
+    if (ownLv > 0.01 && !quiet) {
+      R.g.gain.setTargetAtTime(0.7 * ownLv, t, 0.1); R.wg.gain.setTargetAtTime(0.02 * ownLv, t, 0.1);
+      if (R.p) R.p.pan.setTargetAtTime(0, t, 0.1);
+    } else if (heli && !quiet) {
       const s = placeSound(heli.x, heli.z, 700), d3 = Math.hypot(s.d, heli.y - camera.position.y), lv = Math.pow(clamp(1 - d3 / 700, 0, 1), 2);
       R.g.gain.setTargetAtTime(0.9 * lv, t, 0.1); R.wg.gain.setTargetAtTime(0.012 * lv, t, 0.1);
       if (R.p) R.p.pan.setTargetAtTime(s.pan * 0.7, t, 0.1);
