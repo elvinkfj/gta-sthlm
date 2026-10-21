@@ -862,7 +862,8 @@
         else if (st.f & 2) y = P.person.y + 2.6;
         // (a little bigger on a short screen, a phone on its side, so the name can be read)
         const d = Math.hypot(x - camera.position.x, z - camera.position.z), k = clamp(1.1 - d / 700, 0.62, 1) * clamp(600 / window.innerHeight, 1, 1.6);
-        t.visible = d < 1200;
+        // (someone hiding from you in a game: no name through the walls)
+        t.visible = d < 1200 && !(P.badge && P.badge.hide);
         t.position.set(x, y, z);
         t.scale.set(0.046 * k * (512 / 96), 0.046 * k, 1);
       }
@@ -1021,7 +1022,7 @@
       dent(c, a) { if (c.netId) event('dent', { c: c.netId, a: a.map(r3) }); },
       drawMini(g, px, pz, u) {
         for (const P of S.players.values()) {
-          if (!P.st) continue;
+          if (!P.st || (P.badge && P.badge.hide)) continue;
           const c = P.car && P.car.occupant === P.ident ? P.car : null;
           let x = c ? c.x : P.person.x, z = c ? c.z : P.person.z;
           // (further off than the map reaches: on its edge, in their direction)
@@ -1034,7 +1035,7 @@
       },
       drawBig(g, toX, toY, text) {
         for (const P of S.players.values()) {
-          if (!P.st) continue;
+          if (!P.st || (P.badge && P.badge.hide)) continue;
           const c = P.car && P.car.occupant === P.ident ? P.car : null, X = toX(c ? c.x : P.person.x), Y = toY(c ? c.z : P.person.z);
           g.beginPath(); g.arc(X, Y, 7.5, 0, TAU);
           g.fillStyle = hex(P.look.shirt); g.fill(); g.lineWidth = 2.5; g.strokeStyle = '#ffffff'; g.stroke();
@@ -1053,11 +1054,12 @@
           return { id: P.id, name: P.name, shirt: P.look.shirt, at };
         });
       },
-      // their part in a game, on the sign over their head and on the maps (ring: a flashing ring round their dot)
-      badge(id, text, bg, ring) {
+      // their part in a game, on the sign over their head and on the maps (ring: a flashing ring round their dot; hide:
+      // neither the sign nor the dot, while they hide from you)
+      badge(id, text, bg, ring, hide) {
         const P = S.players.get(id);
         if (!P) return;
-        P.badge = text ? { text, bg, ring: !!ring } : null;
+        P.badge = text ? { text, bg, ring: !!ring, hide: !!hide } : null;
         drawTag(P);
       },
       // a line in the chat from the game itself

@@ -12,6 +12,7 @@
 <body>
 
 <canvas id="game" aria-label="Spelvärlden"></canvas>
+<div id="partyBlind" hidden><b>Du blundar och räknar</b><span id="partyBlindClock">1:00</span><small>De andra gömmer sig. Sedan letar du efter dem.</small></div>
 
 <div id="hud">
   <div class="tags">
@@ -168,6 +169,8 @@
           <span class="mp-games-head">Lekar</span>
           <p class="mp-games-rules"><b>Polis och tjuv:</b> en av er är polis och jagar de andra. Polisen tar en tjuv genom att köra in i hen eller springa ikapp. Varje sekund en tjuv är fri ger tjuven 1 poäng, och tar polisen tjuven får polisen sekunderna som var kvar. Alla får vara polis en gång.</p>
           <div class="mp-actions"><button id="gameCnr" class="btn-sign" type="button">Starta polis och tjuv</button></div>
+          <p class="mp-games-rules"><b>Kurragömma:</b> en av er blundar och räknar till 60 medan de andra gömmer sig. Sedan syns de inte på kartan, och den som letar hittar dem genom att gå eller köra nära. Poängen räknas som i polis och tjuv, och alla får leta en gång.</p>
+          <div class="mp-actions"><button id="gameHide" class="btn-sign" type="button">Starta kurragömma</button></div>
           <p class="mp-games-rules"><b>Gatlopp mot varandra:</b> alla flyttas till starten av samma gatlopp och kör samtidigt. Först i mål vinner. Ni kör bilen ni sitter i, och vid starten kan ni byta med B. Välj gatlopp:</p>
           <div class="mp-actions" id="gameRaces"></div>
           <div class="mp-actions"><button id="gameStop" class="btn-sign small alt" type="button" hidden>Avsluta leken</button></div>
