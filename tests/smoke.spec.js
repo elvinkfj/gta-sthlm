@@ -303,3 +303,33 @@ test('tunnelbanan: från Slussen till Hötorget, med biljett', async () => {
   expect(r.bad).toEqual([]);
   expect(errors).toEqual([]);
 });
+
+test('gröna lund: åk karusellen, med kameran i sadeln', async () => {
+  const r = await page.evaluate(() => {
+    const t = gubbeTest, s = {}, C = TIVOLI.CAROUSEL;
+    t.hold(true);
+    if (t.state().driving) t.press('KeyE');
+    t.jobs.reward(100);
+    t.teleport(C.x + 8.5, C.z); t.run(0.2, 1 / 60, false);
+    s.prompt = RIDES.prompt();
+    const cash = t.jobs.earned;
+    t.press('KeyE'); t.run(2, 1 / 60, true);
+    s.paid = cash - t.jobs.earned; s.riding = RIDES.riding; s.camY = camera.position.y;
+    const x0 = player.x; t.run(2, 1 / 60, false); s.turned = Math.abs(player.x - x0) > 1;
+    t.press('KeyE'); s.stays = RIDES.riding;
+    t.run(18, 1 / 60, false);
+    s.off = !RIDES.on && player.y < 0.1 && player.model.group.visible;
+    s.bad = t.state().bad;
+    t.hold(false);
+    return s;
+  });
+  expect(r.prompt).toBe('Åk karusellen (30 kr)');
+  expect(r.paid).toBe(30);
+  expect(r.riding).toBe(true);
+  expect(r.camY).toBeGreaterThan(3);
+  expect(r.turned).toBe(true);
+  expect(r.stays).toBe(true);
+  expect(r.off).toBe(true);
+  expect(r.bad).toEqual([]);
+  expect(errors).toEqual([]);
+});

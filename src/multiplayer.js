@@ -762,7 +762,7 @@
     }
     // a friend's car with them at the wheel, near enough to get in, and not going too fast to
     function rideable() {
-      if (driving || S.ride || FLY.on || CHUTE.on || !started || (policeStop && policeStop.locked) || player.y > 1.5) return null;
+      if (driving || S.ride || FLY.on || CHUTE.on || RIDES.on || !started || (policeStop && policeStop.locked) || player.y > 1.5) return null;
       let best = null, bd = Infinity;
       for (const P of S.players.values()) {
         const c = P.car;
@@ -837,7 +837,7 @@
       const spot = spotNear(at.x, at.z);
       if (!spot) { status('Hittade ingen plats bredvid ' + P.name + ' just nu. Försök igen om en stund.', true); return; }
       if (S.ride) unride(true);
-      FLY.bail(); CHUTE.bail(); METRO.bail();
+      FLY.bail(); CHUTE.bail(); METRO.bail(); RIDES.bail();
       if (driving && !exitCar()) { closePanel(); return; }
       player.x = spot.x; player.z = spot.z; player.y = 0; player.vx = player.vz = player.vy = 0;
       player.rot = camYaw = Math.atan2(at.x - spot.x, at.z - spot.z);
