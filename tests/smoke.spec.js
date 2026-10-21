@@ -115,3 +115,48 @@ test('polis och tjuv: polisen tar tjuven och leken räknar poäng', async () => 
   expect(r.stopped).toBeNull();
   expect(errors).toEqual([]);
 });
+
+test('gatlopp mot varandra: alla till start, först i mål vinner', async () => {
+  // a pretend room again: you and Oscar race Gamla stan runt; you drive through every checkpoint, Oscar comes home later
+  const r = await page.evaluate(() => {
+    gubbeTest.hold(true);
+    Object.assign(MP.debug.S, { code: 'TEST', host: true, myId: 'me', hostId: 'me', name: 'Elvin' });
+    const P = MP.debug.addPlayer('f1', 'Oscar', {});
+    const R = gubbeTest.jobs.RACES[0], s1 = PARTY.debug.gridSpot(R, 1, gubbeTest.MODELS[0]);
+    const feed = () => MP.debug.take(P, [performance.now(), s1.x, 0, s1.z, 0, 0, 0, 1, 0, 0, 0]);
+    feed(); gubbeTest.run(0.2, 1 / 60, false); feed();
+    PARTY.debug.beginRace(R.id); feed(); gubbeTest.run(0.1, 1 / 60, false);
+    const G = () => PARTY.debug.G, s = {};
+    s.grid = G().ph; s.hold = PARTY.hold(); s.atStart = Math.hypot(driving.x - R.pts[0].x, driving.z - R.pts[0].z);
+    PARTY.debug.advance(15.5); feed(); gubbeTest.run(0.1, 1 / 60, false);
+    s.race = G().ph; s.racing = !!(gubbeTest.jobs.job && gubbeTest.jobs.job.party);
+    gubbeTest.jobs._skipCountdown();
+    for (let i = 1; i < R.pts.length; i++) { driving.x = R.pts[i].x; driving.z = R.pts[i].z; driving.vx = driving.vz = 0; gubbeTest.run(0.05, 1 / 60, false); feed(); PARTY.debug.advance(1); }
+    s.mine = PARTY.debug.mine.fin > 0;
+    return s;
+  });
+  // (your time reaches the one who has the room a moment after the finish)
+  await page.waitForTimeout(50);
+  const r2 = await page.evaluate(() => {
+    const G = () => PARTY.debug.G, s = {};
+    s.fin = G().fin.map((f) => f > 0);
+    PARTY.debug.heard('f1', { a: 'fin', t: 300 });
+    s.over = G().ph; s.winner = document.getElementById('partyBoardTitle').textContent;
+    PARTY.debug.advance(16);
+    s.closed = G();
+    MP.debug.leave();
+    gubbeTest.hold(false);
+    return s;
+  });
+  expect(r.grid).toBe('grid');
+  expect(r.hold).toBe(true);
+  expect(r.atStart).toBeLessThan(45);
+  expect(r.race).toBe('race');
+  expect(r.racing).toBe(true);
+  expect(r.mine).toBe(true);
+  expect(r2.fin).toEqual([true, false]);
+  expect(r2.over).toBe('over');
+  expect(r2.winner).toContain('du vann');
+  expect(r2.closed).toBeNull();
+  expect(errors).toEqual([]);
+});

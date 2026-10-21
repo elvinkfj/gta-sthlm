@@ -421,9 +421,11 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
 #party .job-icon { background: #2f6bff; color: var(--snow); }
 #party.thief .job-icon { background: var(--sign-red); }
 #party.out .job-icon { background: #5b6168; }
+#party.race { box-shadow: 0 0 0 2px var(--sign-yellow); }
+#party.race .job-icon { background: var(--sign-yellow); color: var(--asphalt); }
 #partyBig { top: 30%; }
 #partyBoard {
-  position: fixed; left: 50%; top: 48%; transform: translate(-50%, -50%); pointer-events: none;
+  position: fixed; left: 50%; top: 60%; transform: translate(-50%, -50%); pointer-events: none;
   min-width: min(320px, calc(100vw - 32px)); max-width: calc(100vw - 32px); box-sizing: border-box; padding: 16px 20px 14px; border-radius: 14px;
   background: var(--sign-blue); box-shadow: inset 0 0 0 4px var(--sign-blue), inset 0 0 0 7px var(--snow), 0 12px 30px rgba(0, 0, 0, 0.4);
 }
