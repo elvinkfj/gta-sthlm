@@ -196,3 +196,38 @@ test('kurragömma: den som letar blundar, och hittar den som är nära', async (
   expect(r.after).toBe('end');
   expect(errors).toEqual([]);
 });
+
+test('helikoptern: kliv in, lyft, flyg, landa och kliv ur', async () => {
+  const r = await page.evaluate(() => {
+    const t = gubbeTest, H = FLY.heli, P = FLY.debug.PAD, s = {};
+    t.hold(true);
+    if (t.state().driving) t.press('KeyE');
+    t.teleport(P.x + Math.cos(P.h) * 4, P.z - Math.sin(P.h) * 4); t.run(0.2, 1 / 60, false);
+    s.prompt = FLY.prompt();
+    t.press('KeyE'); t.run(0.1, 1 / 60, false);
+    s.on = FLY.on;
+    // the rotor runs up first, then Space climbs
+    t.key('Space', true); t.run(7, 1 / 60, false); t.key('Space', false);
+    s.y = H.y;
+    const x0 = H.x, z0 = H.z;
+    t.key('KeyW', true); t.run(3, 1 / 60, false); t.key('KeyW', false);
+    s.moved = Math.hypot(H.x - x0, H.z - z0);
+    // back over the pad and down with Shift
+    H.x = P.x; H.z = P.z; H.vx = H.vz = 0;
+    t.key('ShiftLeft', true); t.run(5, 1 / 60, false); t.key('ShiftLeft', false);
+    s.down = H.ground && H.y < 0.1;
+    t.press('KeyE'); t.run(0.2, 1 / 60, false);
+    s.out = !FLY.on && t.state().driving === null;
+    s.bad = t.state().bad;
+    t.hold(false);
+    return s;
+  });
+  expect(r.prompt).toBe('Flyg helikoptern');
+  expect(r.on).toBe(true);
+  expect(r.y).toBeGreaterThan(15);
+  expect(r.moved).toBeGreaterThan(20);
+  expect(r.down).toBe(true);
+  expect(r.out).toBe(true);
+  expect(r.bad).toEqual([]);
+  expect(errors).toEqual([]);
+});

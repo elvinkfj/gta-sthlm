@@ -420,7 +420,7 @@
         return;
       }
       if (!P) return;
-      if (m.t === 's') { if (take(P, m.d)) broadcast({ t: 's', id, d: m.d.slice(0, 11) }, id); }
+      if (m.t === 's') { if (take(P, m.d)) broadcast({ t: 's', id, d: m.d.slice(0, 12) }, id); }
       else if (m.t === 'e') { const e = cleanEvent(m, id); if (e) { heard(P, e); broadcast(e, id); } }
     }
     function dropConn(conn) {
@@ -498,6 +498,7 @@
       dropCar(P);
       removePerson(P.person);
       if (P.mesh && P.mesh.parent) P.mesh.parent.remove(P.mesh);
+      if (P.heli) { scene.remove(P.heli.group, P.heli.beam, P.heli.patch); P.heli.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
       scene.remove(P.tag); P.tag.material.map.dispose(); P.tag.material.dispose();
       if (announce) toast(P.name + ' lämnade rummet.');
       renderList(); hud();
@@ -547,6 +548,7 @@
     // d: [time, x, y, z, heading, vx, vz, flags (1 on the ground, 2 in a vehicle, 4 handcuffed), stars, riding with (id or 0), car or 0]
     // car: [id, model, colour, x, z, heading, vx, vz, steering, gear, throttle, flags (1 brakes, 2 reversing, 4 blue lights,
     //       8 engine dead, 16 at the wheel), blinkers, engine health, turret, wheel slip]
+    // then, flying the helicopter (FLY), [x, y, z, heading, pitch, roll, rotor] (left out by games from before it)
     function take(P, d) {
       if (!Array.isArray(d) || d.length < 11) return false;
       const t = num(d[0], NaN), a = P.snaps;
@@ -554,8 +556,10 @@
       const pos = (v) => clamp(num(v), -9000, 9000), vel = (v) => clamp(num(v), -150, 150);
       const s = {
         t, x: pos(d[1]), y: clamp(num(d[2]), -10, 80), z: pos(d[3]), rot: num(d[4]), vx: vel(d[5]), vz: vel(d[6]), f: num(d[7]) | 0,
-        stars: clamp(num(d[8]) | 0, 0, 5), ride: typeof d[9] === 'string' ? d[9] : '', c: null
+        stars: clamp(num(d[8]) | 0, 0, 5), ride: typeof d[9] === 'string' ? d[9] : '', c: null, hc: null
       };
+      const hc = d[11];
+      if (Array.isArray(hc) && hc.length >= 7) s.hc = { x: pos(hc[0]), y: clamp(num(hc[1]), -5, 400), z: pos(hc[2]), h: num(hc[3]), p: clamp(num(hc[4]), -1, 1), r: clamp(num(hc[5]), -1, 1), rot: clamp(num(hc[6]), 0, 1) };
       const c = d[10];
       if (Array.isArray(c) && c.length >= 16 && typeof c[0] === 'string') {
         s.c = {
@@ -577,8 +581,10 @@
       const D = k < 0.5 ? A : B;
       const o = {
         x: lerp(A.x, B.x, k) + A.vx * ex, y: lerp(A.y, B.y, k), z: lerp(A.z, B.z, k) + A.vz * ex, rot: lerpAngle(A.rot, B.rot, k),
-        vx: lerp(A.vx, B.vx, k), vz: lerp(A.vz, B.vz, k), f: D.f, stars: D.stars, ride: D.ride, c: D.c
+        vx: lerp(A.vx, B.vx, k), vz: lerp(A.vz, B.vz, k), f: D.f, stars: D.stars, ride: D.ride, c: D.c, hc: D.hc
       };
+      const ha = A.hc, hb = B.hc;
+      if (ha && hb) o.hc = { x: lerp(ha.x, hb.x, k) + A.vx * ex, y: lerp(ha.y, hb.y, k), z: lerp(ha.z, hb.z, k) + A.vz * ex, h: lerpAngle(ha.h, hb.h, k), p: lerp(ha.p, hb.p, k), r: lerp(ha.r, hb.r, k), rot: lerp(ha.rot, hb.rot, k) };
       const ca = A.c, cb = B.c;
       if (ca && cb && ca.id === cb.id) {
         o.c = Object.assign({}, D.c, {
@@ -621,6 +627,16 @@
         c.braking = !!(cs.f & 1); c.reversing = !!(cs.f & 2); c.siren = !!(cs.f & 4); c.dead = !!(cs.f & 8);
         c.health = cs.hp; c.blink = cs.b; c.aimWant = cs.a; c.slip = on ? cs.slip : 0;
       } else if (P.car) dropCar(P);
+      // in their helicopter: the red Bell 429 where they fly it
+      const hc = st.hc;
+      if (hc) {
+        if (!P.heli) P.heli = buildHeli(true);
+        const M = P.heli;
+        M.group.visible = true;
+        M.group.position.set(hc.x, hc.y, hc.z); M.body.rotation.set(hc.p, hc.h, hc.r);
+        P.spin = (P.spin || 0) + dt * 41 * hc.rot;
+        M.rotor.rotation.y = P.spin; M.tail.rotation.x = P.spin * 5.3; M.beacon.visible = clock % 1.2 < 0.12;
+      } else if (P.heli) P.heli.group.visible = false;
       const p = P.person, hide = !!(st.f & 2) || !!st.ride;
       p.asleep = hide; p.model.group.visible = !hide;
       p.x = st.x; p.y = st.y; p.z = st.z; p.rot = st.rot; p.vx = st.vx; p.vz = st.vz;
@@ -633,11 +649,11 @@
       const c = driving || (S.lastCar && S.lastCar.group.parent ? S.lastCar : null);
       if (!c) S.lastCar = null;
       if (c && !c.netId) c.netId = Math.random().toString(36).slice(2, 10);
-      const hidden = !!driving || !!S.ride || !!(policeStop && policeStop.riding);
+      const hidden = !!driving || !!S.ride || FLY.on || !!(policeStop && policeStop.riding);
       const car = c ? [c.netId, c.M.id, c.color, r2(c.x), r2(c.z), r3(c.h), r2(c.vx), r2(c.vz), r3(c.steer), c.gear | 0, r2(c.thr || 0),
         (c.braking ? 1 : 0) | (c.reversing ? 2 : 0) | (c.siren ? 4 : 0) | (c.dead ? 8 : 0) | (c === driving ? 16 : 0), c.blink | 0, Math.round(c.health), r3(c.aim || 0), r1(c.slip || 0)] : 0;
       return [Math.round(performance.now()), r2(player.x), r2(player.y), r2(player.z), r3(player.rot), r2(player.vx), r2(player.vz),
-        (player.grounded ? 1 : 0) | (hidden ? 2 : 0) | (player.cuffed ? 4 : 0), stars(), S.ride ? S.ride.owner.id : 0, car];
+        (player.grounded ? 1 : 0) | (hidden ? 2 : 0) | (player.cuffed ? 4 : 0), stars(), S.ride ? S.ride.owner.id : 0, car, FLY.on ? FLY.net() : 0];
     }
     function send() {
       if (!inRoom()) return;
@@ -737,7 +753,7 @@
     }
     // a friend's car with them at the wheel, near enough to get in, and not going too fast to
     function rideable() {
-      if (driving || S.ride || !started || (policeStop && policeStop.locked) || player.y > 1.5) return null;
+      if (driving || S.ride || FLY.on || !started || (policeStop && policeStop.locked) || player.y > 1.5) return null;
       let best = null, bd = Infinity;
       for (const P of S.players.values()) {
         const c = P.car;
@@ -812,6 +828,7 @@
       const spot = spotNear(at.x, at.z);
       if (!spot) { status('Hittade ingen plats bredvid ' + P.name + ' just nu. Försök igen om en stund.', true); return; }
       if (S.ride) unride(true);
+      FLY.bail();
       if (driving && !exitCar()) { closePanel(); return; }
       player.x = spot.x; player.z = spot.z; player.y = 0; player.vx = player.vz = player.vy = 0;
       player.rot = camYaw = Math.atan2(at.x - spot.x, at.z - spot.z);
@@ -858,7 +875,8 @@
         if (!st) { t.visible = false; continue; }
         const rc = st.ride ? carOf(st.ride) : null, wheel = P.car && P.car.occupant === P.ident ? P.car : null, c = wheel || rc;
         let x = P.person.x, y = P.person.y + 2.12, z = P.person.z;
-        if (c) { x = c.x; z = c.z; y = (c.M.boat ? WATER_Y + 2.4 : c.parts[c.parts.length - 1].top + 0.75) + (wheel ? 0 : 0.6 * (1 + (P.seat ? P.seat.n : 0))); }
+        if (st.hc) { x = st.hc.x; y = st.hc.y + 4.2; z = st.hc.z; }
+        else if (c) { x = c.x; z = c.z; y = (c.M.boat ? WATER_Y + 2.4 : c.parts[c.parts.length - 1].top + 0.75) + (wheel ? 0 : 0.6 * (1 + (P.seat ? P.seat.n : 0))); }
         else if (st.f & 2) y = P.person.y + 2.6;
         // (a little bigger on a short screen, a phone on its side, so the name can be read)
         const d = Math.hypot(x - camera.position.x, z - camera.position.z), k = clamp(1.1 - d / 700, 0.62, 1) * clamp(600 / window.innerHeight, 1, 1.6);

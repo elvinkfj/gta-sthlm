@@ -7,6 +7,7 @@
       for (const c of cars) c.input = c === driving ? inp : c.water ? WATER.think(c, dt) : c.bot ? (c.police ? policeThink(c, dt) : botThink(c, dt)) : null;
       for (const p of persons) if (p !== player && !p.asleep && !p.remote) p.intent = npcThink(p, dt);
       MP.update(dt);
+      FLY.update(dt, inp);
       const pIntent = custodyIntent(dt) || playerIntent(inp);
       const steps = Math.max(1, Math.ceil(dt * 120));
       for (let i = 0; i < steps; i++) physicsStep(dt / steps, pIntent);
@@ -23,6 +24,7 @@
       VENDORS.update(dt);
     }
     PARTY.update();
+    FLY.hud();
     updateCamera(dt);
     updateHUD(dt);
     drawMap();
@@ -123,7 +125,7 @@
     state() {
       const bad = [];
       for (const c of cars) { if (!isFinite(c.x + c.z + c.h + c.vx + c.vz)) bad.push('nan-car'); else if (!c.remote && !(c.M.boat ? boatFits(c.M, c.x, c.z, c.h) : fitsM(c.M, c.x, c.z, c.h))) bad.push('car-off ' + c.M.id + ' ' + c.x.toFixed(1) + ',' + c.z.toFixed(1)); }
-      for (const p of persons) { if (!isFinite(p.x + p.z + p.y)) bad.push('nan-person'); else if (!p.remote && !walkable(p.x, p.z) && !(p === player && (driving || MP.ride) && (driving || MP.ride).M.boat) && !(p === player && policeStop && policeStop.phase === 'water')) bad.push('person-off ' + p.x.toFixed(1) + ',' + p.z.toFixed(1)); }
+      for (const p of persons) { if (!isFinite(p.x + p.z + p.y)) bad.push('nan-person'); else if (!p.remote && !walkable(p.x, p.z) && !(p === player && (driving || MP.ride) && (driving || MP.ride).M.boat) && !(p === player && policeStop && policeStop.phase === 'water') && !(p === player && FLY.on)) bad.push('person-off ' + p.x.toFixed(1) + ',' + p.z.toFixed(1)); }
       const bots = cars.filter((c) => c.bot);
       return {
         player: { x: +player.x.toFixed(2), y: +player.y.toFixed(2), z: +player.z.toFixed(2) },

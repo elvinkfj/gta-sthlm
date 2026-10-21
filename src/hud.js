@@ -32,13 +32,13 @@
   function updateHUD(dt) {
     // at a kiosk or a balloon seller E buys, otherwise it is for the car you stand by
     // riding along with a friend, or by a friend's car you can get in
-    const mpP = started ? MP.prompt() : null;
-    const liftP = started && !driving ? LIFT.prompt() : null, shop = !liftP && started && !driving ? VENDORS.prompt() : null;
-    const prompt = mpP || liftP || shop || (started && !driving && nearCar ? (nearCar.bot ? 'Ta ' + nearCar.M.def : 'Kliv in i ' + nearCar.M.def) : null);
+    const mpP = started ? MP.prompt() : null, flyP = started ? FLY.prompt() : null;
+    const liftP = started && !driving && !FLY.on ? LIFT.prompt() : null, shop = !liftP && started && !driving && !FLY.on ? VENDORS.prompt() : null;
+    const prompt = mpP || flyP || liftP || shop || (started && !driving && nearCar ? (nearCar.bot ? 'Ta ' + nearCar.M.def : 'Kliv in i ' + nearCar.M.def) : null);
     if (prompt !== lastPrompt) {
       lastPrompt = prompt;
       el.prompt.hidden = !prompt || isTouch;
-      if (prompt) { el.promptText.textContent = prompt; el.prompt.classList.toggle('steal', !mpP && !shop && !liftP && !!nearCar && !!nearCar.bot); el.prompt.classList.toggle('shop', !mpP && !!shop); }
+      if (prompt) { el.promptText.textContent = prompt; el.prompt.classList.toggle('steal', !mpP && !flyP && !shop && !liftP && !!nearCar && !!nearCar.bot); el.prompt.classList.toggle('shop', !mpP && !!shop); }
     }
     // the stars: as many lit as the police want you, flashing while they search for you; the helicopter beside them
     const ns = stars(), searching = !!wanted && !wanted.inSight && !policeStop, hl = !!heli && heli.state !== 'leave', army = !!wanted && cars.some((c) => c.military && c.police && c.police.state === 'chase');
@@ -68,10 +68,10 @@
       el.btnUp.hidden = el.btnDown.hidden = !driving;
     }
     const ph = policeStop && policeStop.phase;
-    const vendor = !driving && VENDORS.near;
-    const use = ph === 'talk' ? 'Skriv under' : ph === 'transport' || ph === 'park' ? 'Hoppa fram' : ph === 'jail' ? 'Sov' : mpP ? (MP.ride ? 'Kliv ur' : 'Åk med') : driving ? 'Kliv ur' : liftP ? 'Hissen' : vendor ? (vendor.seller ? 'Köp glass' : 'Köp ballong') : nearCar && nearCar.bot ? 'Ta bilen' : 'Kliv in';
+    const vendor = !driving && !FLY.on && VENDORS.near;
+    const use = ph === 'talk' ? 'Skriv under' : ph === 'transport' || ph === 'park' ? 'Hoppa fram' : ph === 'jail' ? 'Sov' : mpP ? (MP.ride ? 'Kliv ur' : 'Åk med') : flyP || FLY.on ? (FLY.on ? 'Kliv ur' : 'Flyg') : driving ? 'Kliv ur' : liftP ? 'Hissen' : vendor ? (vendor.seller ? 'Köp glass' : 'Köp ballong') : nearCar && nearCar.bot ? 'Ta bilen' : 'Kliv in';
     if (use !== lastUse) { el.btnUse.textContent = use; lastUse = use; }
-    el.btnUse.classList.toggle('off', !mpP && !driving && !nearCar && !vendor && !liftP && !['talk', 'transport', 'park', 'jail'].includes(ph));
+    el.btnUse.classList.toggle('off', !mpP && !flyP && !driving && !nearCar && !vendor && !liftP && !['talk', 'transport', 'park', 'jail'].includes(ph));
     if (driving) {
       const c = driving, vf = c.vx * Math.sin(c.h) + c.vz * Math.cos(c.h);
       const kmh = Math.round(Math.abs(vf) * 3.6), rf = clamp(c.rpm / (c.M.red * 1.04), 0, 1);
@@ -187,6 +187,7 @@
       g.restore();
     }
     if (heli) drawHeliIcon(g, heli.x, heli.z, heli.h, 1 / s, true);
+    FLY.drawMini(g, px, pz, 1 / s);
     MP.drawMini(g, px, pz, 1 / s);
     const rot = driving ? driving.h : player.rot, u = 1 / s;
     g.translate(px, pz); g.rotate(-rot);
@@ -352,6 +353,7 @@
       g.fillStyle = hex(spawnedCar.color); g.strokeStyle = '#fff'; g.lineWidth = 2;
       g.fillRect(toX(spawnedCar.x) - 4, toY(spawnedCar.z) - 4, 8, 8); g.strokeRect(toX(spawnedCar.x) - 4, toY(spawnedCar.z) - 4, 8, 8);
     }
+    FLY.drawBig(g, toX, toY, text);
     MP.drawBig(g, toX, toY, text);
     const p = driving || player, rot = driving ? driving.h : player.rot, X = toX(p.x), Y = toY(p.z);
     g.save(); g.translate(X, Y); g.rotate(-rot);
