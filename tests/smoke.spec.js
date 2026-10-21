@@ -231,3 +231,35 @@ test('helikoptern: kliv in, lyft, flyg, landa och kliv ur', async () => {
   expect(r.bad).toEqual([]);
   expect(errors).toEqual([]);
 });
+
+test('fallskärm: hoppa från Kaknästornet, veckla ut och landa mjukt', async () => {
+  const r = await page.evaluate(() => {
+    const t = gubbeTest, K = CHUTE.debug.TOWERS[0], s = {};
+    t.hold(true);
+    if (t.state().driving) t.press('KeyE');
+    t.teleport(K.x + 9, K.z); t.run(0.2, 1 / 60, false);
+    s.prompt = CHUTE.prompt();
+    t.press('KeyE'); t.run(0.1, 1 / 60, false);
+    s.up = player.y;
+    t.run(2, 1 / 60, false);
+    s.falling = CHUTE.on && !CHUTE.open && CHUTE.debug.S.vy < -10;
+    t.press('Space'); t.run(3, 1 / 60, false);
+    s.open = CHUTE.open; s.slow = CHUTE.debug.S.vy > -6;
+    let n = 0;
+    while (CHUTE.on && n++ < 60) t.run(1, 1 / 60, false);
+    s.landed = !CHUTE.on && player.y < 0.1;
+    s.soft = document.getElementById('toast').textContent;
+    s.bad = t.state().bad;
+    t.hold(false);
+    return s;
+  });
+  expect(r.prompt).toContain('Kaknästornet');
+  expect(r.up).toBeGreaterThan(130);
+  expect(r.falling).toBe(true);
+  expect(r.open).toBe(true);
+  expect(r.slow).toBe(true);
+  expect(r.landed).toBe(true);
+  expect(['Snygg landning!', 'Du landade på ett tak och klättrade ner.']).toContain(r.soft);
+  expect(r.bad).toEqual([]);
+  expect(errors).toEqual([]);
+});
