@@ -446,3 +446,44 @@ test('verkstaden: kör in, välj lack, fälgar, fjädring och motor, och de spar
   expect(r.bad).toEqual([]);
   expect(errors).toEqual([]);
 });
+
+test('dag och natt: på natten lyser lamporna, fönstren och billjusen, och den som har rummet bestämmer tiden', async () => {
+  const r = await page.evaluate(() => {
+    const t = gubbeTest, D = t.daynight, s = {};
+    t.hold(true);
+    if (t.state().driving) t.press('KeyE');
+    s.startHour = D.hour;
+    D.set(23); t.run(0.5, 1 / 60, false);
+    const bot = t.cars.find((c) => c.bot && !c.dead && !c.M.boat);
+    s.night = { lights: D.lights, sun: sun.intensity, fog: scene.fog.color.r, lamp: D.debug.lampU.value, pools: D.debug.pools.some((p) => p.visible), head: bot ? bot.mat.userData.glow.x : null, beam: !!(bot && bot.beam && bot.beam.visible), clock: document.getElementById('locTime').textContent };
+    // O: an hour on
+    t.press('KeyO');
+    s.afterO = Math.round(D.hour * 100) / 100; s.toast = t.state().toast;
+    // the time from the one who has the room, and not from anyone else
+    D.heard(true, 15.5); s.fromHost = D.hour;
+    D.heard(false, 3); s.fromOther = D.hour;
+    D.set(10); t.run(0.5, 1 / 60, false);
+    s.day = { lights: D.lights, sun: sun.intensity, head: bot ? bot.mat.userData.glow.x : null, pools: D.debug.pools.some((p) => p.visible) };
+    s.bad = t.state().bad;
+    t.hold(false);
+    return s;
+  });
+  expect(r.night.lights).toBeCloseTo(1, 2);
+  expect(r.night.sun).toBeLessThan(0.5);
+  expect(r.night.fog).toBeLessThan(0.2);
+  expect(r.night.lamp).toBeGreaterThan(3);
+  expect(r.night.pools).toBe(true);
+  expect(r.night.head).toBeGreaterThan(2);
+  expect(r.night.beam).toBe(true);
+  expect(r.night.clock).toBe('23:00');
+  expect(r.afterO).toBeCloseTo(0, 1);
+  expect(r.toast).toContain('Klockan är 00:');
+  expect(r.fromHost).toBe(15.5);
+  expect(r.fromOther).toBe(15.5);
+  expect(r.day.lights).toBe(0);
+  expect(r.day.sun).toBeCloseTo(1.6, 1);
+  expect(r.day.head).toBeCloseTo(0.6, 2);
+  expect(r.day.pools).toBe(false);
+  expect(r.bad).toEqual([]);
+  expect(errors).toEqual([]);
+});

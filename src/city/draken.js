@@ -934,6 +934,8 @@
       t.near[0].visible = t.near[1].visible = close; t.far.visible = !close && d < FAR_CULL;
     }
   }
+  // (the lamps' material: its diffuser, the bottom of the head, glows at night; see DAYNIGHT)
+  let lampMat = null;
   {
     const m = new Merger();
     m.add(new THREE.CylinderGeometry(0.07, 0.11, 6.0, 8), 0x55595e, 0, 3.0, 0);
@@ -941,7 +943,9 @@
     m.box(0.07, 0.07, 1.5, 0x55595e, 0, 5.95, 0.7);
     m.box(0.34, 0.12, 0.55, 0x3a3d41, 0, 5.88, 1.4);
     m.box(0.28, 0.03, 0.46, 0xfff6e0, 0, 5.81, 1.4);
-    for (const lm of instancedByArea(m.build(), std({ vertexColors: true, roughness: 0.5, metalness: 0.6 }), lamps, (o, l) => { o.position.set(l.x, 0, l.z); o.rotation.y = l.rot; })) {
+    const lampGeo = m.build();
+    lampMat = std({ vertexColors: true, roughness: 0.5, metalness: 0.6 });
+    for (const lm of instancedByArea(lampGeo, lampMat, lamps, (o, l) => { o.position.set(l.x, 0, l.z); o.rotation.y = l.rot; })) {
       const c = lm.geometry.boundingSphere.center;
       culled.push({ m: lm, x: c.x, z: c.z });
     }

@@ -19,7 +19,7 @@ Lekarna läggs i en ny fil, `src/party.js`, som laddas direkt efter `src/multipl
 
 ## Del 3: Stan lever
 
-- [ ] **Dag och natt.** Ett dygn i spelet tar ungefär 20 minuter. Solen går ner, himlen blir orange och sedan mörk, gatlamporna och fönstren tänds och bilarna kör med strålkastare. Den som har rummet bestämmer tiden för alla.
+- [x] **Dag och natt.** Ett dygn i spelet tar ungefär 20 minuter. Solen går ner, himlen blir orange och sedan mörk, gatlamporna och fönstren tänds och bilarna kör med strålkastare. Den som har rummet bestämmer tiden för alla. (Klar: `src/daynight.js`. Klockan står på gatuskylten, på natten syns stjärnor och en måne, och O spolar fram en timme.)
 - [ ] **Väder.** Ibland regnar det (blöta gator som glänser, vindrutetorkare, sämre grepp) och på vintern snöar det (vita tak och halt på vägen).
 - [x] **Vattenballonger.** Köp vattenballonger hos ballongförsäljarna och kasta dem med en knapp. De plaskar, gör den du träffar blöt, och träffar du en polis blir du jagad. Fungerar på kompisar också. (Klar: `src/water-balloons.js`. Hinken står bredvid ballongförsäljaren, och man kastar med ett klick eller F.)
 

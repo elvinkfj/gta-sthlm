@@ -73,6 +73,8 @@ body.touch #liftPanel { bottom: auto; top: calc(190px + env(safe-area-inset-top,
 #locStreet { font-weight: 900; font-size: 1.05rem; }
 #locDistrict { font-weight: 700; font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.85; }
 #locStreet:empty { display: none; }
+/* (the time of day, on the street sign) */
+#locTime { font: 700 0.78rem/1 var(--font-gauge); opacity: 0.85; font-variant-numeric: tabular-nums; }
 
 #map {
   position: absolute; top: calc(16px + env(safe-area-inset-top, 0px)); right: calc(16px + env(safe-area-inset-right, 0px));
