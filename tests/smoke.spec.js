@@ -534,3 +534,84 @@ test('väder: U ger regn, sedan snö, sedan sol, och det blir halt', async () =>
   expect(r.bad).toEqual([]);
   expect(errors).toEqual([]);
 });
+
+test('nivåer och troféer: XP ger nivåer och troféer, I visar tavlan, och verkstadens bästa delar väntar på en nivå', async () => {
+  const r = await page.evaluate(() => {
+    const t = gubbeTest, P = t.progress, D = P.debug, W = WORKSHOP.debug, s = {};
+    t.hold(true);
+    if (t.state().driving) t.press('KeyE');
+    if (t.wanted) t.endChase(false);
+    // a job that pays 300 kr gives 100 XP, and the first time a trophy with 50 more (the races earlier may have taken it)
+    const xp0 = P.xp, had = !!D.S.got.jobb;
+    s.jobXp = P.job(300);
+    s.gained = P.xp - xp0 - (had ? 0 : 50);
+    s.first = !!D.S.got.jobb;
+    // getting away from five stars: two trophies
+    P.escaped(5);
+    s.escape = !!D.S.got.undan && !!D.S.got.fem;
+    // 300 km/h is watched every frame
+    t.jobs.reward(5000);
+    t.teleport(...W.toW(0, -9)); t.run(0.3, 1 / 60, false);
+    t.choose('suv'); t.run(0.2, 1 / 60, false);
+    const c = t.driving;
+    c.vx = 0; c.vz = 84; P.update(0); c.vz = 0;
+    s.fast = !!D.S.got.fart;
+    s.level = P.level === D.levelOf(P.xp).lv;
+    s.tag = document.getElementById('lvNum').textContent === String(P.level);
+    // a new trophy or level shows in a moment
+    t.run(0.2, 1 / 60, false);
+    s.award = !document.getElementById('award').hidden;
+    // into the workshop: motor steg 3 waits for level 8
+    const [x, z] = W.toW(0, -6);
+    c.x = x; c.z = z; c.h = W.lot.face; c.vx = c.vz = 0;
+    t.key('KeyW', true);
+    for (let i = 0; i < 600 && !W.inBay(c.x, c.z); i++) t.run(1 / 60, 1 / 60, false);
+    t.key('KeyW', false); t.key('KeyS', true);
+    for (let i = 0; i < 300 && Math.hypot(c.vx, c.vz) > 0.3; i++) t.run(1 / 60, 1 / 60, false);
+    t.key('KeyS', false);
+    t.run(0.5, 1 / 60, false);
+    s.shop = WORKSHOP.open;
+    const steg3 = () => [...document.querySelectorAll('#shopEngine button')].find((b) => b.textContent.startsWith('Steg 3'));
+    s.before = { lv: P.level, locked: steg3().disabled };
+    let need = 0;
+    for (let lv = 1; lv < 8; lv++) need += D.need(lv);
+    P.gain(Math.max(1, need - P.xp));
+    W.render();
+    s.after = { lv: P.level, locked: steg3().disabled };
+    W.closeBoard();
+    s.unlocks = WORKSHOP.unlocks.map((u) => u.lv);
+    // I opens the board with every trophy, and pauses the game; Esc closes it
+    t.press('KeyI');
+    s.board = { open: P.open, paused: paused(), rows: document.querySelectorAll('#trList li').length, got: document.querySelectorAll('#trList li.got').length, trophies: D.TROPHIES.length, gotNow: Object.keys(D.S.got).length };
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape' }));
+    s.closed = !P.open && document.getElementById('trophies').hidden;
+    // it is kept in the browser
+    t.run(4, 1 / 30, false);
+    const kept = JSON.parse(localStorage.getItem('gubbe-niva'));
+    s.kept = kept.xp === P.xp && kept.got.fart === 1;
+    s.bad = t.state().bad;
+    t.hold(false);
+    return s;
+  });
+  expect(r.jobXp).toBe(100);
+  expect(r.gained).toBe(100);
+  expect(r.first).toBe(true);
+  expect(r.escape).toBe(true);
+  expect(r.fast).toBe(true);
+  expect(r.level).toBe(true);
+  expect(r.tag).toBe(true);
+  expect(r.award).toBe(true);
+  expect(r.shop).toBe(true);
+  expect(r.before.locked).toBe(r.before.lv < 8);
+  expect(r.after.lv).toBeGreaterThanOrEqual(8);
+  expect(r.after.locked).toBe(false);
+  expect(r.unlocks).toEqual([2, 3, 4, 5, 6, 8]);
+  expect(r.board.open).toBe(true);
+  expect(r.board.paused).toBe(true);
+  expect(r.board.rows).toBe(r.board.trophies);
+  expect(r.board.got).toBe(r.board.gotNow);
+  expect(r.closed).toBe(true);
+  expect(r.kept).toBe(true);
+  expect(r.bad).toEqual([]);
+  expect(errors).toEqual([]);
+});

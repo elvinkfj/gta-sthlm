@@ -390,6 +390,8 @@
         line = 'Gatloppet ' + raceOf().name + ' är slut.';
       }
       if (!rows.length) return;
+      // XP for playing, more for winning
+      if (G.ids.includes(MP.myId)) PROGRESS.played(rows[0].id === MP.myId && (G.n === 'race' ? rows[0].home : !(rows.length > 1 && rows[0].sc === rows[1].sc)));
       E.boardTitle.textContent = title;
       E.boardList.textContent = '';
       for (const r of rows) {

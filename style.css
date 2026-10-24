@@ -494,7 +494,7 @@ body.metro #touch, body.metro #hud { visibility: hidden; }
 /* (the price and the buy button stay in view at the bottom while the rest scrolls) */
 .shop-foot { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0 14px; border-top: 2px solid rgba(255, 255, 255, 0.3); background: #c8102e; font-weight: 900; }
 .shop-foot .short { color: #ffe08a; }
-body.shop #touch, body.shop .tags, body.shop #map, body.shop #btnFriends, body.shop #dash, body.shop #limit, body.shop #prompt, body.shop #loc, body.shop #stars { visibility: hidden; }
+body.shop #touch, body.shop .tags, body.shop #map, body.shop #btnFriends, body.shop #btnLevel, body.shop #dash, body.shop #limit, body.shop #prompt, body.shop #loc, body.shop #stars { visibility: hidden; }
 @media (max-width: 760px) {
   #shop { left: 0; top: auto; height: 60vh; align-items: flex-end; padding: 8px; }
   .shop-sign { width: 100%; min-width: 0; }
@@ -553,3 +553,80 @@ body.shop #touch, body.shop .tags, body.shop #map, body.shop #btnFriends, body.s
 #partyBoard li:first-child { color: var(--sign-yellow); font-size: 1.25rem; }
 #partyBoard li span:last-child { margin-left: auto; font-family: var(--font-gauge); font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: reduce) { .sign { animation: none; } #hud { transition: none; } #limit.over, #wanted, .beacon, #ticket { animation: none; } #limit.over { box-shadow: inset 0 0 0 7px var(--sign-red), 0 0 0 4px var(--sign-red); } }
+/* ---------- levels and trophies: the level in the corner, +XP, a new trophy or level, the board (a brown tourist sign) ---------- */
+.lv-tag { pointer-events: auto; cursor: pointer; padding: 4px 11px 4px 4px; }
+.lv-tag:hover { background: rgba(15, 23, 30, 0.9); }
+#lvNum { min-width: 22px; height: 22px; padding: 0 3px; box-sizing: border-box; display: grid; place-items: center; border-radius: 999px; background: var(--sign-yellow); color: var(--asphalt); font: 900 0.8rem/1 var(--font-gauge); }
+.lv-text { display: grid; gap: 3px; font-size: 0.66rem; letter-spacing: 0.12em; text-transform: uppercase; line-height: 1; }
+.lv-bar { width: 56px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.22); overflow: hidden; }
+.lv-bar i { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--sign-yellow); transition: width 0.4s ease; }
+.lv-bar.big { width: 100%; height: 10px; border-radius: 5px; background: rgba(0, 0, 0, 0.28); }
+/* on a touch screen: a button under the friends' button */
+#btnLevel {
+  display: none; position: absolute; pointer-events: auto; top: calc(58px + env(safe-area-inset-top, 0px)); right: calc(150px + env(safe-area-inset-right, 0px));
+  padding: 8px 12px 6px; border: 0; border-radius: 999px; color: var(--asphalt); font: 900 0.82rem/1 var(--font-sign); touch-action: manipulation;
+  background: linear-gradient(to right, var(--sign-yellow) var(--p, 0%), var(--snow) var(--p, 0%)) bottom / 100% 4px no-repeat, var(--snow);
+  box-shadow: inset 0 0 0 2px var(--asphalt), 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+body.touch #btnLevel { display: block; }
+@media (max-width: 760px) {
+  body.touch #btnLevel { right: calc(142px + env(safe-area-inset-right, 0px)); }
+  body.touch.driving #btnLevel { top: calc(140px + env(safe-area-inset-top, 0px)); right: calc(96px + env(safe-area-inset-right, 0px)); }
+}
+#xpPop {
+  position: absolute; left: 50%; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+  font: 900 1.35rem/1 var(--font-sign); color: var(--sign-yellow); white-space: nowrap; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.4), 0 0 12px rgba(0, 0, 0, 0.45);
+}
+#xpPop.go { animation: xpUp 1.8s ease-out forwards; }
+@keyframes xpUp { 0% { opacity: 0; translate: 0 10px; } 12% { opacity: 1; translate: 0 0; } 70% { opacity: 1; } 100% { opacity: 0; translate: 0 -26px; } }
+body.touch #xpPop { bottom: calc(300px + env(safe-area-inset-bottom, 0px)); }
+/* a new trophy (gold) or level (yellow), under the map */
+#award {
+  position: absolute; right: calc(16px + env(safe-area-inset-right, 0px)); top: calc(240px + env(safe-area-inset-top, 0px));
+  width: min(300px, calc(100vw - 32px)); box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 10px 14px 10px 10px;
+  border-radius: 12px; background: #6e4220; box-shadow: inset 0 0 0 2px #6e4220, inset 0 0 0 4px var(--snow), 0 10px 26px rgba(0, 0, 0, 0.35);
+}
+#award.go { animation: awardIn 0.5s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+#award .cup { width: 40px; height: 40px; flex: none; fill: #f2c94c; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.3)); }
+#award.level { background: var(--sign-yellow); color: var(--asphalt); box-shadow: inset 0 0 0 2px var(--sign-yellow), inset 0 0 0 4px var(--asphalt), 0 10px 26px rgba(0, 0, 0, 0.35); }
+#award.level .cup { fill: var(--asphalt); filter: none; }
+#award small { display: block; font-size: 0.66rem; font-weight: 900; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.85; }
+#award b { display: block; font: 900 1.2rem/1.15 var(--font-sign); }
+#awardSub { display: block; font-size: 0.8rem; font-weight: 700; line-height: 1.3; }
+@keyframes awardIn { from { opacity: 0; transform: translateX(30px) scale(0.9); } to { opacity: 1; transform: none; } }
+@media (max-width: 760px) {
+  #award { right: auto; left: 50%; top: auto; bottom: calc(196px + env(safe-area-inset-bottom, 0px)); translate: -50% 0; }
+  body.touch #award { bottom: calc(340px + env(safe-area-inset-bottom, 0px)); }
+}
+#trophies { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; box-sizing: border-box; background: rgba(6, 16, 26, 0.55); }
+.tr-sign { width: min(520px, 100%); max-height: 100%; display: flex; flex-direction: column; overflow: hidden; background: #6e4220; }
+.tr-sign .sign-inner { gap: 10px; overflow-y: auto; min-height: 0; padding: 16px 18px 18px; }
+.tr-sign h2 { margin: 0; display: flex; align-items: center; gap: 10px; font: 900 1.9rem/1 var(--font-sign); }
+.tr-sign h2 .cup { width: 1.1em; height: 1.1em; fill: #f2c94c; }
+.tr-xp { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; font-weight: 700; font-size: 0.86rem; font-variant-numeric: tabular-nums; }
+.tr-xp .lv-bar { flex: 1 0 100%; }
+#trTotal { opacity: 0.8; }
+.tr-sec { display: grid; gap: 6px; padding-top: 8px; border-top: 2px solid rgba(255, 255, 255, 0.3); }
+.tr-sec h3 { margin: 0; font: 900 1.05rem/1.1 var(--font-sign); display: flex; align-items: baseline; gap: 8px; }
+.tr-sec h3 small { font-weight: 700; font-size: 0.78rem; opacity: 0.85; }
+.tr-unlocks, .tr-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.tr-unlocks li { display: flex; align-items: baseline; gap: 10px; font-size: 0.86rem; font-weight: 700; opacity: 0.75; }
+.tr-unlocks li b { min-width: 4.2em; padding: 3px 7px 1px; border-radius: 5px; background: rgba(0, 0, 0, 0.28); font: 900 0.76rem/1.2 var(--font-sign); text-align: center; }
+.tr-unlocks li.done { opacity: 1; }
+.tr-unlocks li.done b { background: var(--sign-yellow); color: var(--asphalt); }
+.tr-list li { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 6px 10px 6px 8px; border-radius: 9px; background: rgba(0, 0, 0, 0.22); }
+.tr-list li .cup { width: 28px; height: 28px; fill: rgba(255, 255, 255, 0.22); }
+.tr-list li.got { background: rgba(255, 255, 255, 0.16); }
+.tr-list li.got .cup { fill: #f2c94c; filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.35)); }
+.tr-list b { display: block; font-weight: 900; font-size: 0.92rem; }
+.tr-list small { display: block; font-size: 0.76rem; font-weight: 700; opacity: 0.85; }
+.tr-side { display: grid; justify-items: end; gap: 2px; font: 700 0.8rem/1.1 var(--font-gauge); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tr-side small { font-family: var(--font-sign); color: #f2c94c; opacity: 1; }
+li.got .tr-side { color: #9be08f; }
+.tr-note { margin: 0; font-size: 0.8rem; font-weight: 700; opacity: 0.85; line-height: 1.4; }
+/* a part in the workshop that waits for a level */
+.shop-opt.locked { cursor: not-allowed; opacity: 0.5; }
+.shop-opt.locked small { color: #ffe08a; opacity: 1; }
+.shop-opt.locked:hover { background: rgba(255, 255, 255, 0.14); }
+.shop-swatch.locked { position: relative; cursor: not-allowed; opacity: 0.55; }
+.shop-swatch.locked::after { content: attr(data-lv); position: absolute; inset: 0; display: grid; place-items: center; color: var(--snow); font: 900 0.8rem/1 var(--font-gauge); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); }

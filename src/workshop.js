@@ -11,15 +11,24 @@
     const KEY = 'gubbe-verkstad', PAINT_KR = 300, RIM_KR = 400;
     const PAINTS = [['Svart', 0x15171a], ['Vit', 0xf2f2f0], ['Silver', 0xb9bdc2], ['Grafit', 0x50555b], ['Röd', 0xc8102e], ['Vinröd', 0x6e1424],
       ['Orange', 0xff7a1a], ['Gul', 0xf7c600], ['Limegrön', 0x8fd400], ['Grön', 0x1f7a3a], ['Turkos', 0x16a3a6], ['Ljusblå', 0x5fa8e8],
-      ['Blå', 0x1f4fbf], ['Marinblå', 0x14234a], ['Lila', 0x6a2fa0], ['Rosa', 0xff6fb0], ['Brun', 0x6b4426], ['Guld', 0xc9a227]];
+      ['Blå', 0x1f4fbf], ['Marinblå', 0x14234a], ['Lila', 0x6a2fa0], ['Rosa', 0xff6fb0], ['Brun', 0x6b4426], ['Guld', 0xc9a227, 6]];
     // (null: the rims the model comes with)
-    const RIMS = [[null, 'Original'], ['gloss', 'Femekrade'], ['alloy', 'Dubbelekrade'], ['sport', 'Sport'], ['black', 'Svarta'], ['aero', 'Aero'], ['f40', 'Stjärnan'], ['wire', 'Ekrar'], ['steel', 'Stål']];
+    const RIMS = [[null, 'Original'], ['gloss', 'Femekrade'], ['alloy', 'Dubbelekrade'], ['sport', 'Sport'], ['black', 'Svarta'], ['aero', 'Aero'], ['f40', 'Stjärnan', 2], ['wire', 'Ekrar', 4], ['steel', 'Stål']];
     // drop: how far the body comes down (the arches leave only a few centimetres before the tyres tuck in); grip: a little
     // better road holding
-    const LOWS = [{ name: 'Standard', drop: 0, grip: 1, kr: 0 }, { name: 'Sänkt', drop: 0.04, grip: 1.04, kr: 300 }, { name: 'Mycket sänkt', drop: 0.07, grip: 1.08, kr: 600 }];
+    const LOWS = [{ name: 'Standard', drop: 0, grip: 1, kr: 0 }, { name: 'Sänkt', drop: 0.04, grip: 1.04, kr: 300 }, { name: 'Mycket sänkt', drop: 0.07, grip: 1.08, kr: 600, lv: 5 }];
     // boost: more pull; top: every gear goes that much further, and so does the top speed
-    const ENGINES = [{ name: 'Standard', boost: 1, top: 1, kr: 0 }, { name: 'Steg 1', boost: 1.12, top: 1.05, kr: 600 }, { name: 'Steg 2', boost: 1.25, top: 1.1, kr: 1500 }, { name: 'Steg 3', boost: 1.4, top: 1.15, kr: 3000 }];
+    const ENGINES = [{ name: 'Standard', boost: 1, top: 1, kr: 0 }, { name: 'Steg 1', boost: 1.12, top: 1.05, kr: 600 }, { name: 'Steg 2', boost: 1.25, top: 1.1, kr: 1500, lv: 3 }, { name: 'Steg 3', boost: 1.4, top: 1.15, kr: 3000, lv: 8 }];
     const rimsOk = (M) => !M.moped, lowOk = (M) => !M.moped && !M.bus;
+    // the best parts wait for a level (the third field of a paint or rims, lv on the rest): what each level unlocks, for
+    // the level board (PROGRESS), and the level a part still waits for (0 when you can buy it)
+    const unlocks = [
+      ...PAINTS.filter((p) => p[2]).map(([name, , lv]) => ({ lv, text: 'lacken ' + name.toLowerCase() })),
+      ...RIMS.filter((r) => r[2]).map(([, name, lv]) => ({ lv, text: 'fälgarna ' + name })),
+      ...LOWS.filter((x) => x.lv).map((x) => ({ lv: x.lv, text: 'fjädringen ' + x.name.toLowerCase() })),
+      ...ENGINES.filter((x) => x.lv).map((x) => ({ lv: x.lv, text: 'motorn ' + x.name.toLowerCase() }))
+    ].sort((a, b) => a.lv - b.lv);
+    const locked = (lv) => (lv && PROGRESS.level < lv ? lv : 0);
 
     /* ---------- what you have bought, per model ---------- */
     let saved = {};
@@ -224,13 +233,14 @@
       g.fillStyle = '#3a3e42'; g.beginPath(); g.arc(cx, cy, R * 0.1, 0, TAU); g.fill();
     }
     const kr = (n) => (n ? fmtKr(n) : 'Gratis');
-    function option(list, name, sub, on, owned, pick, extra) {
-      const b = document.createElement('button');
-      b.type = 'button'; b.className = 'shop-opt' + (on ? ' on' : '') + (owned ? ' owned' : '');
+    function option(list, name, sub, on, owned, pick, extra, lv) {
+      const b = document.createElement('button'), lock = owned ? 0 : locked(lv);
+      b.type = 'button'; b.className = 'shop-opt' + (on ? ' on' : '') + (owned ? ' owned' : '') + (lock ? ' locked' : '');
       b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      if (lock) { b.disabled = true; b.title = 'Låses upp på nivå ' + lock; }
       if (extra) b.append(extra);
       const nm = document.createElement('b'); nm.textContent = name;
-      const sm = document.createElement('small'); sm.textContent = owned ? 'Din nu' : sub;
+      const sm = document.createElement('small'); sm.textContent = owned ? 'Din nu' : lock ? 'Nivå ' + lock : sub;
       b.append(nm, sm);
       b.addEventListener('click', () => { pick(); show(want); render(); });
       list.append(b);
@@ -241,10 +251,11 @@
       E.car.textContent = M.name;
       E.cash.textContent = 'Kassa ' + fmtKr(JOBS.earned);
       E.paint.textContent = '';
-      for (const [name, col] of PAINTS) {
-        const b = document.createElement('button');
-        b.type = 'button'; b.className = 'shop-swatch' + (want.paint === col ? ' on' : '') + (have.paint === col ? ' owned' : '');
-        b.style.background = hex(col); b.title = name; b.setAttribute('aria-label', name); b.setAttribute('aria-pressed', want.paint === col ? 'true' : 'false');
+      for (const [name, col, lv] of PAINTS) {
+        const b = document.createElement('button'), lock = have.paint === col ? 0 : locked(lv);
+        b.type = 'button'; b.className = 'shop-swatch' + (want.paint === col ? ' on' : '') + (have.paint === col ? ' owned' : '') + (lock ? ' locked' : '');
+        b.style.background = hex(col); b.title = lock ? name + ': låses upp på nivå ' + lock : name; b.setAttribute('aria-label', b.title); b.setAttribute('aria-pressed', want.paint === col ? 'true' : 'false');
+        if (lock) { b.disabled = true; b.dataset.lv = lock; }
         b.addEventListener('click', () => { want.paint = col; show(want); render(); });
         E.paint.append(b);
       }
@@ -258,16 +269,16 @@
       }
       E.rimSec.hidden = !rimsOk(M);
       E.rims.textContent = '';
-      if (rimsOk(M)) for (const [style, name] of RIMS) {
+      if (rimsOk(M)) for (const [style, name, lv] of RIMS) {
         const cv = document.createElement('canvas'); cv.width = cv.height = 40;
         drawRim(cv, style || M.rim);
-        option(E.rims, name, style ? kr(RIM_KR) : kr(have.rim ? RIM_KR : 0), want.rim === style, have.rim === style, () => { want.rim = style; }, cv);
+        option(E.rims, name, style ? kr(RIM_KR) : kr(have.rim ? RIM_KR : 0), want.rim === style, have.rim === style, () => { want.rim = style; }, cv, lv);
       }
       E.lowSec.hidden = !lowOk(M);
       E.low.textContent = '';
-      if (lowOk(M)) LOWS.forEach((L, i) => option(E.low, L.name, kr(L.kr), want.low === i, have.low === i, () => { want.low = i; }));
+      if (lowOk(M)) LOWS.forEach((L, i) => option(E.low, L.name, kr(L.kr), want.low === i, have.low === i, () => { want.low = i; }, null, L.lv));
       E.engine.textContent = '';
-      ENGINES.forEach((P, i) => option(E.engine, P.name, kr(P.kr), want.engine === i, have.engine === i, () => { want.engine = i; }));
+      ENGINES.forEach((P, i) => option(E.engine, P.name, kr(P.kr), want.engine === i, have.engine === i, () => { want.engine = i; }, null, P.lv));
       E.stats.textContent = statsOf(M, want.engine);
       E.fix.textContent = '';
       const fp = fixPrice(c);
@@ -386,7 +397,7 @@
     }
 
     return {
-      update, view, fit, kept, look, netCode, drawMini, drawBig,
+      update, view, fit, kept, look, netCode, drawMini, drawBig, unlocks,
       paints: PAINTS.map(([, c]) => c),
       // how high the camera may go: under the roof in the hall, and under the lintel looking in through the door
       ceiling(cx, cz, tx, tz) { return inside(cx, cz) ? H - 0.4 : inside(tx, tz) ? DOOR_H - 0.5 : Infinity; },
