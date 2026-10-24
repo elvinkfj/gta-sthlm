@@ -547,7 +547,9 @@
       c.plates.visible = !c.M.boat && Math.abs(c.x - camera.position.x) + Math.abs(c.z - camera.position.z) < 90;
       for (const s of c.spins) s.rotation.x = c.wheelRot;
       const glow = c.mat.userData.glow;
-      glow.y = c.braking ? BRAKE_GLOW : TAIL_GLOW;
+      // (at night the headlights are on in every car with someone in it, and the tail lights shine brighter: DAYNIGHT)
+      glow.x = !c.dead && (c === driving || c.occupant || c.bot) ? DAYNIGHT.head : DAYNIGHT.parked;
+      glow.y = c.braking ? BRAKE_GLOW : TAIL_GLOW * DAYNIGHT.tail;
       c.mat.userData.rev.value = c.reversing && !c.dead ? 1.8 : 0;
       updateBlink(c, dt);
       updateEngine(c, vf / (c.speedK || 1), dt);

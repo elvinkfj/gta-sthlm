@@ -2,7 +2,7 @@
   const $ = (id) => document.getElementById(id);
   // the game's version: one up in every pull request that changes the game (see CLAUDE.md). It stands in the bottom right
   // corner, and friends in a room see each other's
-  const VERSION = { nr: 46, date: '24 oktober 2026' };
+  const VERSION = { nr: 47, date: '24 oktober 2026' };
   $('version').textContent = 'Version ' + VERSION.nr + ' · ' + VERSION.date;
   if (!window.THREE) {
     $('lede').textContent = 'Kunde inte ladda 3D-motorn. Kontrollera att mappen lib ligger bredvid index.html och ladda om sidan.';
@@ -73,10 +73,14 @@
   const SUN_OFF = new THREE.Vector3(85, 120, 55);
   const SUN_DIR = SUN_OFF.clone().normalize();
 
-  // sky: blue gradient, sun and drifting clouds, drawn by one shader on a dome that follows the camera
+  // sky: blue gradient, sun and drifting clouds, drawn by one shader on a dome that follows the camera. Its colours are
+  // uniforms that the day and night (DAYNIGHT) change; the values here are the day's: zenith, horizon, the sun's glow,
+  // the sun's disc, the clouds and their sunlit edge, the ground below the horizon, and at night the stars and the moon
   const SKY_VERT = 'varying vec3 vDir;\nvoid main() { vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }';
   const SKY_FRAG = [
     'uniform vec3 sunDir; uniform float time; uniform vec3 haze; uniform float hazeAmt; uniform float envMode;',
+    'uniform vec3 uZen; uniform vec3 uHor; uniform vec3 uGlow; uniform float uSunVis; uniform vec3 uCloud; uniform float uCloudGlow; uniform float uGround;',
+    'uniform float uNight; uniform vec3 uMoonDir;',
     'varying vec3 vDir;',
     'float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }',
     'float noise(vec2 p) { vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);',
@@ -84,18 +88,23 @@
     'float fbm(vec2 p) { float v = 0.0, a = 0.5; for (int i = 0; i < 5; i++) { v += a * noise(p); p = p * 2.03 + vec2(1.7, 9.2); a *= 0.5; } return v; }',
     'void main() {',
     '  vec3 d = normalize(vDir); float h = d.y;',
-    '  vec3 zen = vec3(0.075, 0.24, 0.62), hor = vec3(0.55, 0.68, 0.82);',
-    '  vec3 col = mix(hor, zen, pow(max(h, 0.0), 0.5));',
-    '  if (h < 0.0) col = mix(hor, mix(vec3(0.30, 0.32, 0.31), vec3(0.42, 0.39, 0.35), envMode), min(1.0, -h * 5.0));',
+    '  vec3 col = mix(uHor, uZen, pow(max(h, 0.0), 0.5));',
+    '  if (h < 0.0) col = mix(uHor, mix(vec3(0.30, 0.32, 0.31), vec3(0.42, 0.39, 0.35), envMode) * uGround, min(1.0, -h * 5.0));',
     '  float sd = max(dot(d, sunDir), 0.0);',
-    '  col += vec3(1.0, 0.82, 0.58) * (pow(sd, 6.0) * 0.22 + pow(sd, 90.0) * 0.8);',
-    '  col += vec3(1.0, 0.96, 0.88) * smoothstep(0.9993, 0.9997, sd) * 14.0;',
+    '  col += uGlow * (pow(sd, 6.0) * 0.22 + pow(sd, 90.0) * 0.8);',
+    '  col += vec3(1.0, 0.96, 0.88) * smoothstep(0.9993, 0.9997, sd) * 14.0 * uSunVis;',
+    '  if (uNight > 0.0 && h > 0.0) {',
+    '    vec2 sp = floor(d.xz / (h + 0.35) * 260.0); float s = hash(sp);',
+    '    col += vec3(0.85, 0.9, 1.0) * step(0.9965, s) * (0.6 + 0.4 * sin(time * 2.0 + s * 60.0)) * uNight * smoothstep(0.04, 0.3, h) * 1.6;',
+    '    float md = dot(d, uMoonDir);',
+    '    col += vec3(0.93, 0.95, 1.0) * (smoothstep(0.99955, 0.99975, md) * 2.4 + pow(max(md, 0.0), 40.0) * 0.06) * uNight;',
+    '  }',
     '  if (h > 0.0) {',
     '    vec2 uv = d.xz / (h + 0.1) * 1.1 + vec2(time * 0.006, time * 0.0025);',
     '    float n = fbm(uv);',
     '    float c = smoothstep(0.48, 0.74, n) * smoothstep(0.0, 0.14, h);',
-    '    vec3 cc = mix(vec3(0.58, 0.63, 0.70), vec3(1.05, 1.03, 1.0), smoothstep(0.5, 0.86, fbm(uv * 1.7 + 3.1)));',
-    '    cc += vec3(1.0, 0.86, 0.66) * pow(sd, 5.0) * 0.45;',
+    '    vec3 cc = mix(vec3(0.58, 0.63, 0.70), vec3(1.05, 1.03, 1.0), smoothstep(0.5, 0.86, fbm(uv * 1.7 + 3.1))) * uCloud;',
+    '    cc += vec3(1.0, 0.86, 0.66) * pow(sd, 5.0) * 0.45 * uCloudGlow;',
     '    col = mix(col, cc, c * 0.92);',
     '  }',
     '  col = mix(col, vec3(dot(col, vec3(0.3, 0.55, 0.15))), envMode * 0.45);',
@@ -109,21 +118,30 @@
   function skyMaterial(hazeAmt, envMode = 0) {
     return new THREE.ShaderMaterial({
       vertexShader: SKY_VERT, fragmentShader: SKY_FRAG, side: THREE.BackSide, depthWrite: false, fog: false,
-      uniforms: { sunDir: { value: SUN_DIR }, time: { value: 0 }, haze: { value: new THREE.Vector3(HAZE[0], HAZE[1], HAZE[2]) }, hazeAmt: { value: hazeAmt }, envMode: { value: envMode } }
+      uniforms: {
+        sunDir: { value: SUN_DIR }, time: { value: 0 }, haze: { value: new THREE.Vector3(HAZE[0], HAZE[1], HAZE[2]) }, hazeAmt: { value: hazeAmt }, envMode: { value: envMode },
+        uZen: { value: new THREE.Vector3(0.075, 0.24, 0.62) }, uHor: { value: new THREE.Vector3(0.55, 0.68, 0.82) }, uGlow: { value: new THREE.Vector3(1.0, 0.82, 0.58) }, uSunVis: { value: 1 },
+        uCloud: { value: new THREE.Vector3(1, 1, 1) }, uCloudGlow: { value: 1 }, uGround: { value: 1 }, uNight: { value: 0 }, uMoonDir: { value: new THREE.Vector3(0, 1, 0) }
+      }
     });
   }
   const sky = new THREE.Mesh(new THREE.SphereGeometry(1500, 48, 24), skyMaterial(1));
   sky.renderOrder = -1;
   scene.add(sky);
 
-  // reflections and soft sky light for every PBR material come from the same sky
-  {
-    const envScene = new THREE.Scene();
-    envScene.add(new THREE.Mesh(new THREE.SphereGeometry(900, 48, 24), skyMaterial(0, 1)));
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    scene.environment = pmrem.fromScene(envScene, 0.02, 0.1, 2000).texture;
+  // reflections and soft sky light for every PBR material come from the same sky (baked again as the day goes on, by
+  // DAYNIGHT with bakeEnv)
+  const envScene = new THREE.Scene(), envSky = new THREE.Mesh(new THREE.SphereGeometry(900, 48, 24), skyMaterial(0, 1));
+  envScene.add(envSky);
+  let envTarget = null;
+  function bakeEnv() {
+    const pmrem = new THREE.PMREMGenerator(renderer), old = envTarget;
+    envTarget = pmrem.fromScene(envScene, 0.02, 0.1, 2000);
+    scene.environment = envTarget.texture;
     pmrem.dispose();
+    if (old) old.dispose();
   }
+  bakeEnv();
   const std = (o) => new THREE.MeshStandardMaterial(Object.assign({ roughness: 0.9, metalness: 0 }, o));
 
   /* ================= geometry helpers ================= */

@@ -29,7 +29,7 @@
     <div class="tag wb-tag" id="wbTag" hidden title="Vattenballonger: klicka med musen, eller tryck F när du går, för att kasta"><svg class="wb" viewBox="0 0 20 20" aria-hidden="true"><ellipse cx="10" cy="8.6" rx="5.8" ry="6.8" fill="#4fc3f7" stroke="#fff" stroke-width="1"/><path d="M8.7 15.3h2.6L10 17.8z" fill="#4fc3f7" stroke="#fff" stroke-width="0.8"/></svg><b id="wbCount">0</b></div>
   </div>
   <div id="stars" role="img" aria-label="Polisen letar inte efter dig" title="Hur mycket polisen är efter dig. Från tre stjärnor kommer helikoptern"><span class="heli">HELIKOPTER</span><span class="army">MILITÄR</span></div>
-  <div id="loc"><span id="locStreet"></span><span id="locDistrict">Norrmalm</span></div>
+  <div id="loc"><span id="locStreet"></span><span id="locDistrict">Norrmalm</span><span id="locTime">10:00</span></div>
   <div id="job" hidden><span class="job-icon" id="jobIcon">T</span><span><b id="jobTitle"></b><small id="jobHint"></small></span><span id="jobClock"></span></div>
   <div id="bigText" hidden></div>
   <div id="party" hidden><span class="job-icon" id="partyIcon">P</span><span><b id="partyTitle"></b><small id="partySub"></small></span><span id="partyClock"></span></div>
@@ -97,6 +97,7 @@
     <span class="key">V</span><span>Släpp en ballong</span>
     <span class="key">Verkstad</span><span>På Götgatan på Söder, mellan Åsögatan och Skånegatan. Kör in genom porten och stanna på den gula rutan. Där köper du ny lack, fälgar, sänkt fjädring och bättre motor, och kan laga bilen. Det du köper sparas för den bilmodellen. Ny lack när polisen jagar dig gör att de tappar bort dig</span>
     <span class="key">Vattenballonger</span><span>Köp 5 st för 25 kr i hinken bredvid ballongförsäljaren. Klicka med musen, eller tryck F när du går, så kastar du dit du tittar. Den du träffar blir blöt. Träffar du polisen blir du jagad!</span>
+    <span class="key">O</span><span>Spola fram tiden en timme. Ett dygn i spelet tar 20 minuter, och på natten tänds gatlamporna, fönstren och billjusen</span>
     <span class="key">R</span><span>Ställ bilen på gatan igen, eller båten ute på öppet vatten</span>
     <span class="key">T</span><span>Ljud av och på</span>
     <span class="key">Q</span><span>Grafikkvalitet: hög, mellan eller enkel</span>
@@ -301,6 +302,7 @@
 <script src="src/rides.js"></script>
 <script src="src/water-balloons.js"></script>
 <script src="src/workshop.js"></script>
+<script src="src/daynight.js"></script>
 <script src="src/gameplay.js"></script>
 <script src="src/hud.js"></script>
 <script src="src/sound.js"></script>
