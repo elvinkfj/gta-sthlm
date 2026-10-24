@@ -391,6 +391,8 @@
       // how high the camera may go: under the roof in the hall, and under the lintel looking in through the door
       ceiling(cx, cz, tx, tz) { return inside(cx, cz) ? H - 0.4 : inside(tx, tz) ? DOOR_H - 0.5 : Infinity; },
       get open() { return open; },
+      // the board closes (a game with friends starts, or you go to a friend)
+      bail: closeBoard,
       // J on the bay opens the board again
       key() {
         if (!onBay || open) return false;
