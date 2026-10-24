@@ -206,6 +206,8 @@ body.job #wanted, body.party #wanted { top: calc(112px + env(safe-area-inset-top
 .wb-tag b { color: #8fd8ff; font-variant-numeric: tabular-nums; }
 .wb { width: 18px; height: 18px; display: block; }
 /* water on the screen when a friend's water balloon hits you: a bluish edge and drops that run down */
+/* rain on the windscreen while you drive, and the wipers (drawn by WEATHER at half the screen's size) */
+#rainScreen { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 #wetScreen { position: fixed; inset: 0; pointer-events: none; overflow: hidden; background: radial-gradient(ellipse at center, rgba(120, 180, 230, 0) 45%, rgba(90, 150, 210, 0.35) 100%); }
 #wetScreen i { position: absolute; border-radius: 50% 50% 46% 46% / 58% 58% 42% 42%; background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.75), rgba(190, 225, 255, 0.22) 45%, rgba(110, 160, 210, 0.32) 100%); box-shadow: inset -2px -3px 6px rgba(40, 80, 120, 0.35), 0 2px 4px rgba(0, 0, 0, 0.12); }
 /* the indicator tell-tales over the dash: green arrows that blink with the lamps (tap them on a touch screen) */

@@ -782,17 +782,19 @@
     return m;
   }
   const nscale = (k) => new THREE.Vector2(k, k);
-  groundMesh(paveB, std({ map: pave2, normalMap: NRM.pave, normalScale: nscale(0.8), color: 0xe6e2da, roughness: 0.92 }));
-  groundMesh(grassB, std({ map: grassTex, roughness: 0.95 }), -1);
-  groundMesh(railB, std({ map: railTex, roughness: 0.95 }), -1);
-  groundMesh(roadB, std({ map: road2, normalMap: NRM.road, normalScale: nscale(0.4), roughness: 0.86 }), -2);
-  groundMesh(avenueB, std({ map: avenue2, normalMap: NRM.avenue, normalScale: nscale(0.4), roughness: 0.86 }), -2);
-  groundMesh(medianB, std({ map: median2, normalMap: NRM.median, normalScale: nscale(0.4), roughness: 0.88 }), -2);
-  groundMesh(junctionB, std({ map: junction2, normalMap: NRM.junction, normalScale: nscale(0.4), roughness: 0.86 }), -2);
-  groundMesh(cobbleB, std({ map: cobble2, normalMap: NRM.cobble, normalScale: nscale(1.1), roughness: 0.72 }), -2);
-  groundMesh(slabB, std({ map: slab2, normalMap: NRM.slab, normalScale: nscale(0.8), roughness: 0.8 }), -2);
-  groundMesh(plazaB, std({ map: plazaTex, roughness: 0.5 }), -3);
-  groundMesh(zebraB, std({ color: 0xe8e8e4, roughness: 0.7 }), -4);
+  // (the ground's materials by kind, for the rain and the snow: WEATHER)
+  const GROUND = {};
+  groundMesh(paveB, GROUND.pave = std({ map: pave2, normalMap: NRM.pave, normalScale: nscale(0.8), color: 0xe6e2da, roughness: 0.92 }));
+  groundMesh(grassB, GROUND.grass = std({ map: grassTex, roughness: 0.95 }), -1);
+  groundMesh(railB, GROUND.rail = std({ map: railTex, roughness: 0.95 }), -1);
+  groundMesh(roadB, GROUND.road = std({ map: road2, normalMap: NRM.road, normalScale: nscale(0.4), roughness: 0.86 }), -2);
+  groundMesh(avenueB, GROUND.avenue = std({ map: avenue2, normalMap: NRM.avenue, normalScale: nscale(0.4), roughness: 0.86 }), -2);
+  groundMesh(medianB, GROUND.median = std({ map: median2, normalMap: NRM.median, normalScale: nscale(0.4), roughness: 0.88 }), -2);
+  groundMesh(junctionB, GROUND.junction = std({ map: junction2, normalMap: NRM.junction, normalScale: nscale(0.4), roughness: 0.86 }), -2);
+  groundMesh(cobbleB, GROUND.cobble = std({ map: cobble2, normalMap: NRM.cobble, normalScale: nscale(1.1), roughness: 0.72 }), -2);
+  groundMesh(slabB, GROUND.slab = std({ map: slab2, normalMap: NRM.slab, normalScale: nscale(0.8), roughness: 0.8 }), -2);
+  groundMesh(plazaB, GROUND.plaza = std({ map: plazaTex, roughness: 0.5 }), -3);
+  groundMesh(zebraB, GROUND.zebra = std({ color: 0xe8e8e4, roughness: 0.7 }), -4);
   scene.add(new THREE.Mesh(signB.build(), std({ map: signTex, roughness: 0.45, emissive: 0x2a2a2a, emissiveMap: signTex })));
   scene.add(new THREE.Mesh(tB.build(), std({ map: tTex, roughness: 0.45, transparent: true, alphaTest: 0.5, emissive: 0x2a2a2a, emissiveMap: tTex })));
   const water = new THREE.Mesh(new THREE.PlaneGeometry(9000, 9000), std({ color: 0x143644, roughness: 0.07, normalMap: waterNormal, normalScale: new THREE.Vector2(0.32, 0.32) }));

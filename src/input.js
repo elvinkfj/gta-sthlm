@@ -65,6 +65,7 @@
     else if (code === 'KeyJ') { if (!WORKSHOP.key() && !PARTY.noJobs()) JOBS.key(); }
     else if (code === 'KeyV') VENDORS.letGo();
     else if (code === 'KeyO') DAYNIGHT.key();
+    else if (code === 'KeyU') WEATHER.key();
     else if (code === 'KeyZ') setBlink(1);
     else if (code === 'KeyX') setBlink(2);
     else if (code === 'KeyC') setBlink(3);

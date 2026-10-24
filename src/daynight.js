@@ -10,7 +10,7 @@
     const DAY_S = 1200, START = 10, RISE = 5, SET = 21, NOON = 13, NIGHT_DIP = 0.5;
     // the sun's path is drawn through where it stood before (SUN_DIR) at the start
     const AZ = (Math.atan2(SUN_DIR.x, SUN_DIR.z) * (NOON - RISE)) / (NOON - START), EL = Math.asin(SUN_DIR.y) / Math.sin((Math.PI * (START - RISE)) / (SET - RISE));
-    let hour = START, baked = START, sendT = 0, shownMin = -1;
+    let hour = START, baked = START, bakedSky = 0, sendT = 0, shownMin = -1;
     const sv = new THREE.Vector3(), mv = new THREE.Vector3(), lv = new THREE.Vector3();
     // where the sun is at an hour: azimuth from the south towards the east, and height
     function sunAt(h, out) {
@@ -166,13 +166,15 @@
       for (const m of [facadeMat, modernMat]) m.emissive.setRGB(L * 1.1, L * 1.1, L * 1.1);
       headK = lerp(HEAD_GLOW, 2.6, L); parkedK = lerp(HEAD_GLOW, 0.12, L); tailK = 1 + 1.6 * L;
       beamMat.opacity = L * 0.5;
+      // and the clouds, the rain and the snow over it all
+      WEATHER.tint();
     }
     const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
     function update(dt) {
       hour = (hour + (dt * 24) / DAY_S) % 24;
       apply();
       // the light everything gets from the sky, baked again as the sky changes
-      if (Math.abs(((hour - baked + 36) % 24) - 12) >= 0.25) { baked = hour; bakeEnv(); }
+      if (Math.abs(((hour - baked + 36) % 24) - 12) >= 0.25 || Math.abs(WEATHER.overcast - bakedSky) > 0.1) { baked = hour; bakedSky = WEATHER.overcast; bakeEnv(); }
       // the pools of lamplight near you (further off they are lost in the dark anyway)
       for (const p of pools) { const c = p.geometry.boundingSphere.center; p.visible = L > 0.01 && Math.abs(c.x - camera.position.x) + Math.abs(c.z - camera.position.z) < 520; }
       // the headlights on the road, for every car with someone in it
