@@ -3,7 +3,7 @@
   /* ================= game state ================= */
   let started = false, pickerOpen = false, nearCar = null;
   // the car picker and the big map both pause the game
-  const paused = () => pickerOpen || bigmap.open || MP.panelOpen || METRO.boardOpen;
+  const paused = () => pickerOpen || bigmap.open || MP.panelOpen || METRO.boardOpen || WORKSHOP.open;
   let camYaw = player.rot, camPitch = 0.3, camDist = 6, lastLook = -1e9, clipT = 1;
   const camTarget = new THREE.Vector3(player.x, 1.6, player.z);
   let jumpQueued = false;
@@ -387,8 +387,10 @@
     if (spawnedCar) removeCar(spawnedCar);
     if (!spot) spot = findSpawnSpot(M);
     if (!spot) { toast(M.boat ? 'Det finns inget vatten här i närheten. Gå ner till en kaj och försök igen.' : 'Det finns ingen plats för ' + M.def + ' här. Gå ut på en gata och försök igen.'); return; }
-    // found every Dalahäst: your cars come in gold
-    const c = makeCar(M, goldCars && !M.police && !M.mil && !M.boat && M.id !== 'taxi' ? 0xc9a227 : M.colors[Math.floor(Math.random() * M.colors.length)]);
+    // found every Dalahäst: your cars come in gold; what you bought for this model at the workshop comes with it
+    const kept = WORKSHOP.kept(M);
+    const c = makeCar(M, kept && kept.paint !== null ? kept.paint : goldCars && !M.police && !M.mil && !M.boat && M.id !== 'taxi' ? 0xc9a227 : M.colors[Math.floor(Math.random() * M.colors.length)]);
+    WORKSHOP.fit(c, kept);
     c.x = spot.x; c.z = spot.z; c.h = spot.h;
     spawnedCar = c;
     enterCar(c);
@@ -548,7 +550,7 @@
       glow.y = c.braking ? BRAKE_GLOW : TAIL_GLOW;
       c.mat.userData.rev.value = c.reversing && !c.dead ? 1.8 : 0;
       updateBlink(c, dt);
-      updateEngine(c, vf, dt);
+      updateEngine(c, vf / (c.speedK || 1), dt);
       damageFx(c, dt);
       if (c.M.police) policeLights(c, dt);
     }
@@ -579,8 +581,8 @@
     return Math.max(0.1, tmin);
   }
   function updateCamera(dt) {
-    // on a ride at Gröna Lund the camera sits in your seat
-    const seatView = RIDES.view();
+    // on a ride at Gröna Lund the camera sits in your seat; at the workshop it looks at your car
+    const seatView = RIDES.view() || WORKSHOP.view();
     if (seatView) {
       const p = seatView.pos, d = seatView.dir;
       camera.position.copy(p); camTarget.copy(p);
@@ -619,6 +621,8 @@
     let cy = Math.max(car && car.M.boat ? WATER_Y + 0.6 : 0.5, camTarget.y + sp * dist);
     // indoors at the police station the camera stays under the ceiling
     if (!car && !fly && (STATION.inside(player.x, player.z) || STATION.inside(cx, cz))) cy = Math.min(cy, STATION.GH - 0.3);
+    // and in the workshop's hall under its roof
+    if (!fly) cy = Math.min(cy, WORKSHOP.ceiling(cx, cz, camTarget.x, camTarget.z));
     if (span) cy = clamp(cy, span.floor + 0.4, span.ceil - 0.15);
     // so close that the camera would be inside your head: hide the body
     if (!car && !fly && !CHUTE.on && !METRO.riding) player.model.group.visible = dist > 1.15;

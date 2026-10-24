@@ -85,50 +85,54 @@
       else if ((c.rT += dt) > 0.12) { c.inR = want < 0; c.rT = 0; if (!c.inR) c.gear = 0; onShift(c, c.inR ? -1 : 1); }
     }
     c.reversing = you ? c.inR || vf < -0.3 : vf < -0.3 || (throttle < -0.05 && vf < 0.5);
-    if (c.auto && !c.inR) autoShift(c, vf, throttle);
-    const power = c.dead ? 0 : c.power;
+    // a tuned engine (the workshop): more pull, and every gear reaches that much further (k), the top speed too
+    const k = c.speedK || 1;
+    if (c.auto && !c.inR) autoShift(c, vf / k, throttle);
+    const power = c.dead ? 0 : c.power * (c.boost || 1);
     if (you) {
       // your car goes where the gear says: forwards in 1 and up, backwards only in R; the other pedal brakes to a stop
       const go = c.inR ? -throttle : throttle, back = c.inR ? -1 : 1;
       if (go > 0.05) {
         if (vf * back < -0.5) vf += M.brake * go * back * dt;
         else if (c.inR) { if (vf > -M.rev) vf -= M.accel * 0.7 * go * power * dt; }
-        else if (c.shiftT <= 0) vf += driveAccel(M, Math.max(0, vf), c.gear, power) * go * dt;
+        else if (c.shiftT <= 0) vf += driveAccel(M, Math.max(0, vf) / k, c.gear, power) * go * dt;
       } else if (go < -0.05) {
         const dv = M.brake * -go * dt;
         vf = Math.abs(vf) <= dv ? 0 : vf - Math.sign(vf) * dv;
       } else {
-        const r = Math.max(0, vf) / M.gearTop[c.gear];
+        const r = Math.max(0, vf) / (M.gearTop[c.gear] * k);
         const engine = c.shiftT > 0 || Math.abs(vf) < 1 || c.dead || c.inR ? 0 : 0.9 * Math.pow(M.max / M.gearTop[c.gear], 0.5) * Math.min(r, 1.2);
         const roll = (2.2 + engine) * dt;
         vf = Math.abs(vf) <= roll ? 0 : vf - Math.sign(vf) * roll;
       }
     } else if (throttle > 0.05) {
       if (vf < -0.5) vf += M.brake * throttle * dt;
-      else if (c.shiftT <= 0) vf += driveAccel(M, Math.max(0, vf), c.gear, power) * throttle * dt;
+      else if (c.shiftT <= 0) vf += driveAccel(M, Math.max(0, vf) / k, c.gear, power) * throttle * dt;
     } else if (throttle < -0.05) {
       if (vf > 0.5) vf += M.brake * throttle * dt;
       else if (vf > -M.rev) vf += M.accel * 0.7 * throttle * power * dt;
     } else {
       // rolling resistance, plus engine braking that is stronger in low gears and at high revs
-      const r = vf / M.gearTop[c.gear];
+      const r = vf / (M.gearTop[c.gear] * k);
       const engine = c.shiftT > 0 || vf < 1 || c.dead ? 0 : 0.9 * Math.pow(M.max / M.gearTop[c.gear], 0.5) * Math.min(r, 1.2);
       const roll = ((inp ? 2.2 : 7) + engine) * dt;
       vf = Math.abs(vf) <= roll ? 0 : vf - Math.sign(vf) * roll;
     }
     // a manual downshift at too high a speed: the engine over-revs and holds the car back hard
-    if (vf > M.gearTop[c.gear] * 1.06 && c.shiftT <= 0) vf -= 4 * dt;
-    if (vf > M.max) vf = M.max;
+    if (vf > M.gearTop[c.gear] * k * 1.06 && c.shiftT <= 0) vf -= 4 * dt;
+    if (vf > M.max * k) vf = M.max * k;
     if (hand) vf -= Math.sign(vf) * Math.min(Math.abs(vf), 8 * dt);
     c.braking = hand || (throttle < -0.05 && vf > 0.5) || (throttle > 0.05 && vf < -0.5);
     const maxSteer = 0.6 / (1 + Math.abs(vf) * 0.03);
     // bent suspension after a crash pulls the car to one side
     c.steer += (steerIn * maxSteer + c.align - c.steer) * Math.min(1, 6 * dt);
-    vl *= Math.exp(-(hand ? 1.4 : 9) * M.grip * dt);
+    // (lowered springs hold the road a little better)
+    const grip = M.grip * (c.gripK || 1);
+    vl *= Math.exp(-(hand ? 1.4 : 9) * grip * dt);
     c.slip = Math.abs(vl) + (hand && Math.abs(vf) > 3 ? Math.abs(vf) * 0.35 : 0)
       + (throttle > 0.9 && c.gear === 0 && vf < 7 && M.zero[1] < 5 && !c.dead ? 4 : 0);
     let yaw = (vf / M.wb) * Math.tan(c.steer);
-    const cap = ((hand ? 1.8 : 1) * 14 * M.grip) / Math.max(Math.abs(vf), 5);
+    const cap = ((hand ? 1.8 : 1) * 14 * grip) / Math.max(Math.abs(vf), 5);
     yaw = clamp(yaw, -cap, cap);
     c.h += yaw * dt;
     // velocity stays in the old frame; the new heading picks up a little slip next step

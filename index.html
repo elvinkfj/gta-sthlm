@@ -95,6 +95,7 @@
     <span class="key">Gröna Lund</span><span>Gå fram till pariserhjulet, fritt fall-tornet, karusellen eller berg-och-dalbanan och tryck E. En åktur kostar 30 kr, och kameran sitter i vagnen. Titta runt med musen</span>
     <span class="key">Glass</span><span>Glasskiosk och ballongförsäljare vid Skeppsbron, i Kungsträdgården, på Medborgarplatsen och på Djurgården. Gå fram och tryck E för att köpa</span>
     <span class="key">V</span><span>Släpp en ballong</span>
+    <span class="key">Verkstad</span><span>På Götgatan på Söder, mellan Åsögatan och Skånegatan. Kör in genom porten och stanna på den gula rutan. Där köper du ny lack, fälgar, sänkt fjädring och bättre motor, och kan laga bilen. Det du köper sparas för den bilmodellen. Ny lack när polisen jagar dig gör att de tappar bort dig</span>
     <span class="key">Vattenballonger</span><span>Köp 5 st för 25 kr i hinken bredvid ballongförsäljaren. Klicka med musen, eller tryck F när du går, så kastar du dit du tittar. Den du träffar blir blöt. Träffar du polisen blir du jagad!</span>
     <span class="key">R</span><span>Ställ bilen på gatan igen, eller båten ute på öppet vatten</span>
     <span class="key">T</span><span>Ljud av och på</span>
@@ -153,6 +154,24 @@
         <button id="play" class="btn-sign" type="button">Spela</button>
         <button id="playFriends" class="btn-sign alt" type="button">Spela med vänner</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<div id="shop" hidden role="dialog" aria-modal="true" aria-labelledby="shopTitle">
+  <div class="sign shop-sign">
+    <div class="sign-inner">
+      <div class="mp-head">
+        <h2 id="shopTitle"><svg class="shop-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.7 6.3a5.5 5.5 0 0 1-7.2 6.9l-7.6 7.6a2.3 2.3 0 0 1-3.3-3.3l7.6-7.6a5.5 5.5 0 0 1 6.9-7.2l-3.4 3.4.8 2.8 2.8.8z"/></svg>Verkstaden</h2>
+        <button id="shopClose" class="btn-sign picker-close" type="button">Stäng</button>
+      </div>
+      <p class="shop-car"><b id="shopCar">Bilen</b><span id="shopCash">Kassa 0 kr</span></p>
+      <section class="shop-sec"><h3>Lack <small>300 kr</small></h3><div class="shop-paint" id="shopPaint"></div></section>
+      <section class="shop-sec" id="shopRimSec"><h3>Fälgar</h3><div class="shop-opts rims" id="shopRims"></div></section>
+      <section class="shop-sec" id="shopLowSec"><h3>Fjädring <small>sänkt ligger bättre på vägen</small></h3><div class="shop-opts" id="shopLow"></div></section>
+      <section class="shop-sec"><h3>Motor</h3><div class="shop-opts" id="shopEngine"></div><p class="shop-note" id="shopStats"></p></section>
+      <section class="shop-sec"><h3>Laga</h3><div class="shop-opts" id="shopFix"></div></section>
+      <div class="shop-foot"><span id="shopSum">Välj något att köpa</span><button id="shopBuy" class="btn-sign small" type="button" disabled>Köp</button></div>
     </div>
   </div>
 </div>
@@ -281,6 +300,7 @@
 <script src="src/metro.js"></script>
 <script src="src/rides.js"></script>
 <script src="src/water-balloons.js"></script>
+<script src="src/workshop.js"></script>
 <script src="src/gameplay.js"></script>
 <script src="src/hud.js"></script>
 <script src="src/sound.js"></script>

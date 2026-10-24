@@ -551,7 +551,7 @@
     }
     // d: [time, x, y, z, heading, vx, vz, flags (1 on the ground, 2 in a vehicle, 4 handcuffed, 8 under a parachute), stars, riding with (id or 0), car or 0]
     // car: [id, model, colour, x, z, heading, vx, vz, steering, gear, throttle, flags (1 brakes, 2 reversing, 4 blue lights,
-    //       8 engine dead, 16 at the wheel), blinkers, engine health, turret, wheel slip]
+    //       8 engine dead, 16 at the wheel), blinkers, engine health, turret, wheel slip, the workshop's rims and springs (WORKSHOP.netCode)]
     // then, flying the helicopter (FLY), [x, y, z, heading, pitch, roll, rotor] (left out by games from before it)
     function take(P, d) {
       if (!Array.isArray(d) || d.length < 11) return false;
@@ -569,11 +569,11 @@
         s.c = {
           id: c[0].slice(0, 12), m: typeof c[1] === 'string' && Object.prototype.hasOwnProperty.call(MODEL, c[1]) ? c[1] : 'halvkombi', col: num(c[2]), x: pos(c[3]), z: pos(c[4]), h: num(c[5]),
           vx: vel(c[6]), vz: vel(c[7]), st: clamp(num(c[8]), -1, 1), g: clamp(num(c[9]) | 0, 0, 9), th: clamp(num(c[10]), -1, 1), f: num(c[11]) | 0,
-          b: clamp(num(c[12]) | 0, 0, 3), hp: clamp(num(c[13], 100), 0, 100), a: num(c[14]), slip: clamp(num(c[15]), 0, 30)
+          b: clamp(num(c[12]) | 0, 0, 3), hp: clamp(num(c[13], 100), 0, 100), a: num(c[14]), slip: clamp(num(c[15]), 0, 30), tune: clamp(num(c[16]) | 0, 0, 127)
         };
       }
-      // (each colour is a geometry of its own: only the ones the model comes in, and gold)
-      if (s.c && !MODEL[s.c.m].colors.includes(s.c.col) && s.c.col !== 0xc9a227) s.c.col = MODEL[s.c.m].colors[0];
+      // (each colour is a geometry of its own: only the ones the model comes in, gold and the workshop's paints)
+      if (s.c && !MODEL[s.c.m].colors.includes(s.c.col) && s.c.col !== 0xc9a227 && !WORKSHOP.paints.includes(s.c.col)) s.c.col = MODEL[s.c.m].colors[0];
       a.push(s);
       if (a.length > 40) a.shift();
       // how far their clock is from ours, plus the quickest a message has come through
@@ -614,7 +614,8 @@
       const cs = st.c;
       if (cs) {
         let c = P.car;
-        if (!c || c.netId !== cs.id || c.M.id !== cs.m) {
+        // (new paint from the workshop: the car is built again in its new colour)
+        if (!c || c.netId !== cs.id || c.M.id !== cs.m || c.color !== cs.col) {
           dropCar(P);
           c = makeCar(MODEL[cs.m], cs.col);
           Object.assign(c, { remote: true, keep: true, netId: cs.id, owner: P, x: cs.x, z: cs.z, h: cs.h });
@@ -624,6 +625,7 @@
         // at the wheel, or the car stands where they left it
         const on = !!(cs.f & 16);
         if (on !== (c.occupant === P.ident)) setOccupant(c, on ? P.ident : null);
+        if (c.tuneNet !== cs.tune) { c.tuneNet = cs.tune; WORKSHOP.look(c, cs.tune); }
         c.x = cs.x; c.z = cs.z; c.h = cs.h; c.steer = cs.st;
         c.vx = on ? cs.vx : 0; c.vz = on ? cs.vz : 0;
         c.wheelRot += ((c.vx * Math.sin(c.h) + c.vz * Math.cos(c.h)) * dt) / c.M.R;
@@ -662,7 +664,7 @@
       if (c && !c.netId) c.netId = Math.random().toString(36).slice(2, 10);
       const hidden = !!driving || !!S.ride || FLY.on || METRO.riding || !!(policeStop && policeStop.riding);
       const car = c ? [c.netId, c.M.id, c.color, r2(c.x), r2(c.z), r3(c.h), r2(c.vx), r2(c.vz), r3(c.steer), c.gear | 0, r2(c.thr || 0),
-        (c.braking ? 1 : 0) | (c.reversing ? 2 : 0) | (c.siren ? 4 : 0) | (c.dead ? 8 : 0) | (c === driving ? 16 : 0), c.blink | 0, Math.round(c.health), r3(c.aim || 0), r1(c.slip || 0)] : 0;
+        (c.braking ? 1 : 0) | (c.reversing ? 2 : 0) | (c.siren ? 4 : 0) | (c.dead ? 8 : 0) | (c === driving ? 16 : 0), c.blink | 0, Math.round(c.health), r3(c.aim || 0), r1(c.slip || 0), WORKSHOP.netCode(c)] : 0;
       return [Math.round(performance.now()), r2(player.x), r2(player.y), r2(player.z), r3(player.rot), r2(player.vx), r2(player.vz),
         (player.grounded ? 1 : 0) | (hidden ? 2 : 0) | (player.cuffed ? 4 : 0) | (CHUTE.open ? 8 : 0) | (SPLASH.wet ? 16 : 0), stars(), S.ride ? S.ride.owner.id : 0, car, FLY.on ? FLY.net() : 0];
     }
@@ -843,7 +845,7 @@
       const spot = spotNear(at.x, at.z);
       if (!spot) { status('Hittade ingen plats bredvid ' + P.name + ' just nu. Försök igen om en stund.', true); return; }
       if (S.ride) unride(true);
-      FLY.bail(); CHUTE.bail(); METRO.bail(); RIDES.bail();
+      FLY.bail(); CHUTE.bail(); METRO.bail(); RIDES.bail(); WORKSHOP.bail();
       if (driving && !exitCar()) { closePanel(); return; }
       player.x = spot.x; player.z = spot.z; player.y = 0; player.vx = player.vz = player.vy = 0;
       player.rot = camYaw = Math.atan2(at.x - spot.x, at.z - spot.z);
