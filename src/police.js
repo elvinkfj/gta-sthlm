@@ -174,7 +174,7 @@
     if (PARTY.busy()) return;
     if (!wanted) {
       wanted = { kinds: new Set(), counts: {}, bonus: 0, stars: 1, starT: 0, over: 0, lostT: 0, searchT: 0, stopT: 0, t: 0, fleeT: 0, seen: playerTarget(), inSight: true };
-      toast(kind === 'fart' ? 'Polisen såg dig köra för fort. Stanna bilen!' : 'Polisen är efter dig!');
+      toast(kind === 'fart' ? 'Polisen såg dig köra för fort. Stanna bilen!' : kind === 'ballong' ? 'Plask! Du träffade polisen med en vattenballong. Nu är de efter dig!' : 'Polisen är efter dig!');
     }
     wanted.kinds.add(kind);
     wanted.over = Math.max(wanted.over, over || 0);
@@ -234,6 +234,7 @@
     if (w.over >= ARREST_OVER) rows.push({ why: 'grov hastighetsöverträdelse', text: 'Grov hastighetsöverträdelse, körkortet dras in', kr: 2000 });
     if (w.kinds.has('skott')) rows.push({ why: 'skottlossning', text: 'Skottlossning med stridsvagn i tätort', kr: 25000 });
     if (w.kinds.has('smitning')) rows.push({ why: 'du smet från kontrollen', text: 'Avvikande från poliskontroll', kr: 3000 });
+    if (w.kinds.has('ballong')) rows.push({ why: 'vattenballong på polisen', text: 'Ordningsstörning, vattenballong på polis', kr: 1000 });
     if (!rows.length) rows.push({ why: 'ordningsstörning', text: 'Ordningsstörning', kr: 800 });
     return { f: rows.reduce((a, r) => a + r.kr, 0), why: rows.map((r) => r.why), rows };
   }

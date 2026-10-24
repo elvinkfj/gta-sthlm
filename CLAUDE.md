@@ -44,6 +44,7 @@ The game is these files, loaded in this order:
 - `src/parachute.js` (about 220 lines): jumping with a parachute, from the helicopter or from the top of Kaknästornet and a Hötorgsskrapa.
 - `src/metro.js` (about 170 lines): the tunnelbana: the board at the T signs, the lines, the ride and fare dodging.
 - `src/rides.js` (about 190 lines): riding the Ferris wheel, the free-fall tower, the carousel and the roller coaster at Gröna Lund.
+- `src/water-balloons.js` (about 360 lines): the buckets of water balloons beside the balloon sellers, throwing, splashes and getting soaked.
 - `src/gameplay.js` (about 610 lines): input state, the car picker, traffic upkeep, one simulation step, moving the meshes and the camera.
 - `src/hud.js` (about 390 lines): on-screen text, the minimap and the big map.
 - `src/sound.js` (about 360 lines): synthesised engine sounds and effects.
@@ -84,6 +85,7 @@ Line numbers drift with every change, so search instead of trusting numbers. Eac
 | `src/parachute.js` | `the parachute` | Freefall and the canopy, steering, landing (hard, soft, in the water, on a roof), the towers to jump from. While you jump, `CHUTE.step` moves the player in place of `personMove`. Uses `FLY.heightAt` for the roofs. | `CHUTE` |
 | `src/metro.js` | `the tunnelbana` | The stations are the T signs (`mapLabels` of kind `tbana`), the green, red and blue lines with changes, the board (pauses the game like the car picker), the ride as an overlay, the ticket from the Kassa and the inspectors | `METRO` |
 | `src/rides.js` | `the rides at Gröna Lund` | Getting on (30 kr), queueing for the tower and the coaster, the seat you sit in and the camera there (`RIDES.view`, used by `updateCamera`). The rides themselves move in `TIVOLI` in `src/city/build.js`, which also has the coaster's train. | `RIDES` |
+| `src/water-balloons.js` | `water balloons` | The bucket beside each balloon seller (E buys five), throwing (a click with the mouse caught, F on foot, the touch button) the way the camera looks, from your hand, a car, the helicopter or a ride, the flight and what it hits (people, cars, houses, the ground, the water), splashes and wet patches, and soaked people (`p.wetT`, a darker, shiny material that drips). A wet police officer or police car starts a chase (`startChase('ballong')`). With friends: MP's `wb` event carries a throw and `wet` says who was hit; flag 16 in the state means soaked. | `SPLASH` |
 | `src/gameplay.js` | `game state`, `car picker`, `traffic upkeep` | Input state, picking a car, keeping traffic around the player | `keys`, `readInput`, `chooseModel`, `manageTraffic` |
 | `src/gameplay.js` | `simulation step`, `visuals` | One physics step, moving meshes, the camera | `physicsStep`, `animate`, `updateCamera` |
 | `src/hud.js` | `HUD`, `minimap`, `the big map` | On-screen text and both maps | `updateHUD`, `drawMap`, `bigmap`, `drawBigmap` |
