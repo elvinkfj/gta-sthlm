@@ -176,6 +176,7 @@
       // set down on Kaknästornet
       const onKak = on && H.ground && Math.abs(H.y - KAK.deck) < 0.5 && Math.hypot(H.x - KAK.x, H.z - KAK.z) < KAK.r + SKIDS;
       if (onKak && !H.onKak) {
+        PROGRESS.did('kaknas');
         if (!kakDone) {
           kakDone = true;
           try { localStorage.setItem(KAK_KEY, '1'); } catch { /* counted anyway */ }

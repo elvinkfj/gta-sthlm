@@ -41,6 +41,7 @@
     function board() {
       const r = R.r;
       R.phase = 'ride'; R.t = 0;
+      PROGRESS.did('rides', r.id);
       if (r.id === 'wheel') {
         // the gondola nearest the bottom, and the wheel turns faster for a lap
         let best = 0, bd = Infinity;

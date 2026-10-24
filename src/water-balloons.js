@@ -200,13 +200,13 @@
       p.wetT = SOAK;
       const ai = p.ai;
       if (!ai) return;
-      if (ai.state === 'cop') { if (b.mine) startChase('ballong'); }
+      if (ai.state === 'cop') { if (b.mine) { startChase('ballong'); PROGRESS.did('wetCop'); } }
       else if (ai.state !== 'idle' && ai.state !== 'vendor' && ai.state !== 'board') { ai.state = 'flee'; ai.t = 4; ai.dodgeT = 0; }
     }
     function wetCar(c, b) {
       if (c === driving) { if (!b.mine) hitMe(b, c); return; }
       if (c.remote || !b.mine) return;
-      if (c.police && !c.dead) startChase('ballong');
+      if (c.police && !c.dead) { startChase('ballong'); PROGRESS.did('wetCop'); }
       else if (c.bot && !c.M.boat) honkAt(c.x, c.z);
     }
     // a friend's balloon hit you, or the car you drive (in a closed car only the windscreen gets wet)

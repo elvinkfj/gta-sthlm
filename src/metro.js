@@ -124,7 +124,10 @@
         fines += FINE;
         beep([392, 330], 0.05, 0.5);
         toast('Biljettkontroll! Du hade ingen biljett och fick en tilläggsavgift på ' + fmtKr(FINE) + '.');
-      } else toast('Du kom upp vid ' + r.to.name + '.' + (r.paid ? '' : ' Ingen kontroll den här gången!'));
+      } else {
+        toast('Du kom upp vid ' + r.to.name + '.' + (r.paid ? '' : ' Ingen kontroll den här gången!'));
+        if (!r.paid) PROGRESS.did('dodge');
+      }
     }
     function update(dt) {
       if (!R) return;
