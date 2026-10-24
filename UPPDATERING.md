@@ -15,7 +15,7 @@ Lekarna läggs i en ny fil, `src/party.js`, som laddas direkt efter `src/multipl
 ## Del 2: Köra snabbare och snyggare
 
 - [ ] ~~**Nitro.**~~ Elvin valde att hoppa över nitron. (Det som stod: en knapp (förslag: Shift i bilen) ger en kraftig spark framåt, med blå låga ur avgasröret och ett eget ljud. En mätare visar hur mycket nitro som är kvar, och den fylls på sakta.)
-- [ ] **Verkstaden.** En verkstad i stan (förslag: på Söder) där du köper ny färg, andra fälgar, sänkt fjädring och bättre motor för pengarna i Kassan. Det du köper sparas för den bilen.
+- [x] **Verkstaden.** En verkstad i stan (förslag: på Söder) där du köper ny färg, andra fälgar, sänkt fjädring och bättre motor för pengarna i Kassan. Det du köper sparas för den bilen. (Klar: `src/workshop.js`. Verkstaden ligger på Götgatan mellan Åsögatan och Skånegatan. Där går det också att laga bilen, och ny lack får polisen att tappa bort dig.)
 
 ## Del 3: Stan lever
 

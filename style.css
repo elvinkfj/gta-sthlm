@@ -455,6 +455,46 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
 .metro-dots i { width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 0 2px var(--snow); }
 #metroRide { position: fixed; inset: 0; display: grid; grid-template-rows: auto 1fr auto; gap: 18px; padding: 22px; box-sizing: border-box; background: #1c2126; }
 body.metro #touch, body.metro #hud { visibility: hidden; }
+/* ---------- the workshop ---------- */
+/* the board on the right (at the bottom on a phone), with the car in view beside it */
+#shop { position: fixed; top: 0; right: 0; bottom: 0; display: flex; align-items: center; padding: 16px; box-sizing: border-box; pointer-events: none; }
+/* (the inside scrolls, not the sign: a scrolling box with a solid background can hide the game above it) */
+.shop-sign { width: min(410px, calc(100vw - 32px)); max-height: 100%; display: flex; flex-direction: column; overflow: hidden; pointer-events: auto; background: #c8102e; }
+.shop-sign .sign-inner { gap: 8px; padding: 14px 16px 0; overflow-y: auto; min-height: 0; }
+.shop-sign h2 { margin: 0; display: flex; align-items: center; gap: 10px; font: 900 1.7rem/1 var(--font-sign); }
+.shop-icon { width: 1.1em; height: 1.1em; fill: var(--snow); }
+.shop-car { margin: 0; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-weight: 700; font-size: 0.92rem; }
+.shop-car span { color: #ffe08a; font-variant-numeric: tabular-nums; }
+.shop-sec { display: grid; gap: 5px; padding-top: 7px; border-top: 2px solid rgba(255, 255, 255, 0.3); }
+.shop-sec h3 { margin: 0; font: 900 1rem/1.1 var(--font-sign); display: flex; align-items: baseline; gap: 8px; }
+.shop-sec h3 small { font-weight: 700; font-size: 0.75rem; opacity: 0.85; }
+.shop-paint { display: flex; flex-wrap: wrap; gap: 6px; }
+.shop-swatch { width: 30px; height: 30px; border-radius: 50%; border: 0; cursor: pointer; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.55), 0 2px 4px rgba(0, 0, 0, 0.3); }
+.shop-swatch.owned { box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.55), 0 0 0 2px rgba(255, 255, 255, 0.5); }
+.shop-swatch.on { box-shadow: inset 0 0 0 3px var(--snow), 0 0 0 3px var(--sign-yellow); }
+.shop-swatch:focus-visible { outline: 3px solid var(--snow); outline-offset: 2px; }
+.shop-opts { display: flex; flex-wrap: wrap; gap: 6px; }
+.shop-opt { display: grid; justify-items: center; gap: 1px; padding: 6px 9px 5px; border: 0; border-radius: 8px; cursor: pointer; background: rgba(255, 255, 255, 0.14); color: var(--snow); font-family: inherit; text-align: center; }
+.shop-opt b { font-weight: 900; font-size: 0.86rem; }
+.shop-opt small { font-weight: 700; font-size: 0.7rem; opacity: 0.85; }
+.shop-opt canvas { width: 26px; height: 26px; }
+.shop-opts.rims { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.rims .shop-opt { grid-template-columns: auto minmax(0, 1fr); justify-items: start; column-gap: 6px; text-align: left; padding: 5px 7px; }
+.rims .shop-opt b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rims .shop-opt canvas { grid-row: span 2; align-self: center; }
+.shop-opt:hover, .shop-opt:focus-visible { background: rgba(255, 255, 255, 0.26); outline: none; }
+.shop-opt.owned small { color: #ffe08a; opacity: 1; }
+.shop-opt.on { background: var(--snow); color: var(--asphalt); }
+.shop-opt.on small { color: var(--asphalt); }
+.shop-note { margin: 0; font-size: 0.8rem; font-weight: 700; opacity: 0.9; }
+/* (the price and the buy button stay in view at the bottom while the rest scrolls) */
+.shop-foot { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0 14px; border-top: 2px solid rgba(255, 255, 255, 0.3); background: #c8102e; font-weight: 900; }
+.shop-foot .short { color: #ffe08a; }
+body.shop #touch, body.shop .tags, body.shop #map, body.shop #btnFriends, body.shop #dash, body.shop #limit, body.shop #prompt, body.shop #loc, body.shop #stars { visibility: hidden; }
+@media (max-width: 760px) {
+  #shop { left: 0; top: auto; height: 60vh; align-items: flex-end; padding: 8px; }
+  .shop-sign { width: 100%; min-width: 0; }
+}
 .metro-led { justify-self: center; display: flex; align-items: center; gap: 14px; padding: 10px 18px; border-radius: 10px; background: #050505; box-shadow: inset 0 0 0 3px #3a3f45; max-width: 100%; box-sizing: border-box; }
 .metro-led span { padding: 4px 10px; border-radius: 6px; font-weight: 900; font-size: 0.85rem; color: #fff; white-space: nowrap; }
 .metro-led b { font: 700 clamp(1rem, 3.5vw, 1.6rem)/1.2 var(--font-gauge); color: #ffb000; letter-spacing: 0.04em; }

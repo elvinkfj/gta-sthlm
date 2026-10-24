@@ -393,3 +393,56 @@ test('vattenballonger: köp i hinken, blöt en gubbe och en polis, och bli träf
   expect(r.bad).toEqual([]);
   expect(errors).toEqual([]);
 });
+
+test('verkstaden: kör in, välj lack, fälgar, fjädring och motor, och de sparas för bilen', async () => {
+  const r = await page.evaluate(() => {
+    const t = gubbeTest, W = WORKSHOP.debug, s = {};
+    t.hold(true);
+    if (t.state().driving) t.press('KeyE');
+    if (t.wanted) t.endChase(false);
+    t.jobs.reward(3000);
+    // a SUV out on Götgatan with its nose to the door, driven in onto the bay and stopped
+    t.teleport(...W.toW(0, -9)); t.run(0.3, 1 / 60, false);
+    t.choose('suv'); t.run(0.2, 1 / 60, false);
+    const c = t.driving, [x, z] = W.toW(0, -6);
+    c.x = x; c.z = z; c.h = W.lot.face; c.vx = c.vz = 0;
+    t.key('KeyW', true);
+    for (let i = 0; i < 600 && !W.inBay(c.x, c.z); i++) t.run(1 / 60, 1 / 60, false);
+    t.key('KeyW', false); t.key('KeyS', true);
+    for (let i = 0; i < 300 && Math.hypot(c.vx, c.vz) > 0.3; i++) t.run(1 / 60, 1 / 60, false);
+    t.key('KeyS', false);
+    t.run(0.5, 1 / 60, false);
+    s.open = WORKSHOP.open;
+    // pick: yellow, aero rims, lowered, stage 1
+    const pickOpt = (list, start) => [...document.querySelectorAll(list + ' button')].find((b) => b.textContent.startsWith(start)).click();
+    [...document.querySelectorAll('#shopPaint button')].find((b) => b.title === 'Gul').click();
+    pickOpt('#shopRims', 'Aero'); pickOpt('#shopLow', 'Sänkt'); pickOpt('#shopEngine', 'Steg 1');
+    s.sum = document.getElementById('shopSum').textContent;
+    s.preview = c.color !== 0xf7c600 && c.rimStyle === 'aero';
+    const cash = t.jobs.earned;
+    document.getElementById('shopBuy').click();
+    s.paid = cash - t.jobs.earned;
+    s.car = { color: c.color, rim: c.rimStyle, low: c.body.position.y, k: c.speedK, boost: c.boost };
+    document.getElementById('shopClose').click();
+    s.closed = !WORKSHOP.open && !document.body.classList.contains('shop');
+    // back out, get out, and pick the same model again: it comes as you made it
+    t.key('KeyS', true); t.run(3, 1 / 60, false); t.key('KeyS', false); t.run(1, 1 / 60, false);
+    t.press('KeyE'); t.run(0.3, 1 / 60, false);
+    t.choose('suv'); t.run(0.3, 1 / 60, false);
+    const d = t.driving;
+    s.again = { color: d.color, rim: d.rimStyle, low: d.body.position.y, k: d.speedK };
+    s.bad = t.state().bad;
+    t.hold(false);
+    return s;
+  });
+  expect(r.open).toBe(true);
+  // (the thousands are split with a no-break space)
+  expect(r.sum).toMatch(/^Att betala: 1\s600 kr$/);
+  expect(r.preview).toBe(true);
+  expect(r.paid).toBe(1600);
+  expect(r.car).toEqual({ color: 0xf7c600, rim: 'aero', low: -0.04, k: 1.05, boost: 1.12 });
+  expect(r.closed).toBe(true);
+  expect(r.again).toEqual({ color: 0xf7c600, rim: 'aero', low: -0.04, k: 1.05 });
+  expect(r.bad).toEqual([]);
+  expect(errors).toEqual([]);
+});

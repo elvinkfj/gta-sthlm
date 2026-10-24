@@ -107,6 +107,9 @@
   }
 
   /* ---------- the rest of the city: buildings along every street ---------- */
+  // the workshop (src/workshop.js) takes the place of one house on the west side of Götgatan, between Åsögatan and
+  // Skånegatan: that house is a ghost (see addBuilding), and where it would have stood is kept here (fr, w, d)
+  const WORKSHOP_LOT = { e: nearestEdge(75, 1247, (x) => x.name === 'Götgatan').e, side: 1, s0: 95, s1: 113, fr: null, w: 0, d: 0, obstacle: null };
   for (const e of edges) {
     if (e.bridge) continue;
     const f = edgeFrame(e.a, e.b), set = e.hw + e.walk + 0.2;
@@ -121,8 +124,12 @@
         if (S.sparse && rand() > S.sparse) { s += lot + rr(10, 40); continue; }
         let built = false;
         for (const depth of [S.depth * rr(0.85, 1.15), S.depth * 0.6]) {
-          const fr = lotFrame(f, side, s, lot, set);
-          if (fits(rectPoly(fr, 0, 0, lot, depth))) { addBuilding(fr, lot, depth, S); built = true; break; }
+          const fr = lotFrame(f, side, s, lot, set), L = WORKSHOP_LOT;
+          if (fits(rectPoly(fr, 0, 0, lot, depth))) {
+            const ghost = e === L.e && side === L.side && s < L.s1 - 1 && s + lot > L.s0 + 1;
+            if (ghost) Object.assign(L, { fr, w: lot, d: depth });
+            addBuilding(fr, lot, depth, S, ghost ? { ghost: L } : undefined); built = true; break;
+          }
         }
         s += built ? lot : 3;
       }

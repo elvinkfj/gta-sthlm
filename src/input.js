@@ -62,7 +62,7 @@
     else if (code === 'KeyL') toggleSiren();
     else if (code === 'KeyK') openBigmap();
     else if (code === 'KeyQ') POST.cycle();
-    else if (code === 'KeyJ') { if (!PARTY.noJobs()) JOBS.key(); }
+    else if (code === 'KeyJ') { if (!WORKSHOP.key() && !PARTY.noJobs()) JOBS.key(); }
     else if (code === 'KeyV') VENDORS.letGo();
     else if (code === 'KeyZ') setBlink(1);
     else if (code === 'KeyX') setBlink(2);
@@ -72,6 +72,7 @@
   window.addEventListener('keydown', (e) => {
     if (MP.keydown(e)) return;
     if (METRO.keydown(e)) return;
+    if (WORKSHOP.keydown(e)) return;
     if (bigmap.open) { if (e.code === 'Escape' || e.code === 'KeyK') { e.preventDefault(); onKey(e.code, e.repeat); } return; }
     if (pickerOpen) { if (e.code === 'Escape' || e.code === 'KeyB' || /^Digit\d$/.test(e.code)) { e.preventDefault(); onKey(e.code, e.repeat, e.timeStamp); } return; }
     // (P opens the friends' sign and focuses a field in it: the key itself must not type a "p" there)
@@ -134,7 +135,7 @@
   el.btnUse.addEventListener('pointerdown', (e) => { e.preventDefault(); if (!useKey() && !MP.use() && !FLY.use() && !CHUTE.use() && !METRO.use() && !RIDES.use() && !LIFT.use() && !SPLASH.use() && !VENDORS.use()) toggleCar(); });
   $('btnCars').addEventListener('pointerdown', (e) => { e.preventDefault(); openPicker(); });
   $('btnThrow').addEventListener('pointerdown', (e) => { e.preventDefault(); SPLASH.toss(); });
-  $('btnJob').addEventListener('pointerdown', (e) => { e.preventDefault(); if (!tankFire() && !PARTY.noJobs()) JOBS.key(); });
+  $('btnJob').addEventListener('pointerdown', (e) => { e.preventDefault(); if (!tankFire() && !WORKSHOP.key() && !PARTY.noJobs()) JOBS.key(); });
   el.btnUp.addEventListener('pointerdown', (e) => { e.preventDefault(); playerShift(1); });
   el.blinkL.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); setBlink(1); });
   el.blinkR.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); setBlink(2); });

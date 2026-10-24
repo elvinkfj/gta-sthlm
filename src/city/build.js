@@ -691,8 +691,12 @@
     B.box(m, 0.65, -t, w - m, 2.9, 0, GLASS_DARK);
     B.box(m, 2.95, -t - 0.05, w - m, 3.45, 0, sc);
   }
+  // a house left out for something else (o.ghost, the workshop's WORKSHOP_LOT in src/city/blocks.js): it is drawn into a
+  // builder that is never built, so it throws the same dice as before and every other house comes out the same; its
+  // ground stays taken and its obstacle is kept (in o.ghost.obstacle) for whatever takes its place to switch off
+  let ghostB = null;
   function addBuilding(fr, w, d, S, o = {}) {
-    const poly = rectPoly(fr, 0, 0, w, d), [cx, cz] = centroid(poly), B = cityAt(cx, cz);
+    const poly = rectPoly(fr, 0, 0, w, d), [cx, cz] = centroid(poly), B = o.ghost ? ghostB || (ghostB = new Builder({ split: true, ao: AO })) : cityAt(cx, cz);
     const floors = (o.floors || S.floors[0] + Math.floor(rand() * (S.floors[1] - S.floors[0] + 1))) + (rand() < S.tall ? 1 : 0);
     const h = floors * FLOOR_H + 0.6, col = o.col || pick(S.colors), rc = pick(S.roofs);
     B.setFrame(fr[0], fr[1], fr[2], fr[3]);
@@ -719,8 +723,9 @@
     }
     if (!o.simple && w > 2.2 && rand() < S.shops) shopfront(B, w, pick(SHOP_SIGNS));
     B.setFrame();
-    addOBox(cx, cz, fr[2], fr[3], w / 2 + 0.15, d / 2 + 0.15, h);
+    const box = addOBox(cx, cz, fr[2], fr[3], w / 2 + 0.15, d / 2 + 0.15, h);
     take(poly);
+    if (o.ghost) { o.ghost.obstacle = box; return h; }
     mapPolys.push([poly, col]);
     return h;
   }

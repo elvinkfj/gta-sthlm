@@ -176,6 +176,7 @@
     g.drawImage(mapStatic, MAP.x0, MAP.z0, MAP.w, MAP.h);
     JOBS.drawMini(g, px, pz, 1 / s);
     VENDORS.drawMini(g, px, pz, 1 / s);
+    WORKSHOP.drawMini(g, px, pz, 1 / s);
     for (const c of cars) {
       // (a friend at the wheel is their dot, drawn below)
       if (c === driving || (c.remote && c.occupant) || Math.abs(c.x - px) > 160 || Math.abs(c.z - pz) > 160) continue;
@@ -327,6 +328,7 @@
       g.beginPath(); g.moveTo(X, Y - 6); g.lineTo(X + 5, Y); g.lineTo(X, Y + 6); g.lineTo(X - 5, Y); g.closePath(); g.fill(); g.stroke();
     }
     VENDORS.drawBig(g, toX, toY, k);
+    WORKSHOP.drawBig(g, toX, toY, k);
     JOBS.drawBig(g, toX, toY, k);
     // the army: dark green squares
     for (const c of cars) {
