@@ -2,7 +2,7 @@
   const $ = (id) => document.getElementById(id);
   // the game's version: one up in every pull request that changes the game (see CLAUDE.md). It stands in the bottom right
   // corner, and friends in a room see each other's
-  const VERSION = { nr: 47, date: '24 oktober 2026' };
+  const VERSION = { nr: 48, date: '24 oktober 2026' };
   $('version').textContent = 'Version ' + VERSION.nr + ' · ' + VERSION.date;
   if (!window.THREE) {
     $('lede').textContent = 'Kunde inte ladda 3D-motorn. Kontrollera att mappen lib ligger bredvid index.html och ladda om sidan.';
@@ -75,12 +75,13 @@
 
   // sky: blue gradient, sun and drifting clouds, drawn by one shader on a dome that follows the camera. Its colours are
   // uniforms that the day and night (DAYNIGHT) change; the values here are the day's: zenith, horizon, the sun's glow,
-  // the sun's disc, the clouds and their sunlit edge, the ground below the horizon, and at night the stars and the moon
+  // the sun's disc, the clouds and their sunlit edge, the ground below the horizon, at night the stars and the moon, and
+  // how much of the sky the clouds cover (more in rain and snow: WEATHER)
   const SKY_VERT = 'varying vec3 vDir;\nvoid main() { vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }';
   const SKY_FRAG = [
     'uniform vec3 sunDir; uniform float time; uniform vec3 haze; uniform float hazeAmt; uniform float envMode;',
     'uniform vec3 uZen; uniform vec3 uHor; uniform vec3 uGlow; uniform float uSunVis; uniform vec3 uCloud; uniform float uCloudGlow; uniform float uGround;',
-    'uniform float uNight; uniform vec3 uMoonDir;',
+    'uniform float uNight; uniform vec3 uMoonDir; uniform float uCover;',
     'varying vec3 vDir;',
     'float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }',
     'float noise(vec2 p) { vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);',
@@ -102,7 +103,7 @@
     '  if (h > 0.0) {',
     '    vec2 uv = d.xz / (h + 0.1) * 1.1 + vec2(time * 0.006, time * 0.0025);',
     '    float n = fbm(uv);',
-    '    float c = smoothstep(0.48, 0.74, n) * smoothstep(0.0, 0.14, h);',
+    '    float c = smoothstep(0.48 - uCover * 0.5, 0.74 - uCover * 0.42, n) * smoothstep(0.0, 0.14, h);',
     '    vec3 cc = mix(vec3(0.58, 0.63, 0.70), vec3(1.05, 1.03, 1.0), smoothstep(0.5, 0.86, fbm(uv * 1.7 + 3.1))) * uCloud;',
     '    cc += vec3(1.0, 0.86, 0.66) * pow(sd, 5.0) * 0.45 * uCloudGlow;',
     '    col = mix(col, cc, c * 0.92);',
@@ -121,7 +122,7 @@
       uniforms: {
         sunDir: { value: SUN_DIR }, time: { value: 0 }, haze: { value: new THREE.Vector3(HAZE[0], HAZE[1], HAZE[2]) }, hazeAmt: { value: hazeAmt }, envMode: { value: envMode },
         uZen: { value: new THREE.Vector3(0.075, 0.24, 0.62) }, uHor: { value: new THREE.Vector3(0.55, 0.68, 0.82) }, uGlow: { value: new THREE.Vector3(1.0, 0.82, 0.58) }, uSunVis: { value: 1 },
-        uCloud: { value: new THREE.Vector3(1, 1, 1) }, uCloudGlow: { value: 1 }, uGround: { value: 1 }, uNight: { value: 0 }, uMoonDir: { value: new THREE.Vector3(0, 1, 0) }
+        uCloud: { value: new THREE.Vector3(1, 1, 1) }, uCloudGlow: { value: 1 }, uGround: { value: 1 }, uNight: { value: 0 }, uMoonDir: { value: new THREE.Vector3(0, 1, 0) }, uCover: { value: 0 }
       }
     });
   }

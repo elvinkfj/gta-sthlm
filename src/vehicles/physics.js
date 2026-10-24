@@ -93,11 +93,11 @@
       // your car goes where the gear says: forwards in 1 and up, backwards only in R; the other pedal brakes to a stop
       const go = c.inR ? -throttle : throttle, back = c.inR ? -1 : 1;
       if (go > 0.05) {
-        if (vf * back < -0.5) vf += M.brake * go * back * dt;
+        if (vf * back < -0.5) vf += M.brake * WEATHER.brake * go * back * dt;
         else if (c.inR) { if (vf > -M.rev) vf -= M.accel * 0.7 * go * power * dt; }
         else if (c.shiftT <= 0) vf += driveAccel(M, Math.max(0, vf) / k, c.gear, power) * go * dt;
       } else if (go < -0.05) {
-        const dv = M.brake * -go * dt;
+        const dv = M.brake * WEATHER.brake * -go * dt;
         vf = Math.abs(vf) <= dv ? 0 : vf - Math.sign(vf) * dv;
       } else {
         const r = Math.max(0, vf) / (M.gearTop[c.gear] * k);
@@ -126,8 +126,8 @@
     const maxSteer = 0.6 / (1 + Math.abs(vf) * 0.03);
     // bent suspension after a crash pulls the car to one side
     c.steer += (steerIn * maxSteer + c.align - c.steer) * Math.min(1, 6 * dt);
-    // (lowered springs hold the road a little better)
-    const grip = M.grip * (c.gripK || 1);
+    // (lowered springs hold the road a little better; in the wet and on snow your car holds it less well: WEATHER)
+    const grip = M.grip * (c.gripK || 1) * (you ? WEATHER.grip : 1);
     vl *= Math.exp(-(hand ? 1.4 : 9) * grip * dt);
     c.slip = Math.abs(vl) + (hand && Math.abs(vf) > 3 ? Math.abs(vf) * 0.35 : 0)
       + (throttle > 0.9 && c.gear === 0 && vf < 7 && M.zero[1] < 5 && !c.dead ? 4 : 0);

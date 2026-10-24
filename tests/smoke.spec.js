@@ -487,3 +487,50 @@ test('dag och natt: på natten lyser lamporna, fönstren och billjusen, och den 
   expect(r.bad).toEqual([]);
   expect(errors).toEqual([]);
 });
+
+test('väder: U ger regn, sedan snö, sedan sol, och det blir halt', async () => {
+  const r = await page.evaluate(() => {
+    const t = gubbeTest, W = t.weather, s = {};
+    t.hold(true);
+    if (t.state().driving) t.press('KeyE');
+    s.start = W.kind;
+    t.choose(t.MODELS.find((m) => !m.boat && !m.police && !m.mil && !m.moped).id); t.run(0.2, 1 / 30, false);
+    t.press('KeyU'); s.toastRain = t.state().toast;
+    t.run(25, 1 / 30, false);
+    s.rain = { kind: W.name, amount: W.amount, wet: W.debug.wet, grip: W.grip, drops: W.debug.rain.visible, fog: scene.fog.far, glass: !document.getElementById('rainScreen').hidden };
+    t.press('KeyU'); s.toastSnow = t.state().toast;
+    t.run(45, 1 / 30, false);
+    s.snow = { kind: W.name, cover: W.debug.cover, brake: W.brake, flakes: W.debug.snow.visible, glass: !document.getElementById('rainScreen').hidden };
+    t.press('KeyU');
+    t.run(25, 1 / 30, false);
+    s.clear = { kind: W.name, amount: W.amount };
+    // the weather from the one who has the room, and not from anyone else
+    W.heard(false, 1); s.fromOther = W.kind;
+    W.heard(true, 2); s.fromHost = W.kind;
+    W.debug.now(0, 0); t.run(0.2, 1 / 30, false);
+    s.bad = t.state().bad;
+    t.hold(false);
+    return s;
+  });
+  expect(r.start).toBe(0);
+  expect(r.toastRain).toContain('regna');
+  expect(r.rain.kind).toBe('regn');
+  expect(r.rain.amount).toBeGreaterThan(0.95);
+  expect(r.rain.wet).toBeGreaterThan(0.3);
+  expect(r.rain.grip).toBeLessThan(1);
+  expect(r.rain.drops).toBe(true);
+  expect(r.rain.fog).toBeLessThan(800);
+  expect(r.rain.glass).toBe(true);
+  expect(r.toastSnow).toContain('snöa');
+  expect(r.snow.kind).toBe('snö');
+  expect(r.snow.cover).toBeGreaterThan(0.5);
+  expect(r.snow.brake).toBeLessThan(1);
+  expect(r.snow.flakes).toBe(true);
+  expect(r.snow.glass).toBe(false);
+  expect(r.clear.kind).toBe('sol');
+  expect(r.clear.amount).toBe(0);
+  expect(r.fromOther).toBe(0);
+  expect(r.fromHost).toBe(2);
+  expect(r.bad).toEqual([]);
+  expect(errors).toEqual([]);
+});

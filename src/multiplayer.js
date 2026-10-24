@@ -410,14 +410,14 @@
         if (P) {
           const old = S.conns.get(id);
           if (old !== conn) { S.conns.set(id, conn); if (old) try { old.close(); } catch { /* gone already */ } }
-          conn.send({ t: 'welcome', v: PROTO, host: S.myId, time: DAYNIGHT.hour, players: [meInfo(), ...[...S.players.values()].filter((p) => p !== P).map(info)] });
+          conn.send({ t: 'welcome', v: PROTO, host: S.myId, time: DAYNIGHT.hour, weather: WEATHER.kind, players: [meInfo(), ...[...S.players.values()].filter((p) => p !== P).map(info)] });
           return;
         }
         const no = m.v !== PROTO ? 'old' : S.players.size + 1 >= MAX ? 'full' : '';
         if (no) { try { conn.send({ t: 'no', why: no }); } catch { /* gone already */ } setTimeout(() => conn.close(), 1000); return; }
         S.conns.set(id, conn);
         const np = addPlayer(id, m.name, m.look, m.ver);
-        conn.send({ t: 'welcome', v: PROTO, host: S.myId, time: DAYNIGHT.hour, players: [meInfo(), ...[...S.players.values()].filter((p) => p !== np).map(info)] });
+        conn.send({ t: 'welcome', v: PROTO, host: S.myId, time: DAYNIGHT.hour, weather: WEATHER.kind, players: [meInfo(), ...[...S.players.values()].filter((p) => p !== np).map(info)] });
         broadcast({ t: 'join', ...info(np) }, id);
         toast(np.name + ' kom in i rummet.' + (otherVer(np) ? ' Hen har ' + otherVer(np) + ', du har version ' + VERSION.nr + '.' : ''));
         return;
@@ -440,8 +440,8 @@
         clearTimeout(wait);
         S.host = false; S.hostId = String(m.host || conn.peer);
         for (const i of Array.isArray(m.players) ? m.players.slice(0, MAX) : []) if (i && typeof i.id === 'string' && i.id !== S.myId && !S.players.has(i.id)) addPlayer(i.id, i.name, i.look, i.ver);
-        // (the time of day is the host's)
-        DAYNIGHT.heard(true, m.time);
+        // (the time of day and the weather are the host's)
+        DAYNIGHT.heard(true, m.time); WEATHER.heard(true, m.weather);
         enter(code);
         return;
       }
@@ -676,7 +676,7 @@
       if (S.host) broadcast({ t: 's', id: S.myId, d });
       else if (S.hostConn && S.hostConn.open) try { S.hostConn.send({ t: 's', d }); } catch { /* its close event deals with it */ }
     }
-    // the horn, the chat, a dent, the tank's gun, new clothes, water balloons and (from the host) the time of day go to everyone at once
+    // the horn, the chat, a dent, the tank's gun, new clothes, water balloons and (from the host) the time of day and the weather go to everyone at once
     function event(k, extra) {
       if (!inRoom()) return;
       const m = Object.assign({ t: 'e', k }, extra);
@@ -721,6 +721,7 @@
         if (atWheel) setOccupant(P.car, P.ident);
         drawTag(P); renderList();
       } else if (m.k === 'time') DAYNIGHT.heard(P.id === S.hostId, m.h);
+      else if (m.k === 'weather') WEATHER.heard(P.id === S.hostId, m.w);
       else if (m.k === 'wb') SPLASH.heard(P, m);
       else if (m.k === 'wet') SPLASH.wetBy(P, m.by);
       else if (m.k === 'game') {
