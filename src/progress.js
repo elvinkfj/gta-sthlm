@@ -201,11 +201,13 @@
     E.board.addEventListener('click', (e) => { if (e.target === E.board) closeBoard(); });
     E.tag.addEventListener('click', openBoard);
     E.btn.addEventListener('pointerdown', (e) => { e.preventDefault(); openBoard(); });
-    // the Dalahästar you had found before there were trophies count too
-    for (const h of horsesFound) did('horses', h);
 
     /* ---------- every frame: what is watched ---------- */
+    let seeded = false;
     function update(dt) {
+      // the Dalahästar you had found before there were trophies count too (on the first frame, not while this file loads:
+      // all of them found gives a trophy, and showing it needs the files after this one)
+      if (!seeded) { seeded = true; for (const h of horsesFound) did('horses', h); }
       const c = driving;
       if (c && started) {
         const v = Math.hypot(c.vx, c.vz);

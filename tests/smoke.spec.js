@@ -615,3 +615,19 @@ test('nivåer och troféer: XP ger nivåer och troféer, I visar tavlan, och ver
   expect(r.bad).toEqual([]);
   expect(errors).toEqual([]);
 });
+
+// (last: it loads the page again, with every Dalahäst found)
+test('alla dalahästar hittade sedan förut: spelet laddar och trofén delas ut', async () => {
+  await page.evaluate(() => { localStorage.setItem('gubbe-dalahastar', JSON.stringify(HORSES.map((h) => h[0]))); localStorage.removeItem('gubbe-niva'); });
+  await page.reload();
+  await page.waitForFunction(() => window.gubbeTest);
+  const r = await page.evaluate(() => {
+    const t = gubbeTest;
+    t.start(); t.run(1, 1 / 30, false);
+    return { horses: PROGRESS.debug.S.st.horses.length, dala: !!PROGRESS.debug.S.got.dala, bad: t.state().bad };
+  });
+  expect(r.horses).toBe(20);
+  expect(r.dala).toBe(true);
+  expect(r.bad).toEqual([]);
+  expect(errors).toEqual([]);
+});
