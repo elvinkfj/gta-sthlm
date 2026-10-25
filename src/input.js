@@ -66,6 +66,7 @@
     else if (code === 'KeyV') VENDORS.letGo();
     else if (code === 'KeyO') DAYNIGHT.key();
     else if (code === 'KeyU') WEATHER.key();
+    else if (code === 'KeyI') PROGRESS.toggle();
     else if (code === 'KeyZ') setBlink(1);
     else if (code === 'KeyX') setBlink(2);
     else if (code === 'KeyC') setBlink(3);
@@ -75,6 +76,7 @@
     if (MP.keydown(e)) return;
     if (METRO.keydown(e)) return;
     if (WORKSHOP.keydown(e)) return;
+    if (PROGRESS.keydown(e)) return;
     if (bigmap.open) { if (e.code === 'Escape' || e.code === 'KeyK') { e.preventDefault(); onKey(e.code, e.repeat); } return; }
     if (pickerOpen) { if (e.code === 'Escape' || e.code === 'KeyB' || /^Digit\d$/.test(e.code)) { e.preventDefault(); onKey(e.code, e.repeat, e.timeStamp); } return; }
     // (P opens the friends' sign and focuses a field in it: the key itself must not type a "p" there)

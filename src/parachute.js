@@ -154,7 +154,7 @@
       const roof = FLY.heightAt(player.x, player.z, 0.4), wet = !walkable(player.x, player.z);
       if (roof > 0 && player.y <= roof) land('roof');
       else if (wet && player.y <= WATER_Y) land('water');
-      else if (!wet && player.y <= 0) land(S.open && S.k > 0.6 ? 'soft' : 'hard');
+      else if (!wet && player.y <= 0) { const soft = S.open && S.k > 0.6; land(soft ? 'soft' : 'hard'); if (soft) PROGRESS.did('chute'); }
     }
 
     /* ---------- every frame ---------- */

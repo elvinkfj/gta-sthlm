@@ -424,7 +424,7 @@
         || (heli && heli.state !== 'leave' && Math.hypot(heli.x - wanted.seen.x, heli.z - wanted.seen.z) < 60)) wanted.searchT += dt;
       // (with more stars they search for longer)
       const more = wanted.stars - 1;
-      if (wanted.searchT > 8 + more * 4 || wanted.lostT > 45 + more * 15 || (!chasers && wanted.lostT > 6)) { endChase(false); return; }
+      if (wanted.searchT > 8 + more * 4 || wanted.lostT > 45 + more * 15 || (!chasers && wanted.lostT > 6)) { PROGRESS.escaped(wanted.stars); endChase(false); return; }
     }
     // pull over (stop, ideally by the kerb) with a patrol close behind and in sight, and they pull in by you
     if (driving && !driving.M.boat && nearCop && nearest < 70 && inSight && sp < 2) {

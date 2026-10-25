@@ -129,8 +129,9 @@
       goldCars = true; fireworksT = 60;
       toast('Alla ' + HORSES.length + ' dalahästar hittade! Fyrverkeri över Strömmen, och nu finns alla bilar i guld (tryck B).');
     } else toast('Dalahäst ' + n + ' av ' + HORSES.length + ': ' + h.name + '. ' + h.fact + ' Hittelön 50 kr.');
-    // a finder's fee for every one
+    // a finder's fee for every one, and XP
     JOBS.reward(50);
+    PROGRESS.did('horses', h.name); PROGRESS.gain(100);
   }
   function updateSurprises(dt) {
     const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z, reach = driving ? 3.4 : 1.7;
@@ -287,7 +288,8 @@
     const hinted = {};
     const el2 = { job: $('job'), icon: $('jobIcon'), title: $('jobTitle'), hint: $('jobHint'), clock: $('jobClock'), big: $('bigText'), cash: $('cash'), cashTag: $('cashTag') };
     function big(text, sub, t = 2.2) { el2.big.textContent = text; if (sub) { const s = document.createElement('small'); s.textContent = sub; el2.big.append(s); } el2.big.hidden = false; bigT = t; }
-    function pay(kr, why) { earned += kr; save(); beep([660, 880, 1320], 0.03, 0.3); toast(why + ' +' + fmtKr(kr)); }
+    // (a job's pay gives XP too, PROGRESS; a car sold at the scrapyard a little)
+    function pay(kr, why, scrap) { earned += kr; save(); beep([660, 880, 1320], 0.03, 0.3); toast(why + ' +' + fmtKr(kr)); if (scrap) PROGRESS.gain(20); else PROGRESS.job(kr); }
     const speed = () => (driving ? Math.hypot(driving.vx, driving.vz) : 0);
     const kindOf = (c) => (!c ? null : c.M.shape.taxi ? 'taxi' : c.M.id === 'skapbil' ? 'paket' : c.M.bus ? 'buss' : c.M.moped ? 'mat'
       : c.M.police && !c.M.boat ? 'polis' : c.M.boat === 'console' || c.M.boat === 'riva' ? 'battaxi' : null);
@@ -417,7 +419,7 @@
       const kr = priceOf(c);
       if (!exitCar()) return;
       removeCar(c);
-      pay(kr, 'Bilskroten köpte ' + M.def + '.');
+      pay(kr, 'Bilskroten köpte ' + M.def + '.', true);
     }
     // party: a race against friends (PARTY), told the time at the finish
     function startRace(r, party) {
@@ -483,6 +485,7 @@
             if (best) records[R.id] = t;
             save();
             if (job.party) job.party(t);
+            PROGRESS.did('races', R.id);
             big('MÅL! ' + fmtTime(t), best ? (rec ? 'Nytt rekord! Förra: ' + fmtTime(rec) : 'Första rekordet på ' + R.name) : 'Rekord: ' + fmtTime(rec), 4);
             pay(best ? 600 : 250, R.name + ' klart.');
             end();

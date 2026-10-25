@@ -3,7 +3,7 @@
   /* ================= game state ================= */
   let started = false, pickerOpen = false, nearCar = null;
   // the car picker and the big map both pause the game
-  const paused = () => pickerOpen || bigmap.open || MP.panelOpen || METRO.boardOpen || WORKSHOP.open;
+  const paused = () => pickerOpen || bigmap.open || MP.panelOpen || METRO.boardOpen || WORKSHOP.open || PROGRESS.open;
   let camYaw = player.rot, camPitch = 0.3, camDist = 6, lastLook = -1e9, clipT = 1;
   const camTarget = new THREE.Vector3(player.x, 1.6, player.z);
   let jumpQueued = false;
