@@ -60,7 +60,9 @@
 
     /* ---------- counting ---------- */
     // one more of something, or (with what) one more of the different things of a kind, each counted once
-    function did(k, what) {
+    // (DAILY is told of every one, new or not, but not of the Dalahästar counted from before: quiet)
+    function did(k, what, quiet) {
+      if (!quiet) DAILY.add(k, 1, what);
       if (what === undefined) S.st[k] = val(k) + 1;
       else {
         const list = Array.isArray(S.st[k]) ? S.st[k] : (S.st[k] = []), w = String(what);
@@ -110,7 +112,7 @@
       E.num.textContent = L.lv; E.btn.textContent = 'Nivå ' + L.lv;
       E.bar.style.width = E.trBar.style.width = Math.floor((L.into / L.need) * 100) + '%';
       E.btn.style.setProperty('--p', Math.floor((L.into / L.need) * 100) + '%');
-      E.tag.title = 'Nivå ' + L.lv + ': ' + fmt(L.into) + ' av ' + fmt(L.need) + ' XP till nästa. Klicka för troféerna (I)';
+      E.tag.title = 'Nivå ' + L.lv + ': ' + fmt(L.into) + ' av ' + fmt(L.need) + ' XP till nästa. Klicka för utmaningarna och troféerna (I)';
     }
     // +XP over the toast, added up while they come close together
     let popN = 0, popAt = 0;
@@ -126,19 +128,20 @@
     // a new trophy or level, one at a time, with a fanfare
     const queue = [];
     let showT = 0;
+    // a: title and sub; trophy, or cls and kind for something else (a level when neither)
     function show(a) { queue.push(a); }
     function fanfare(notes) { notes.forEach((f, i) => setTimeout(() => beep([f], 0.035, 0.18), i * 110)); }
     function award(dt) {
       if (showT > 0) { if ((showT -= dt) <= 0) E.award.hidden = true; return; }
       if (!queue.length || !started) return;
       const a = queue.shift();
-      E.award.classList.toggle('level', !a.trophy);
-      E.awardKind.textContent = a.trophy ? 'Ny trofé' : 'Ny nivå';
+      E.award.className = a.cls || (a.trophy ? '' : 'level');
+      E.awardKind.textContent = a.kind || (a.trophy ? 'Ny trofé' : 'Ny nivå');
       E.awardTitle.textContent = a.title; E.awardSub.textContent = a.sub;
       E.award.hidden = false;
       E.award.classList.remove('go'); void E.award.offsetWidth; E.award.classList.add('go');
       showT = 4.5;
-      fanfare(a.trophy ? [784, 988, 1175, 1568] : [523, 659, 784, 1047, 1319]);
+      fanfare(a.trophy ? [784, 988, 1175, 1568] : a.cls ? [659, 784, 1047] : [523, 659, 784, 1047, 1319]);
     }
     hud();
 
@@ -154,6 +157,7 @@
     const countOf = (t) => (t.stat === 'km' ? (Math.floor(Math.min(val(t.stat), t.n) * 10) / 10).toString().replace('.', ',') : fmt(Math.min(val(t.stat), t.n)));
     let open = false;
     function render() {
+      DAILY.render();
       E.level.textContent = L.lv;
       E.xp.textContent = fmt(L.into) + ' av ' + fmt(L.need) + ' XP till nivå ' + (L.lv + 1);
       E.total.textContent = fmt(S.xp) + ' XP i allt';
@@ -207,7 +211,7 @@
     function update(dt) {
       // the Dalahästar you had found before there were trophies count too (on the first frame, not while this file loads:
       // all of them found gives a trophy, and showing it needs the files after this one)
-      if (!seeded) { seeded = true; for (const h of horsesFound) did('horses', h); }
+      if (!seeded) { seeded = true; for (const h of horsesFound) did('horses', h, true); }
       const c = driving;
       if (c && started) {
         const v = Math.hypot(c.vx, c.vz);
@@ -226,12 +230,12 @@
     }
 
     return {
-      update, did, gain, hud,
+      update, did, gain, hud, show,
       get level() { return L.lv; }, get xp() { return S.xp; }, get open() { return open; },
-      // a job paid kr (JOBS)
-      job(kr) { did('jobs'); S.st.jobKr = val('jobKr') + kr; check(); return gain(Math.max(10, Math.round(kr / 3))); },
+      // a job of this kind paid kr (JOBS)
+      job(kr, kind) { did('jobs'); did('job:' + kind); S.st.jobKr = val('jobKr') + kr; DAILY.add('jobKr', kr); check(); return gain(Math.max(10, Math.round(kr / 3))); },
       // you got away from the police with this many stars
-      escaped(stars) { did('escapes'); if (stars >= 5) did('escape5'); gain(40 * stars); },
+      escaped(stars) { did('escapes'); if (stars >= 3) did('escape3'); if (stars >= 5) did('escape5'); gain(40 * stars); },
       // a game with friends is over: you played, and maybe won
       played(won) { if (won) did('wins'); gain(won ? 225 : 75); },
       toggle() { if (open) closeBoard(); else openBoard(); },

@@ -592,11 +592,15 @@ body.touch #xpPop { bottom: calc(300px + env(safe-area-inset-bottom, 0px)); }
 #award.level .cup { fill: var(--asphalt); filter: none; }
 #award small { display: block; font-size: 0.66rem; font-weight: 900; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.85; }
 #award b { display: block; font: 900 1.2rem/1.15 var(--font-sign); }
-#awardSub { display: block; font-size: 0.8rem; font-weight: 700; line-height: 1.3; }
+#awardSub { display: block; font-size: 0.8rem; font-weight: 700; line-height: 1.3; white-space: pre-line; }
+#award .cal { display: none; width: 40px; height: 40px; flex: none; align-self: flex-start; }
+#award.daily { background: var(--sign-blue); box-shadow: inset 0 0 0 2px var(--sign-blue), inset 0 0 0 4px var(--snow), 0 10px 26px rgba(0, 0, 0, 0.35); }
+#award.daily .cup { display: none; }
+#award.daily .cal { display: block; }
 @keyframes awardIn { from { opacity: 0; transform: translateX(30px) scale(0.9); } to { opacity: 1; transform: none; } }
 @media (max-width: 760px) {
-  #award { right: auto; left: 50%; top: auto; bottom: calc(196px + env(safe-area-inset-bottom, 0px)); translate: -50% 0; }
-  body.touch #award { bottom: calc(340px + env(safe-area-inset-bottom, 0px)); }
+  #award { right: auto; left: 50%; top: auto; bottom: calc(226px + env(safe-area-inset-bottom, 0px)); translate: -50% 0; }
+  body.touch #award { bottom: calc(372px + env(safe-area-inset-bottom, 0px)); }
 }
 #trophies { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; box-sizing: border-box; background: rgba(6, 16, 26, 0.55); }
 .tr-sign { width: min(520px, 100%); max-height: 100%; display: flex; flex-direction: column; overflow: hidden; background: #6e4220; }
@@ -630,3 +634,21 @@ li.got .tr-side { color: #9be08f; }
 .shop-opt.locked:hover { background: rgba(255, 255, 255, 0.14); }
 .shop-swatch.locked { position: relative; cursor: not-allowed; opacity: 0.55; }
 .shop-swatch.locked::after { content: attr(data-lv); position: absolute; inset: 0; display: grid; place-items: center; color: var(--snow); font: 900 0.8rem/1 var(--font-gauge); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); }
+/* ---------- daily challenges: how many are done in the corner, a line while one goes on, the list on the level board ---------- */
+.daily-tag { pointer-events: auto; cursor: pointer; padding: 5px 11px 5px 7px; }
+.daily-tag:hover { background: rgba(15, 23, 30, 0.9); }
+.daily-tag b { color: #8fd8ff; font-variant-numeric: tabular-nums; }
+.daily-tag.all b { color: #7be08f; }
+.cal { width: 18px; height: 18px; display: block; }
+#dailyNote {
+  position: absolute; left: 50%; bottom: calc(184px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); max-width: calc(100vw - 32px); box-sizing: border-box;
+  padding: 6px 12px; border-radius: 8px; background: var(--sign-blue); box-shadow: inset 0 0 0 2px var(--snow); font-weight: 700; font-size: 0.86rem; text-align: center;
+}
+#dailyNote.go { animation: noteIn 0.3s ease-out both; }
+@keyframes noteIn { from { opacity: 0; translate: 0 8px; } to { opacity: 1; translate: 0 0; } }
+body.touch #dailyNote { bottom: calc(334px + env(safe-area-inset-bottom, 0px)); }
+.tr-list.daily li { grid-template-columns: 26px minmax(0, 1fr) auto; }
+.tr-list.daily .lv-bar { width: 100%; margin-top: 5px; }
+.tr-list.daily li.got .lv-bar i { background: #7be08f; }
+.dl-num { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; background: var(--sign-blue); box-shadow: inset 0 0 0 2px var(--snow); font: 900 0.8rem/1 var(--font-gauge); }
+li.got .dl-num { background: #2f9e4a; }

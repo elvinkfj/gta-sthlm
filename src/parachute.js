@@ -69,7 +69,7 @@
 
     /* ---------- jumping ---------- */
     function jump(x, y, z, vx, vz, h) {
-      Object.assign(S, { on: true, open: false, k: 0, t: 0, vx, vy: 0, vz, h, warnT: 0 });
+      Object.assign(S, { on: true, open: false, k: 0, t: 0, vx, vy: 0, vz, h, warnT: 0, y0: y });
       player.x = x; player.y = y; player.z = z; player.vx = vx; player.vz = vz; player.vy = 0; player.rot = h; player.grounded = false;
       player.model.group.visible = true;
       camTarget.set(x, y + 1.6, z);
@@ -89,7 +89,8 @@
     // Space, or the Skärm button: open the parachute while you fall
     function pull() {
       if (!S.on) return false;
-      if (!S.open) { S.open = true; S.k = 0; noise(0.7, 0.2, 650); }
+      // (how far you fell first counts for a daily challenge)
+      if (!S.open) { S.open = true; S.k = 0; noise(0.7, 0.2, 650); DAILY.add('fall', Math.round(S.y0 - player.y)); }
       return true;
     }
     function noise(len, vol, freq) { if (audio && !muted) noiseBurst(audio.ctx.currentTime, len, vol, 'bandpass', freq, 0.7, 0, 0.02); }

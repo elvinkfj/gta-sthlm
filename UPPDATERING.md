@@ -26,7 +26,7 @@ Lekarna läggs i en ny fil, `src/party.js`, som laddas direkt efter `src/multipl
 ## Del 4: Nivåer och belöningar
 
 - [x] **Nivåer och troféer.** Du får XP för allt du gör: jobb, gatlopp, dalahästar, lekarna med kompisar. Nya nivåer låser upp saker (till exempel verkstadens dyraste delar). Troféer för saker som "kör 300 km/h", "fly från fem stjärnor" eller "ta alla dalahästar". Allt sparas i webbläsaren. (Klar: `src/progress.js`. Tryck I för nivån och de 18 troféerna. Nivåerna låser upp verkstadens bästa fälgar, fjädring, guldlack och motor.)
-- [ ] **Dagliga utmaningar.** Tre nya små utmaningar varje dag, till exempel "hitta 2 dalahästar", "kör 5 km taxi" eller "hoppa 50 meter". De ger pengar och XP.
+- [x] **Dagliga utmaningar.** Tre nya små utmaningar varje dag, till exempel "hitta 2 dalahästar", "kör 5 km taxi" eller "hoppa 50 meter". De ger pengar och XP. (Klar: `src/daily.js`. En lätt, en svårare och en svår varje dag, valda efter datumet. "Hoppa 50 meter" blev 50 meters fritt fall med fallskärmen, eftersom bilarna inte kan hoppa. De står på tavlan under I.)
 - [ ] **Garaget.** Köp bilar för pengarna du tjänar och ställ dem i ett eget garage (förslag: under det gula huset i Drakens gränd). Bilarna du köpt står kvar med sin färg och sina delar från verkstaden.
 
 ## Del 5: Upp i luften och under jorden

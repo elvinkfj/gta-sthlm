@@ -289,7 +289,7 @@
     const el2 = { job: $('job'), icon: $('jobIcon'), title: $('jobTitle'), hint: $('jobHint'), clock: $('jobClock'), big: $('bigText'), cash: $('cash'), cashTag: $('cashTag') };
     function big(text, sub, t = 2.2) { el2.big.textContent = text; if (sub) { const s = document.createElement('small'); s.textContent = sub; el2.big.append(s); } el2.big.hidden = false; bigT = t; }
     // (a job's pay gives XP too, PROGRESS; a car sold at the scrapyard a little)
-    function pay(kr, why, scrap) { earned += kr; save(); beep([660, 880, 1320], 0.03, 0.3); toast(why + ' +' + fmtKr(kr)); if (scrap) PROGRESS.gain(20); else PROGRESS.job(kr); }
+    function pay(kr, why, scrap) { earned += kr; save(); beep([660, 880, 1320], 0.03, 0.3); toast(why + ' +' + fmtKr(kr)); if (scrap) { PROGRESS.gain(20); PROGRESS.did('scrap'); } else PROGRESS.job(kr, job && job.kind); }
     const speed = () => (driving ? Math.hypot(driving.vx, driving.vz) : 0);
     const kindOf = (c) => (!c ? null : c.M.shape.taxi ? 'taxi' : c.M.id === 'skapbil' ? 'paket' : c.M.bus ? 'buss' : c.M.moped ? 'mat'
       : c.M.police && !c.M.boat ? 'polis' : c.M.boat === 'console' || c.M.boat === 'riva' ? 'battaxi' : null);

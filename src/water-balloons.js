@@ -198,6 +198,7 @@
       // (a friend: their own game finds out, and tells everyone)
       if (p.remote) return;
       p.wetT = SOAK;
+      if (b.mine) PROGRESS.did('wet');
       const ai = p.ai;
       if (!ai) return;
       if (ai.state === 'cop') { if (b.mine) { startChase('ballong'); PROGRESS.did('wetCop'); } }
