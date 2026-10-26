@@ -889,6 +889,46 @@ test('olika tid och väder när spelet startar: ibland natt, regn och åska elle
   expect(errors).toEqual([]);
 });
 
+test('jobbtavlan: J utan jobb visar alla jobb, och Kör! ger fordonet och startar jobbet', async () => {
+  const r = await page.evaluate(() => {
+    const t = gubbeTest, s = {};
+    t.hold(true);
+    if (JOBS.job) t.press('KeyJ');
+    if (t.state().driving) t.press('KeyE');
+    if (t.wanted) t.endChase(false);
+    // on foot on Ringvägen, away from the race starts, the workshop and the scrapyard
+    const e = edges.find((x) => x.name === 'Ringvägen' && x.len > 100), f = edgeFrame(e.a, e.b);
+    t.teleport(f.A.x + f.ux * e.len / 2 + f.rx * (e.hw + 2), f.A.z + f.uz * e.len / 2 + f.rz * (e.hw + 2)); t.run(0.2, 1 / 60, false);
+    t.press('KeyJ');
+    s.open = JOBS.boardOpen; s.paused = paused();
+    s.rows = document.querySelectorAll('#jobsList li').length; s.races = document.querySelectorAll('#jobsRaces li').length;
+    // Kör! on the food job: the moped beside you, and the job on
+    const i = JOBS.board.BOARD.findIndex((j) => j.kind === 'mat');
+    document.querySelectorAll('#jobsList button')[i].click();
+    t.run(0.3, 1 / 60, false);
+    s.food = { open: JOBS.boardOpen, car: driving && driving.M.id, job: JOBS.job && JOBS.job.kind };
+    // J ends it; in a car without a job of its own J opens the board, and Esc closes it
+    t.press('KeyJ'); s.ended = JOBS.job;
+    t.press('KeyE'); t.choose('kombi'); t.run(0.2, 1 / 60, false);
+    t.press('KeyJ'); s.inCar = JOBS.boardOpen;
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape' }));
+    s.closed = !JOBS.boardOpen && document.getElementById('jobs').hidden;
+    s.bad = t.state().bad;
+    t.hold(false);
+    return s;
+  });
+  expect(r.open).toBe(true);
+  expect(r.paused).toBe(true);
+  expect(r.rows).toBe(6);
+  expect(r.races).toBe(4);
+  expect(r.food).toEqual({ open: false, car: 'stalker', job: 'mat' });
+  expect(r.ended).toBeNull();
+  expect(r.inCar).toBe(true);
+  expect(r.closed).toBe(true);
+  expect(r.bad).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
 // (last: it loads the page again, with every Dalahäst found)
 test('alla dalahästar hittade sedan förut: spelet laddar och trofén delas ut', async () => {
   await page.evaluate(() => { localStorage.setItem('gubbe-dalahastar', JSON.stringify(HORSES.map((h) => h[0]))); localStorage.removeItem('gubbe-niva'); });

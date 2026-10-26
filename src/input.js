@@ -85,6 +85,7 @@
     if (METRO.keydown(e)) return;
     if (WORKSHOP.keydown(e)) return;
     if (GARAGE.keydown(e)) return;
+    if (JOBS.keydown(e)) return;
     if (PROGRESS.keydown(e)) return;
     if (bigmap.open) { if (e.code === 'Escape' || e.code === 'KeyK') { e.preventDefault(); onKey(e.code, e.repeat); } return; }
     if (pickerOpen) { if (e.code === 'Escape' || e.code === 'KeyB' || /^Digit\d$/.test(e.code)) { e.preventDefault(); onKey(e.code, e.repeat, e.timeStamp); } return; }

@@ -436,12 +436,13 @@
     function key() {
       if (policeStop && policeStop.locked) return;
       if (job) { end(job.kind === 'race' ? 'Gatloppet avbrutet.' : 'Du slutade jobba.'); return; }
-      if (!driving) { toast('Jobben görs med fordon: taxin, Sprintern, bussen, mopeden, polisbilen och motorbåtarna. Gatloppen startar vid de gula ljuspelarna, och bilar säljer du på bilskroten i Hammarby hamn.'); return; }
+      // (nothing to start here: the board with every job)
+      if (!driving) { openBoard(); return; }
       if (nearScrap) { sell(); return; }
       if (nearRace) { startRace(nearRace); return; }
       const kind = kindOf(driving);
       if (kind) start(kind);
-      else toast('Med ' + driving.M.def + ' kan du köra gatlopp vid de gula ljuspelarna, eller sälja den på bilskroten i Hammarby hamn. Taxin, Sprintern, bussen, mopeden, polisbilen och motorbåtarna har egna jobb.');
+      else openBoard();
     }
 
     function update(dt) {
@@ -756,6 +757,65 @@
       const T = target();
       if (T) { g.fillStyle = '#ffc21a'; g.strokeStyle = '#ffffff'; g.lineWidth = 2.5; g.beginPath(); g.arc(toX(T.x), toY(T.z), 7, 0, TAU); g.fill(); g.stroke(); }
     }
+    /* ---------- the job board: every job, what it pays, and the vehicle it needs ---------- */
+    // J with nothing to start (on foot, or in a car without a job of its own) opens it, and it pauses the game like the
+    // car picker. A job's button fetches its vehicle (as the car picker would, a boat only by a quay) and starts the job.
+    // (the pay is roughly what the sums in the jobs above come to, JOB_PAY times)
+    const BOARD = [
+      { kind: 'taxi', vehicle: 'taxin, en Toyota Prius', icon: 'T', name: 'Taxi', car: 'taxi', pay: 'ungefär 200–500 kr per kund', text: 'En kund väntar vid trottoaren. Kör dit, stanna, och kör kunden dit den ska. Är du snabb blir det dricks.' },
+      { kind: 'paket', vehicle: 'Sprintern', icon: 'P', name: 'Paket', car: 'skapbil', pay: 'ungefär 300–600 kr per leverans', text: 'Hämta paketen och kör ut dem med Sprintern.' },
+      { kind: 'mat', vehicle: 'mopeden', icon: 'M', name: 'Matleverans', car: 'stalker', pay: 'ungefär 150–400 kr per leverans', text: 'Hämta maten och kör ut den på mopeden innan den kallnar.' },
+      { kind: 'buss', vehicle: 'SL-bussen', icon: 'B', name: 'Busslinje', car: 'buss', pay: 'ungefär 100–200 kr per hållplats, 500 kr extra vid slutstationen', text: 'Kör SL-bussen längs linjen och stanna vid hållplatserna så att resenärerna kan kliva på.' },
+      { kind: 'polis', vehicle: 'polisbilen, en Volvo V90', icon: '!', name: 'Polis', car: 'polis', pay: 'ungefär 600–1 000 kr per rånare', text: 'En rånare flyr i en snabb bil. Kör ikapp och stoppa den. Medan du jobbar stoppar polisen inte dig.' },
+      { kind: 'battaxi', vehicle: 'motorbåten', icon: '~', name: 'Båttaxi', car: 'anytec', pay: 'ungefär 300–700 kr per resa', text: 'Hämta resenärer vid bryggorna och kör dem över vattnet. Stå vid en kaj när du väljer jobbet.' }
+    ];
+    const BD = { board: $('jobs'), close: $('jobsClose'), list: $('jobsList'), races: $('jobsRaces') };
+    let boardOpen = false;
+    function renderBoard() {
+      BD.list.textContent = '';
+      for (const j of BOARD) {
+        const li = document.createElement('li'), ic = document.createElement('span'), txt = document.createElement('span'), b = document.createElement('b'), p = document.createElement('small'), pay = document.createElement('small'), go = document.createElement('button');
+        ic.className = 'job-icon'; ic.textContent = j.icon;
+        b.textContent = j.name + ' · i ' + j.vehicle; p.textContent = j.text; pay.className = 'jobs-pay'; pay.textContent = j.pay;
+        txt.append(b, p, pay);
+        go.type = 'button'; go.className = 'btn-sign small'; go.textContent = 'Kör!';
+        go.addEventListener('click', () => takeJob(j));
+        li.append(ic, txt, go); BD.list.append(li);
+      }
+      BD.races.textContent = '';
+      for (const r of RACES) {
+        const li = document.createElement('li'), a = document.createElement('span'), b = document.createElement('span');
+        a.textContent = r.name; b.textContent = records[r.id] ? 'Rekord ' + fmtTime(records[r.id]) : 'Inget rekord än';
+        li.append(a, b); BD.races.append(li);
+      }
+    }
+    function openBoard() {
+      if (boardOpen || !started || paused()) return;
+      boardOpen = true;
+      renderBoard();
+      BD.board.hidden = false;
+      if (document.pointerLockElement && document.exitPointerLock) document.exitPointerLock();
+      for (const k in keys) keys[k] = false;
+      joy.x = joy.y = 0;
+      if (!isTouch) BD.close.focus();
+    }
+    function closeBoard(lock = true) {
+      if (!boardOpen) return;
+      boardOpen = false;
+      BD.board.hidden = true;
+      if (BD.board.contains(document.activeElement)) document.activeElement.blur();
+      if (lock) requestLock();
+    }
+    // a job's button: its vehicle beside you (the one you are in, if it is the right kind), and off you go
+    function takeJob(j) {
+      closeBoard(false);
+      if (!driving || kindOf(driving) !== j.kind) chooseModel(MODEL[j.car]);
+      if (driving && kindOf(driving) === j.kind && !job) start(j.kind);
+      requestLock();
+    }
+    BD.close.addEventListener('click', () => closeBoard());
+    BD.board.addEventListener('click', (e) => { if (e.target === BD.board) closeBoard(); });
+
     // say what J does the first time you sit in a car that has a job
     function entered(c) {
       const k = kindOf(c);
@@ -775,6 +835,14 @@
       // money from elsewhere (the Dalahästar's finder's fee), without a word of its own
       reward(kr) { earned += kr; save(); },
       SCRAP, priceOf,
+      get boardOpen() { return boardOpen; },
+      // keys while the job board is open: Esc and J close it, the rest wait
+      keydown(e) {
+        if (!boardOpen) return false;
+        if (e.code === 'Escape' || e.code === 'KeyJ') { e.preventDefault(); closeBoard(); }
+        return true;
+      },
+      board: { open: openBoard, close: closeBoard, take: (kind) => takeJob(BOARD.find((j) => j.kind === kind)), BOARD },
       get job() { return job; }, get earned() { return earned; }, get route() { return route; },
       // test hooks: hold the race countdown short, skip to a checkpoint
       _skipCountdown() { if (job && job.kind === 'race') job.t = 0; }
