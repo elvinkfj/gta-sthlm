@@ -29,6 +29,40 @@ Var och en har sin egen trafik, sin egen polis och sina egna dalahästar, så en
 
 Spelarnas webbläsare pratar direkt med varandra (WebRTC). Den fria servern hos PeerJS behövs bara för att de ska hitta varandra, och den som har rummet skickar vidare allt mellan de andra. Ni behöver alltså inte ha en egen server. Släpper era nätverk inte igenom en direkt anslutning går spelet efter några sekunder över till en reservväg: meddelandena skickas då via en fri, öppen MQTT-server (HiveMQ, EMQX eller Mosquitto). Det går lite långsammare men kommer fram nästan överallt, och det behövs inget konto. Reservvägen fungerar också när PeerJS-servern är nere eller blockerad: då skapas rummet och går man med bara via MQTT. Det som skickas den vägen (var ni är, bilarna och chatten) går genom en öppen server, så skriv inget hemligt i chatten. Kommer ni ändå inte in kan ni prova ett annat nät, till exempel mobilens. Vill ni ha en egen PeerJS-server kan ni lägga till `?peerserver=adress:port` i adressen.
 
+### Konto
+
+Allt du har (nivån och troféerna, garaget, de trimmade bilarna, kassan, rekorden, dalahästarna och dagens utmaningar) sparas i webbläsaren. Loggar du in sparas det också på ett konto, så får du tillbaka allt var du än spelar.
+
+- Tryck **Logga in** på startskylten (eller på gubben uppe till vänster i spelet). Skriv ett namn (3–14 bokstäver eller siffror) och ett lösenord (minst 6 tecken).
+- **Skapa konto** gör ett nytt konto, och det du har i spelet nu följer med. **Logga in** hämtar det du har sparat på kontot, och spelet laddas om med det.
+- Medan du spelar sparas allt av sig självt var 20:e sekund och när du stänger spelet. **Spara nu** sparar direkt.
+- **Logga ut** sparar först, och sedan börjar spelet om från början på den datorn tills någon loggar in igen.
+- Skriv upp lösenordet. Det finns ingen e-post kopplad till kontot, så det går inte att få ett nytt lösenord.
+
+Kontona ligger hos Firebase (Google), som är gratis. Det behövs ett eget Firebase-projekt, och det ställer man in en gång:
+
+1. Gå till [console.firebase.google.com](https://console.firebase.google.com), logga in med ett Google-konto och skapa ett nytt projekt, till exempel `gubbe-pa-vagen`. Google Analytics behövs inte.
+2. Under **Authentication** (Build → Authentication): tryck **Kom igång**, välj **E-post/lösenord** under inloggningsmetoder och slå på den (bara den översta knappen). Spara.
+3. Under **Realtime Database**: tryck **Skapa databas**, välj en plats i Europa och starta i **låst läge**. Gå sedan till fliken **Regler**, byt ut allt mot reglerna här under och tryck **Publicera**. De gör att varje spelare bara kan läsa och skriva sitt eget sparade spel.
+
+   ```json
+   {
+     "rules": {
+       "saves": {
+         "$uid": {
+           ".read": "auth != null && auth.uid === $uid",
+           ".write": "auth != null && auth.uid === $uid"
+         }
+       }
+     }
+   }
+   ```
+
+4. Tryck på kugghjulet → **Projektinställningar**, och under **Dina appar** på webbikonen `</>`. Ge appen ett namn (Firebase Hosting behövs inte). Då visas en `firebaseConfig`.
+5. Kopiera `apiKey`, `authDomain` och `databaseURL` därifrån in i `FIREBASE` överst i `src/account.js`. Saknas `databaseURL` står adressen överst på sidan för Realtime Database (den slutar på `firebasedatabase.app` eller `firebaseio.com`).
+
+Värdena i `firebaseConfig` är inte hemliga, de säger bara vilket projekt spelet ska prata med. Det är reglerna i steg 3 som skyddar sparade spel. Begränsa inte API-nyckeln till vissa webbplatser, för spelet öppnas ofta direkt som en fil.
+
 ## Kontroller
 
 | Tangent | Gör |

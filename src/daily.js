@@ -169,6 +169,8 @@
 
     return {
       update, add, render,
+      // what is in memory into localStorage now (ACCOUNT, before it sends the save)
+      flush() { if (dirty) save(); },
       get ids() { return D.ids.slice(); }, get done() { return D.done.slice(); },
       // for the tests: the three a day would get, and today's set to these (fresh)
       debug: { POOL, PAY, BONUS, choose, dayOf, get D() { return D; }, set(ids) { D = { day: D.day, ids, v: ids.map(() => 0), seen: ids.map(() => []), done: ids.map(() => false), bonus: false }; dirty = true; tag(); },
