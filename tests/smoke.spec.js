@@ -780,6 +780,35 @@ test('de nya hyperbilarna går bara att köpa i bilhandeln', async () => {
   expect(errors).toEqual([]);
 });
 
+test('en köpt exklusiv bil går att välja med B, i färgen den köptes i', async () => {
+  const r = await page.evaluate(() => {
+    const t = gubbeTest, G = t.garage, s = {};
+    t.hold(true);
+    if (JOBS.job) t.press('KeyJ');
+    if (t.state().driving) t.press('KeyE');
+    if (t.wanted) t.endChase(false);
+    const e = edges.find((x) => x.name === 'Ringvägen' && x.len > 100), f = edgeFrame(e.a, e.b);
+    t.teleport(f.A.x + f.ux * e.len / 2 + f.rx * (e.hw + 2), f.A.z + f.uz * e.len / 2 + f.rz * (e.hw + 2)); t.run(0.2, 1 / 60, false);
+    // (the garage test bought a Chiron)
+    s.have = G.owned.filter((id) => MODEL[id].buy);
+    t.press('KeyB');
+    s.group = !document.getElementById('pickMine').hidden;
+    s.shown = [...document.querySelectorAll('#gridMine button.model')].map((b) => b.id.slice(6));
+    s.others = ['tourbillon', 'nevera', 'f80', 'w1', 'jesko'].some((id) => document.getElementById('model-' + id));
+    document.getElementById('model-chiron').click(); t.run(0.3, 1 / 60, false);
+    s.car = { id: driving && driving.M.id, owned: !!(driving && driving.owned), color: driving && driving.color === G.mine('chiron').color };
+    t.press('KeyE');
+    t.hold(false);
+    return s;
+  });
+  expect(r.have).toEqual(['chiron']);
+  expect(r.group).toBe(true);
+  expect(r.shown).toEqual(['chiron']);
+  expect(r.others).toBe(false);
+  expect(r.car).toEqual({ id: 'chiron', owned: true, color: true });
+  expect(errors).toEqual([]);
+});
+
 test('mer pengar: pengapåsar, belöning från polisen, nära ögat och drift', async () => {
   const r = await page.evaluate(() => {
     const t = gubbeTest, C = t.cash, s = {};

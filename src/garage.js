@@ -419,6 +419,8 @@
     return {
       update, view, drawMini, drawBig, price,
       get open() { return open; }, get owned() { return owned.map((o) => o.id); },
+      // the one of this model you have ({ id, color }), or null
+      mine(id) { const o = owned.find((x) => x.id === id); return o ? { id: o.id, color: o.color } : null; },
       prompt() { return footNear() ? 'Garaget' : null; },
       // E by the door, on foot
       use() { if (!footNear()) return false; enter(); return true; },
