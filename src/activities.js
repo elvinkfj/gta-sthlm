@@ -401,6 +401,8 @@
       toast('En resenär väntar på bryggan vid ' + pier.name + '. Lägg till där.');
     }
     function start(kind) {
+      // (on a police job the police leave you alone: a chase you are in ends, and no new one starts, see startChase)
+      if (kind === 'polis' && wanted && !policeStop) endChase(false);
       job = { kind, car: driving, t: 0, done: 0, offT: 0 };
       if (kind === 'taxi') newFare(); else if (kind === 'paket') newParcel(); else if (kind === 'mat') newFood();
       else if (kind === 'polis') newRobber(); else if (kind === 'battaxi') newBoatFare(); else newRoute();
