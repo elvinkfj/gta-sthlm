@@ -289,6 +289,7 @@ h1 { margin: 0; font: 900 clamp(2.2rem, 9vw, 3.1rem)/0.95 var(--font-sign); lett
 .lg-balloon { border-radius: 50% 50% 50% 50% / 45% 45% 55% 55% !important; width: 12px !important; height: 14px !important; background: #e0203a; box-shadow: 0 0 0 2px var(--snow); }
 .lg-race { border-radius: 2px !important; background: #ffe14a; box-shadow: 0 0 0 2px #1b1c1e; }
 .lg-goal { background: #ffc21a; box-shadow: 0 0 0 2px var(--snow); }
+.lg-wp { background: #b14bd8; box-shadow: 0 0 0 2px var(--snow); }
 .lg-heli { background: radial-gradient(circle, #163d8c 0 38%, rgba(255,255,255,.75) 40%); box-shadow: 0 0 0 1px #11161b; }
 .lg-army { border-radius: 2px !important; background: #3d4a30; box-shadow: 0 0 0 2px var(--snow); }
 .lg-friend { background: #c8102e; box-shadow: 0 0 0 2px var(--snow); }
@@ -698,5 +699,7 @@ body.touch #cashPop { bottom: calc(420px + env(safe-area-inset-bottom, 0px)); }
 .jobs-list small { display: block; font-size: 0.78rem; font-weight: 700; opacity: 0.85; line-height: 1.35; }
 .jobs-list small.jobs-pay { color: #7be08f; opacity: 1; margin-top: 2px; }
 .jobs-races { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-.jobs-races li { display: flex; justify-content: space-between; gap: 10px; padding: 5px 10px; border-radius: 7px; background: rgba(255, 255, 255, 0.08); font-size: 0.86rem; font-weight: 700; }
-.jobs-races li span:last-child { font-family: var(--font-gauge); color: var(--sign-yellow); }
+.jobs-races li { display: flex; align-items: center; gap: 10px; padding: 5px 10px; border-radius: 7px; background: rgba(255, 255, 255, 0.08); font-size: 0.86rem; font-weight: 700; }
+.jobs-races li span:first-child { flex: 1; }
+.jobs-races li span + span { font-family: var(--font-gauge); color: var(--sign-yellow); }
+.jobs-races li button { padding: 3px 9px; font-size: 0.74rem; }

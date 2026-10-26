@@ -110,7 +110,12 @@
     if (!started || paused()) return;
     if (document.pointerLockElement === canvas || dragging) look(e.movementX || 0, e.movementY || 0);
   });
-  document.addEventListener('pointerlockchange', () => { document.body.classList.toggle('locked', document.pointerLockElement === canvas); });
+  // (a lock asked for just before a board or the big map opened lets go again, or the mouse couldn't reach them)
+  document.addEventListener('pointerlockchange', () => {
+    const on = document.pointerLockElement === canvas;
+    if (on && paused()) document.exitPointerLock();
+    document.body.classList.toggle('locked', on);
+  });
 
   let lookId = null, lookX = 0, lookY = 0;
   canvas.addEventListener('pointerdown', (e) => {

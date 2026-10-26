@@ -784,9 +784,11 @@
       }
       BD.races.textContent = '';
       for (const r of RACES) {
-        const li = document.createElement('li'), a = document.createElement('span'), b = document.createElement('span');
+        const li = document.createElement('li'), a = document.createElement('span'), b = document.createElement('span'), go = document.createElement('button');
         a.textContent = r.name; b.textContent = records[r.id] ? 'Rekord ' + fmtTime(records[r.id]) : 'Inget rekord än';
-        li.append(a, b); BD.races.append(li);
+        go.type = 'button'; go.className = 'btn-sign small alt'; go.textContent = 'Visa vägen';
+        go.addEventListener('click', () => { closeBoard(); WAYPOINT.set(r.pts[0].x, r.pts[0].z, r.name); });
+        li.append(a, b, go); BD.races.append(li);
       }
     }
     function openBoard() {
@@ -814,6 +816,7 @@
       requestLock();
     }
     BD.close.addEventListener('click', () => closeBoard());
+    $('jobsScrap').addEventListener('click', () => { closeBoard(); WAYPOINT.set(SCRAP.x, SCRAP.z, 'bilskroten'); });
     BD.board.addEventListener('click', (e) => { if (e.target === BD.board) closeBoard(); });
 
     // say what J does the first time you sit in a car that has a job
@@ -835,6 +838,8 @@
       // money from elsewhere (the Dalahästar's finder's fee), without a word of its own
       reward(kr) { earned += kr; save(); },
       SCRAP, priceOf,
+      // the way along the streets between two points, and a pillar of light (for your own goal, WAYPOINT)
+      routeTo, beam,
       get boardOpen() { return boardOpen; },
       // keys while the job board is open: Esc and J close it, the rest wait
       keydown(e) {

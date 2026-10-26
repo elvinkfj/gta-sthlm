@@ -90,7 +90,7 @@
     <span class="key">C</span><span>Varningsblinkers</span>
     <span class="key">E</span><span>Kliv in, ta en bil i trafiken, kliv ur</span>
     <span class="key">B</span><span>Välj bilmodell, eller en båt när du står vid en kaj</span>
-    <span class="key">K</span><span>Stor karta (eller klicka på kartan)</span>
+    <span class="key">K</span><span>Stor karta (eller klicka på kartan). Klicka på den stora kartan för att sätta ett eget mål, så visar en lila linje vägen dit</span>
     <span class="key">F</span><span>Tuta, skjut med kanonen i stridsvagnen, eller kasta en vattenballong när du går</span>
     <span class="key">L</span><span>Blåljus, när du kör en polisbil</span>
     <span class="key">Polis</span><span>Kör in till kanten och stanna, så kommer en konstapel fram. E skriver under boten. 50 km/h för fort eller flykt: du blir gripen och hamnar i cellen på polisstationen i Gamla stan. Medan du kör ett polisuppdrag (J i polisbilen) stoppar polisen dig inte</span>
@@ -200,7 +200,7 @@
       <p class="jobs-lede">Tryck Kör! så får du fordonet och jobbet börjar direkt. Du kan också ta fordonet i trafiken eller med B och trycka J. J igen avslutar jobbet.</p>
       <ul class="jobs-list" id="jobsList"></ul>
       <section class="tr-sec"><h3>Gatlopp</h3><p class="tr-note">Kör mot klockan från de gula ljuspelarna (de syns på kartan). Stanna vid pelaren i en bil och tryck J. Nytt rekord ger 1 200 kr, annars 500 kr.</p><ul class="jobs-races" id="jobsRaces"></ul></section>
-      <section class="tr-sec"><h3>Fler sätt att tjäna pengar</h3><p class="tr-note">Sälj bilar du tagit i trafiken på bilskroten i Hammarby hamn. Leta pengapåsar, drifta, kör nära andra bilar i hög fart, kom undan polisen och klara dagens utmaningar (I).</p></section>
+      <section class="tr-sec"><h3>Fler sätt att tjäna pengar</h3><p class="tr-note">Sälj bilar du tagit i trafiken på bilskroten i Hammarby hamn. Leta pengapåsar, drifta, kör nära andra bilar i hög fart, kom undan polisen och klara dagens utmaningar (I).</p><div class="mp-actions"><button id="jobsScrap" class="btn-sign small alt" type="button">Visa vägen till bilskroten</button></div></section>
     </div>
   </div>
 </div>
@@ -304,7 +304,7 @@
   <div class="bigmap-panel">
     <div class="bigmap-head">
       <h2 id="bigmapTitle">Stockholm</h2>
-      <p>Dra för att flytta, scrolla eller använd + och − för att zooma. Dubbelklicka för att hitta dig själv.</p>
+      <p>Klicka för att sätta ett mål, så visar GPS:en vägen dit (klicka på målet igen för att ta bort det). Dra för att flytta, scrolla eller använd + och − för att zooma. Dubbelklicka för att hitta dig själv.</p>
       <div class="bigmap-tools">
         <button id="bigmapOut" class="btn-sign zoom" type="button" aria-label="Zooma ut">−</button>
         <button id="bigmapIn" class="btn-sign zoom" type="button" aria-label="Zooma in">+</button>
@@ -314,7 +314,7 @@
     <canvas id="bigmapCanvas"></canvas>
     <div class="legend">
       <span><i class="lg-you"></i>Du</span><span><i class="lg-police"></i>Polis</span><span><i class="lg-car"></i>Din bil</span>
-      <span><i class="lg-t">T</i>Tunnelbana</span><span><i class="lg-dala"></i>Hittad dalahäst</span><span><i class="lg-park"></i>Park</span><span><i class="lg-main"></i>Huvudgata</span><span><i class="lg-race"></i>Gatlopp</span><span><i class="lg-goal"></i>Mål och GPS</span><span><i class="lg-ice"></i>Glasskiosk</span><span><i class="lg-balloon"></i>Ballonger</span><span><i class="lg-heli"></i>Polishelikopter</span><span><i class="lg-boat"></i>Båt</span><span><i class="lg-army"></i>Militär</span><span><i class="lg-friend"></i>Vän</span>
+      <span><i class="lg-t">T</i>Tunnelbana</span><span><i class="lg-dala"></i>Hittad dalahäst</span><span><i class="lg-park"></i>Park</span><span><i class="lg-main"></i>Huvudgata</span><span><i class="lg-race"></i>Gatlopp</span><span><i class="lg-goal"></i>Mål och GPS</span><span><i class="lg-wp"></i>Mitt mål</span><span><i class="lg-ice"></i>Glasskiosk</span><span><i class="lg-balloon"></i>Ballonger</span><span><i class="lg-heli"></i>Polishelikopter</span><span><i class="lg-boat"></i>Båt</span><span><i class="lg-army"></i>Militär</span><span><i class="lg-friend"></i>Vän</span>
     </div>
   </div>
 </div>
@@ -368,6 +368,7 @@
 <script src="src/progress.js"></script>
 <script src="src/daily.js"></script>
 <script src="src/cash.js"></script>
+<script src="src/waypoint.js"></script>
 <script src="src/gameplay.js"></script>
 <script src="src/hud.js"></script>
 <script src="src/sound.js"></script>
