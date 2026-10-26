@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;700;900&family=Overpass+Mono:wght@700&display=swap">
 <!-- ?v= is the version (VERSION.nr in src/core.js): a new one gets new files, never some new and some old from the browser's cache -->
-<link rel="stylesheet" href="style.css?v=59">
+<link rel="stylesheet" href="style.css?v=60">
 </head>
 <body>
 
@@ -37,6 +37,7 @@
   <div id="stars" role="img" aria-label="Polisen letar inte efter dig" title="Hur mycket polisen är efter dig. Från tre stjärnor kommer helikoptern"><span class="heli">HELIKOPTER</span><span class="army">MILITÄR</span></div>
   <div id="loc"><span id="locStreet"></span><span id="locDistrict">Norrmalm</span><span id="locTime">10:00</span></div>
   <div id="job" hidden><span class="job-icon" id="jobIcon">T</span><span><b id="jobTitle"></b><small id="jobHint"></small></span><span id="jobClock"></span></div>
+  <div id="story" hidden><span class="job-icon" aria-hidden="true">K</span><span><b id="storyTitle"></b><small id="storyHint"></small></span><span id="storyClock"></span></div>
   <div id="bigText" hidden></div>
   <div id="party" hidden><span class="job-icon" id="partyIcon">P</span><span><b id="partyTitle"></b><small id="partySub"></small></span><span id="partyClock"></span></div>
   <div id="partyBig" hidden></div>
@@ -117,6 +118,7 @@
     <span class="key">T</span><span>Ljud av och på</span>
     <span class="key">Q</span><span>Grafikkvalitet: hög, mellan eller enkel</span>
     <span class="key">P</span><span>Spela med vänner: skapa ett rum eller gå med i en väns rum, gå till en vän, starta en lek</span>
+    <span class="key">Story</span><span>Prata med kommissarie Kicki utanför polisstationen på Stora Nygatan (E), så börjar storyn. J två gånger avbryter ett uppdrag</span>
     <span class="key">Konto</span><span>Klicka på gubben uppe till vänster för att logga in, så sparas allt du har på ett konto</span>
     <span class="key">Y</span><span>Chatta med dina vänner i rummet</span>
     <span class="key">Esc</span><span>Släpp musen</span>
@@ -202,6 +204,7 @@
         <button id="jobsClose" class="btn-sign picker-close" type="button">Stäng</button>
       </div>
       <p class="jobs-lede">Tryck Kör! så får du fordonet och jobbet börjar direkt. Du kan också ta fordonet i trafiken eller med B och trycka J. J igen avslutar jobbet.</p>
+      <section class="tr-sec jobs-story"><h3>Storyn: Kuppen på Nationalmuseum</h3><p class="tr-note" id="jobsStoryText"></p><div class="mp-actions"><button id="jobsStoryGo" class="btn-sign small alt" type="button">Visa vägen till Kicki</button></div></section>
       <ul class="jobs-list" id="jobsList"></ul>
       <section class="tr-sec"><h3>Gatlopp</h3><p class="tr-note">Kör mot klockan från de gula ljuspelarna (de syns på kartan). Stanna vid pelaren i en bil och tryck J. Nytt rekord ger 1 200 kr, annars 500 kr.</p><ul class="jobs-races" id="jobsRaces"></ul></section>
       <section class="tr-sec"><h3>Fler sätt att tjäna pengar</h3><p class="tr-note">Sälj bilar du tagit i trafiken på bilskroten i Hammarby hamn. Leta pengapåsar, drifta, kör nära andra bilar i hög fart, kom undan polisen och klara dagens utmaningar (I).</p><div class="mp-actions"><button id="jobsScrap" class="btn-sign small alt" type="button">Visa vägen till bilskroten</button></div></section>
@@ -304,6 +307,18 @@
   </div>
 </div>
 
+<div id="storySign" hidden role="dialog" aria-modal="true" aria-labelledby="stTitle">
+  <div class="sign mp-sign story-sign">
+    <div class="sign-inner">
+      <div class="st-kicker" id="stKicker"></div>
+      <h2 id="stTitle"></h2>
+      <div class="st-lines" id="stLines"></div>
+      <p class="st-pay" id="stPay"></p>
+      <div class="mp-actions"><button id="stGo" class="btn-sign" type="button">Kör!</button><button id="stNo" class="btn-sign alt" type="button">Inte nu</button></div>
+    </div>
+  </div>
+</div>
+
 <div id="account" hidden role="dialog" aria-modal="true" aria-labelledby="acTitle">
   <div class="sign mp-sign">
     <div class="sign-inner">
@@ -344,7 +359,7 @@
     <canvas id="bigmapCanvas"></canvas>
     <div class="legend">
       <span><i class="lg-you"></i>Du</span><span><i class="lg-police"></i>Polis</span><span><i class="lg-car"></i>Din bil</span>
-      <span><i class="lg-t">T</i>Tunnelbana</span><span><i class="lg-dala"></i>Hittad dalahäst</span><span><i class="lg-park"></i>Park</span><span><i class="lg-main"></i>Huvudgata</span><span><i class="lg-race"></i>Gatlopp</span><span><i class="lg-goal"></i>Mål och GPS</span><span><i class="lg-wp"></i>Mitt mål</span><span><i class="lg-ice"></i>Glasskiosk</span><span><i class="lg-balloon"></i>Ballonger</span><span><i class="lg-heli"></i>Polishelikopter</span><span><i class="lg-boat"></i>Båt</span><span><i class="lg-army"></i>Militär</span><span><i class="lg-friend"></i>Vän</span>
+      <span><i class="lg-t">T</i>Tunnelbana</span><span><i class="lg-dala"></i>Hittad dalahäst</span><span><i class="lg-park"></i>Park</span><span><i class="lg-main"></i>Huvudgata</span><span><i class="lg-race"></i>Gatlopp</span><span><i class="lg-goal"></i>Mål och GPS</span><span><i class="lg-wp"></i>Mitt mål</span><span><i class="lg-story"></i>Storyn</span><span><i class="lg-ice"></i>Glasskiosk</span><span><i class="lg-balloon"></i>Ballonger</span><span><i class="lg-heli"></i>Polishelikopter</span><span><i class="lg-boat"></i>Båt</span><span><i class="lg-army"></i>Militär</span><span><i class="lg-friend"></i>Vän</span>
     </div>
   </div>
 </div>
@@ -374,40 +389,41 @@
 
 <div id="version" aria-label="Spelets version"></div>
 <script src="lib/three.min.js"></script>
-<script src="src/core.js?v=59"></script>
-<script src="src/city/map.js?v=59"></script>
-<script src="src/city/build.js?v=59"></script>
-<script src="src/city/blocks.js?v=59"></script>
-<script src="src/city/draken.js?v=59"></script>
-<script src="src/people.js?v=59"></script>
-<script src="src/vehicles/models.js?v=59"></script>
-<script src="src/vehicles/cars.js?v=59"></script>
-<script src="src/vehicles/physics.js?v=59"></script>
-<script src="src/traffic.js?v=59"></script>
-<script src="src/police.js?v=59"></script>
-<script src="src/police-stops.js?v=59"></script>
-<script src="src/activities.js?v=59"></script>
-<script src="src/helicopter.js?v=59"></script>
-<script src="src/parachute.js?v=59"></script>
-<script src="src/metro.js?v=59"></script>
-<script src="src/rides.js?v=59"></script>
-<script src="src/water-balloons.js?v=59"></script>
-<script src="src/workshop.js?v=59"></script>
-<script src="src/garage.js?v=59"></script>
-<script src="src/weather.js?v=59"></script>
-<script src="src/daynight.js?v=59"></script>
-<script src="src/progress.js?v=59"></script>
-<script src="src/daily.js?v=59"></script>
-<script src="src/cash.js?v=59"></script>
-<script src="src/waypoint.js?v=59"></script>
-<script src="src/gameplay.js?v=59"></script>
-<script src="src/hud.js?v=59"></script>
-<script src="src/sound.js?v=59"></script>
-<script src="src/input.js?v=59"></script>
-<script src="src/post.js?v=59"></script>
-<script src="src/multiplayer.js?v=59"></script>
-<script src="src/party.js?v=59"></script>
-<script src="src/account.js?v=59"></script>
-<script src="src/main.js?v=59"></script>
+<script src="src/core.js?v=60"></script>
+<script src="src/city/map.js?v=60"></script>
+<script src="src/city/build.js?v=60"></script>
+<script src="src/city/blocks.js?v=60"></script>
+<script src="src/city/draken.js?v=60"></script>
+<script src="src/people.js?v=60"></script>
+<script src="src/vehicles/models.js?v=60"></script>
+<script src="src/vehicles/cars.js?v=60"></script>
+<script src="src/vehicles/physics.js?v=60"></script>
+<script src="src/traffic.js?v=60"></script>
+<script src="src/police.js?v=60"></script>
+<script src="src/police-stops.js?v=60"></script>
+<script src="src/activities.js?v=60"></script>
+<script src="src/helicopter.js?v=60"></script>
+<script src="src/parachute.js?v=60"></script>
+<script src="src/metro.js?v=60"></script>
+<script src="src/rides.js?v=60"></script>
+<script src="src/water-balloons.js?v=60"></script>
+<script src="src/workshop.js?v=60"></script>
+<script src="src/garage.js?v=60"></script>
+<script src="src/weather.js?v=60"></script>
+<script src="src/daynight.js?v=60"></script>
+<script src="src/progress.js?v=60"></script>
+<script src="src/daily.js?v=60"></script>
+<script src="src/cash.js?v=60"></script>
+<script src="src/waypoint.js?v=60"></script>
+<script src="src/story.js?v=60"></script>
+<script src="src/gameplay.js?v=60"></script>
+<script src="src/hud.js?v=60"></script>
+<script src="src/sound.js?v=60"></script>
+<script src="src/input.js?v=60"></script>
+<script src="src/post.js?v=60"></script>
+<script src="src/multiplayer.js?v=60"></script>
+<script src="src/party.js?v=60"></script>
+<script src="src/account.js?v=60"></script>
+<script src="src/main.js?v=60"></script>
 </body>
 </html>

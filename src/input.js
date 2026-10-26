@@ -56,7 +56,7 @@
     if (repeat) return;
     // under arrest most keys do nothing: you can still look at the map, the help and the sound, and E moves things on
     if (policeStop && policeStop.locked && !['KeyE', 'Enter', 'KeyH', 'KeyT', 'KeyK', 'KeyQ'].includes(code) && !(policeStop.phase === 'jail' && code === 'Space')) return;
-    if (code === 'KeyE' || code === 'Enter') { if (!useKey() && !MP.use() && !FLY.use() && !CHUTE.use() && !METRO.use() && !GARAGE.use() && !RIDES.use() && !LIFT.use() && !SPLASH.use() && !VENDORS.use()) toggleCar(); }
+    if (code === 'KeyE' || code === 'Enter') { if (!useKey() && !MP.use() && !STORY.use() && !FLY.use() && !CHUTE.use() && !METRO.use() && !GARAGE.use() && !RIDES.use() && !LIFT.use() && !SPLASH.use() && !VENDORS.use()) toggleCar(); }
     else if (/^(Digit|Numpad)[0-5]$/.test(code)) LIFT.digit(Number(code.slice(-1)));
     else if (code === 'Space') { if (!CHUTE.pull()) jumpQueued = true; }
     else if (code === 'KeyH') el.help.hidden = !el.help.hidden;
@@ -70,7 +70,7 @@
     else if (code === 'KeyL') toggleSiren();
     else if (code === 'KeyK') openBigmap();
     else if (code === 'KeyQ') POST.cycle();
-    else if (code === 'KeyJ') { if (!WORKSHOP.key() && !GARAGE.key() && !PARTY.noJobs()) JOBS.key(); }
+    else if (code === 'KeyJ') { if (!STORY.key() && !WORKSHOP.key() && !GARAGE.key() && !PARTY.noJobs()) JOBS.key(); }
     else if (code === 'KeyV') VENDORS.letGo();
     else if (code === 'KeyO') DAYNIGHT.key();
     else if (code === 'KeyU') WEATHER.key();
@@ -82,6 +82,7 @@
   }
   window.addEventListener('keydown', (e) => {
     if (ACCOUNT.keydown(e)) return;
+    if (STORY.keydown(e)) return;
     if (MP.keydown(e)) return;
     if (METRO.keydown(e)) return;
     if (WORKSHOP.keydown(e)) return;
@@ -152,7 +153,7 @@
   stick.addEventListener('pointercancel', endStick);
   el.btnJump.addEventListener('pointerdown', (e) => { e.preventDefault(); if (CHUTE.pull()) return; touchBrake = true; jumpQueued = true; });
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.btnJump.addEventListener(ev, () => { touchBrake = false; });
-  el.btnUse.addEventListener('pointerdown', (e) => { e.preventDefault(); if (!useKey() && !MP.use() && !FLY.use() && !CHUTE.use() && !METRO.use() && !GARAGE.use() && !RIDES.use() && !LIFT.use() && !SPLASH.use() && !VENDORS.use()) toggleCar(); });
+  el.btnUse.addEventListener('pointerdown', (e) => { e.preventDefault(); if (!useKey() && !MP.use() && !STORY.use() && !FLY.use() && !CHUTE.use() && !METRO.use() && !GARAGE.use() && !RIDES.use() && !LIFT.use() && !SPLASH.use() && !VENDORS.use()) toggleCar(); });
   $('btnCars').addEventListener('pointerdown', (e) => { e.preventDefault(); openPicker(); });
   $('btnThrow').addEventListener('pointerdown', (e) => { e.preventDefault(); SPLASH.toss(); });
   $('btnJob').addEventListener('pointerdown', (e) => { e.preventDefault(); if (!tankFire() && !WORKSHOP.key() && !GARAGE.key() && !PARTY.noJobs()) JOBS.key(); });

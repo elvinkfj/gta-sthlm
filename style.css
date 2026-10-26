@@ -153,18 +153,18 @@ body.touch #liftPanel { bottom: auto; top: calc(190px + env(safe-area-inset-top,
 @keyframes beacon { 50% { background: var(--sign-red); box-shadow: 0 0 12px 4px rgba(200, 16, 46, 0.8); } }
 .tag.fine { padding: 5px 11px; }
 #wanted.calm { animation: none; box-shadow: 0 0 0 2px #2f6bff; }
-body.job #wanted, body.party #wanted { top: calc(112px + env(safe-area-inset-top, 0px)); }
+body.job #wanted, body.party #wanted, body.story #wanted { top: calc(112px + env(safe-area-inset-top, 0px)); }
 /* the job you are on: what to do, how far, the clock (and in the same place a game with friends) */
-#job, #party {
+#job, #party, #story {
   position: absolute; left: 50%; top: calc(58px + env(safe-area-inset-top, 0px)); transform: translateX(-50%);
   display: flex; align-items: center; gap: 11px; padding: 7px 15px 7px 9px; border-radius: 9px; background: var(--glass);
   box-shadow: 0 0 0 2px var(--sign-yellow); white-space: nowrap;
 }
-#job b, #party b { display: block; font-weight: 900; font-size: 0.95rem; }
-#job small, #party small { display: block; font-size: 0.76rem; opacity: 0.9; font-variant-numeric: tabular-nums; }
+#job b, #party b, #story b { display: block; font-weight: 900; font-size: 0.95rem; }
+#job small, #party small, #story small { display: block; font-size: 0.76rem; opacity: 0.9; font-variant-numeric: tabular-nums; }
 .job-icon { width: 30px; height: 30px; border-radius: 7px; display: grid; place-items: center; background: var(--sign-yellow); color: var(--asphalt); font: 900 0.95rem/1 var(--font-sign); }
-#jobClock, #partyClock { font: 700 1.25rem/1 var(--font-gauge); font-variant-numeric: tabular-nums; margin-left: 4px; }
-#jobClock:empty, #partyClock:empty { display: none; }
+#jobClock, #partyClock, #storyClock { font: 700 1.25rem/1 var(--font-gauge); font-variant-numeric: tabular-nums; margin-left: 4px; }
+#jobClock:empty, #partyClock:empty, #storyClock:empty { display: none; }
 #bigText, #partyBig {
   position: fixed; left: 50%; top: 34%; transform: translate(-50%, -50%); pointer-events: none; text-align: center;
   font: 900 clamp(2.4rem, 9vw, 5.4rem)/1 var(--font-sign); color: var(--sign-yellow); letter-spacing: 0.02em;
@@ -290,6 +290,7 @@ h1 { margin: 0; font: 900 clamp(2.2rem, 9vw, 3.1rem)/0.95 var(--font-sign); lett
 .lg-race { border-radius: 2px !important; background: #ffe14a; box-shadow: 0 0 0 2px #1b1c1e; }
 .lg-goal { background: #ffc21a; box-shadow: 0 0 0 2px var(--snow); }
 .lg-wp { background: #b14bd8; box-shadow: 0 0 0 2px var(--snow); }
+.lg-story { background: #ef3e5c; box-shadow: 0 0 0 2px var(--snow); }
 .lg-heli { background: radial-gradient(circle, #163d8c 0 38%, rgba(255,255,255,.75) 40%); box-shadow: 0 0 0 1px #11161b; }
 .lg-army { border-radius: 2px !important; background: #3d4a30; box-shadow: 0 0 0 2px var(--snow); }
 .lg-friend { background: #c8102e; box-shadow: 0 0 0 2px var(--snow); }
@@ -371,10 +372,10 @@ body.touch .tk-sign .key { display: none; }
 }
 /* on a narrow screen the job panel goes under the street sign on the right, and the police panel under that */
 @media (max-width: 760px) {
-  #job, #party { top: calc(210px + env(safe-area-inset-top, 0px)); left: auto; right: calc(16px + env(safe-area-inset-right, 0px)); transform: none; max-width: calc(100vw - 32px); }
-  #job small, #party small { white-space: normal; }
+  #job, #party, #story { top: calc(210px + env(safe-area-inset-top, 0px)); left: auto; right: calc(16px + env(safe-area-inset-right, 0px)); transform: none; max-width: calc(100vw - 32px); }
+  #job small, #party small, #story small { white-space: normal; }
   body.job #wanted, body.job.touch #wanted, body.party #wanted, body.party.touch #wanted { top: calc(276px + env(safe-area-inset-top, 0px)); }
-  body.touch.driving #job, body.touch.driving #party { top: calc(226px + env(safe-area-inset-top, 0px)); }
+  body.touch.driving #job, body.touch.driving #party, body.touch.driving #story { top: calc(226px + env(safe-area-inset-top, 0px)); }
   body.job.touch.driving #wanted, body.party.touch.driving #wanted { top: calc(292px + env(safe-area-inset-top, 0px)); }
 }
 /* ---------- playing with friends: the room sign, the chat and the friends button ---------- */
@@ -503,7 +504,7 @@ body.metro #touch, body.metro #hud { visibility: hidden; }
 /* (the price and the buy button stay in view at the bottom while the rest scrolls) */
 .shop-foot { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0 14px; border-top: 2px solid rgba(255, 255, 255, 0.3); background: #c8102e; font-weight: 900; }
 .shop-foot .short { color: #ffe08a; }
-body.garage #touch, body.garage .tags, body.garage #map, body.garage #btnFriends, body.garage #btnLevel, body.garage #dash, body.garage #limit, body.garage #prompt, body.garage #loc, body.garage #stars, body.garage #rainScreen, body.garage #wetScreen, body.garage #job, body.garage #award, body.garage #xpPop, body.garage #dailyNote, body.garage #cashPop,
+body.garage #touch, body.garage .tags, body.garage #map, body.garage #btnFriends, body.garage #btnLevel, body.garage #dash, body.garage #limit, body.garage #prompt, body.garage #loc, body.garage #stars, body.garage #rainScreen, body.garage #wetScreen, body.garage #job, body.garage #story, body.garage #award, body.garage #xpPop, body.garage #dailyNote, body.garage #cashPop,
 body.shop #touch, body.shop .tags, body.shop #map, body.shop #btnFriends, body.shop #btnLevel, body.shop #dash, body.shop #limit, body.shop #prompt, body.shop #loc, body.shop #stars { visibility: hidden; }
 @media (max-width: 760px) {
   #shop, #garage { left: 0; top: auto; height: 60vh; align-items: flex-end; padding: 8px; }
@@ -536,6 +537,18 @@ body.shop #touch, body.shop .tags, body.shop #map, body.shop #btnFriends, body.s
 .mp-games-hint { font-weight: 700; }
 .mp-games-hint:empty { display: none; }
 #party { box-shadow: 0 0 0 2px #2f6bff; }
+/* ---------- the story: its box at the top and Kicki's sign ---------- */
+#story { box-shadow: 0 0 0 2px #ef3e5c; }
+#story .job-icon { background: #ef3e5c; color: var(--snow); }
+#storySign { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; box-sizing: border-box; overflow-y: auto; background: rgba(6, 16, 26, 0.55); }
+.story-sign .sign-inner { gap: 12px; }
+.st-kicker { font-weight: 700; font-size: 0.74rem; letter-spacing: 0.14em; text-transform: uppercase; color: #ffb3c0; }
+#stTitle { margin: 0; font: 900 1.9rem/1.05 var(--font-sign); }
+.st-lines { display: grid; gap: 9px; }
+.st-lines p { margin: 0; font-size: 1rem; line-height: 1.45; }
+.st-lines b { color: var(--sign-yellow); }
+.st-pay { margin: 0; font-weight: 900; color: #7be08f; }
+.jobs-story h3 { color: #ffb3c0; }
 #party.thief { box-shadow: 0 0 0 2px var(--sign-red); }
 #party .job-icon { background: #2f6bff; color: var(--snow); }
 #party.thief .job-icon { background: var(--sign-red); }

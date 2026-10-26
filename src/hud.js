@@ -32,7 +32,7 @@
   function updateHUD(dt) {
     // at a kiosk, a balloon seller or a bucket of water balloons E buys, otherwise it is for the car you stand by
     // riding along with a friend, or by a friend's car you can get in
-    const mpP = started ? MP.prompt() : null, flyP = started ? FLY.prompt() || CHUTE.prompt() || METRO.prompt() || GARAGE.prompt() || RIDES.prompt() : null;
+    const mpP = started ? MP.prompt() : null, flyP = started ? STORY.prompt() || FLY.prompt() || CHUTE.prompt() || METRO.prompt() || GARAGE.prompt() || RIDES.prompt() : null;
     const liftP = started && !driving && !FLY.on ? LIFT.prompt() : null, shop = !liftP && started && !driving && !FLY.on ? SPLASH.prompt() || VENDORS.prompt() : null;
     const prompt = mpP || flyP || liftP || shop || (started && !driving && nearCar ? (nearCar.bot ? 'Ta ' + nearCar.M.def : 'Kliv in i ' + nearCar.M.def) : null);
     if (prompt !== lastPrompt) {
@@ -193,6 +193,7 @@
     FLY.drawMini(g, px, pz, 1 / s);
     MP.drawMini(g, px, pz, 1 / s);
     WAYPOINT.drawMini(g, px, pz, 1 / s);
+    STORY.drawMini(g, px, pz, 1 / s);
     const rot = driving ? driving.h : player.rot, u = 1 / s;
     g.translate(px, pz); g.rotate(-rot);
     g.beginPath(); g.moveTo(0, 9 * u); g.lineTo(6.5 * u, -6 * u); g.lineTo(0, -2.5 * u); g.lineTo(-6.5 * u, -6 * u); g.closePath();
@@ -364,6 +365,7 @@
     CHUTE.drawBig(g, toX, toY, text);
     MP.drawBig(g, toX, toY, text);
     WAYPOINT.drawBig(g, toX, toY, k);
+    STORY.drawBig(g, toX, toY);
     const p = driving || player, rot = driving ? driving.h : player.rot, X = toX(p.x), Y = toY(p.z);
     g.save(); g.translate(X, Y); g.rotate(-rot);
     g.beginPath(); g.moveTo(0, 13); g.lineTo(9, -8); g.lineTo(0, -3); g.lineTo(-9, -8); g.closePath();

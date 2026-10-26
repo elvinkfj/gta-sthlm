@@ -772,6 +772,10 @@
     const BD = { board: $('jobs'), close: $('jobsClose'), list: $('jobsList'), races: $('jobsRaces') };
     let boardOpen = false;
     function renderBoard() {
+      // the story first: where you are in it, and the way to Kicki
+      const st = STORY.board();
+      $('jobsStoryText').textContent = st.next ? 'Uppdrag ' + (st.done + 1) + ' av ' + st.n + ': ' + st.next + '. Kommissarie Kicki Lind väntar utanför polisstationen på Stora Nygatan i Gamla stan. Gå fram till henne och tryck E.' : 'Du har klarat hela storyn och stoppat kuppen. Bra jobbat!';
+      $('jobsStoryGo').hidden = !st.next;
       BD.list.textContent = '';
       for (const j of BOARD) {
         const li = document.createElement('li'), ic = document.createElement('span'), txt = document.createElement('span'), b = document.createElement('b'), p = document.createElement('small'), pay = document.createElement('small'), go = document.createElement('button');
@@ -817,6 +821,7 @@
     }
     BD.close.addEventListener('click', () => closeBoard());
     $('jobsScrap').addEventListener('click', () => { closeBoard(); WAYPOINT.set(SCRAP.x, SCRAP.z, 'bilskroten'); });
+    $('jobsStoryGo').addEventListener('click', () => { const at = STORY.board().at; closeBoard(); WAYPOINT.set(at.x, at.z, 'Kicki'); });
     BD.board.addEventListener('click', (e) => { if (e.target === BD.board) closeBoard(); });
 
     // say what J does the first time you sit in a car that has a job
