@@ -152,7 +152,7 @@
         tail: { y: [-0.1, -0.04], x: 0, d: 0.32, rev: [0.26, 0.33] }, cladding: 0.47, plate: [0.47, 0.68]
       } },
     // Koenigsegg Jesko, the hypercar from Ängelholm: the fastest car in town by far
-    { id: 'jesko', name: 'Koenigsegg Jesko', kind: 'Hyperbil', def: 'Koenigseggen', sport: true, group: 'super', rearEngine: true, W: 2.03, L: 4.61, R: 0.36, wb: 2.7, max: 105, zero: [100, 2.5], brake: 40, rev: 10, mass: 1.4, grip: 1.32,
+    { id: 'jesko', name: 'Koenigsegg Jesko', kind: 'Hyperbil', def: 'Koenigseggen', sport: true, group: 'super', buy: true, rearEngine: true, W: 2.03, L: 4.61, R: 0.36, wb: 2.7, max: 105, zero: [100, 2.5], brake: 40, rev: 10, mass: 1.4, grip: 1.32,
       colors: [0xf2f2f0, 0xff6a13, 0x1d4fd8, 0x111316, 0x8a1b1b], gears: 9, idle: 1000, red: 8500, eng: 'v8', rim: 'black',
       shape: {
         sill: [[-2.305, 0.38], [-2.1, 0.24], [-1.75, 0.19], [1.75, 0.19], [2.05, 0.2], [2.305, 0.24]],
@@ -385,7 +385,7 @@
     // Twenty more sports cars, each to the real one's size, wheelbase, weight, power and lines. The supercars first:
     // Ferrari LaFerrari (2013), the hybrid V12 hypercar from Maranello: 963 hp, its nose sharp and low, its tail a wide
     // black diffuser under two round lamps a side
-    { id: 'laferrari', name: 'Ferrari LaFerrari', kind: 'Hyperbil', def: 'LaFerrarin', sport: true, group: 'super', rearEngine: true, W: 1.99, L: 4.702, R: 0.345, wb: 2.65, max: 97, zero: [100, 2.4], brake: 40, rev: 10, mass: 1.4, grip: 1.3,
+    { id: 'laferrari', name: 'Ferrari LaFerrari', kind: 'Hyperbil', def: 'LaFerrarin', sport: true, group: 'super', buy: true, rearEngine: true, W: 1.99, L: 4.702, R: 0.345, wb: 2.65, max: 97, zero: [100, 2.4], brake: 40, rev: 10, mass: 1.4, grip: 1.3,
       colors: [0xc8100c, 0xf6d000, 0x111214, 0xf2f2ee], gears: 7, idle: 1000, red: 9250, eng: 'v12', rim: 'black',
       shape: {
         sill: [[-2.351, 0.36], [-2.15, 0.22], [-1.8, 0.17], [1.8, 0.17], [2.1, 0.19], [2.351, 0.24]],
@@ -434,7 +434,7 @@
       } },
     // Bugatti Chiron: the W16 with four turbos, 1 500 hp, 420 km/h, the fastest thing in town; the horseshoe grille
     // in the middle of the nose and a light bar across the whole tail
-    { id: 'chiron', name: 'Bugatti Chiron', kind: 'Hyperbil', def: 'Chironen', sport: true, group: 'super', rearEngine: true, W: 2.04, L: 4.544, R: 0.37, wb: 2.711, max: 117, zero: [100, 2.4], brake: 42, rev: 10, mass: 2.0, grip: 1.3,
+    { id: 'chiron', name: 'Bugatti Chiron', kind: 'Hyperbil', def: 'Chironen', sport: true, group: 'super', buy: true, rearEngine: true, W: 2.04, L: 4.544, R: 0.37, wb: 2.711, max: 117, zero: [100, 2.4], brake: 42, rev: 10, mass: 2.0, grip: 1.3,
       colors: [0x1d3c7c, 0x111214, 0xf2f2ee, 0x8a1b1b, 0xb5b8bb], gears: 7, idle: 900, red: 6800, eng: 'w16', rim: 'sport',
       shape: {
         sill: [[-2.272, 0.4], [-2.06, 0.25], [-1.75, 0.2], [1.75, 0.2], [2.04, 0.22], [2.272, 0.28]],
@@ -470,7 +470,7 @@
       } },
     // Pagani Huayra, my first own pick: the hand-built hypercar with an AMG twin-turbo V12, gullwing doors, round curves, and four pipes in a
     // cluster in the middle of the tail
-    { id: 'huayra', name: 'Pagani Huayra', kind: 'Hyperbil', def: 'Huayran', sport: true, group: 'super', rearEngine: true, W: 2.04, L: 4.605, R: 0.36, wb: 2.795, max: 106, zero: [100, 3.0], brake: 40, rev: 10, mass: 1.35, grip: 1.3,
+    { id: 'huayra', name: 'Pagani Huayra', kind: 'Hyperbil', def: 'Huayran', sport: true, group: 'super', buy: true, rearEngine: true, W: 2.04, L: 4.605, R: 0.36, wb: 2.795, max: 106, zero: [100, 3.0], brake: 40, rev: 10, mass: 1.35, grip: 1.3,
       colors: [0x2b2e33, 0x1d4fd8, 0xb5b8bb, 0xf2f2ee, 0x8a1b1b], gears: 7, idle: 900, red: 6500, eng: 'v12t', rim: 'sport',
       shape: {
         sill: [[-2.3, 0.38], [-2.1, 0.24], [-1.8, 0.19], [1.8, 0.19], [2.08, 0.21], [2.3, 0.26]],
@@ -687,7 +687,8 @@
       axles: [3.0, -1.35, -2.75], steers: 1, colors: [0x5b6b45], gears: 8, idle: 600, red: 2400, eng: 'bus', rim: 'mil', shape: {} }
   );
   // The newest and best, which only the dealer's in the garage sells (buy, and their own price): not on the car picker,
-  // and never out in the traffic or the car park. Bugatti Tourbillon (2026): a V16 that revs to 9 000 with three
+  // and never out in the traffic or the car park (the Chiron, the Huayra, the Jesko and the LaFerrari above are bought
+  // too, for the garage's own prices). Bugatti Tourbillon (2026): a V16 that revs to 9 000 with three
   // electric motors, 1 800 hp, 445 km/h, the fastest thing in town, with the horseshoe and a light bar across the tail.
   // Rimac Nevera: the Croatian electric hypercar, four motors and 1 914 hp, 0–100 in under two seconds, 412 km/h.
   // Ferrari F80 (2025): a twin-turbo V6 hybrid of 1 200 hp, the headlamps in a black band across the nose, the wing

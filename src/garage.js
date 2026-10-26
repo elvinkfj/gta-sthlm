@@ -15,7 +15,7 @@
     const price = (M) => M.price || Math.round(((M.moped ? 1200 : M.sport ? 2000 + Math.max(0, M.max - 60) * 120 : 900 + M.max * 18) * (M.group === 'classic' ? 1.3 : 1)) / 100) * 100;
     const resale = (M) => Math.round(price(M) / 2 / 100) * 100;
     const FOR_SALE = MODELS.filter((M) => !M.boat && !M.police && !M.mil && !M.bus);
-    const GROUPS = [['new', 'Nyheter, bara här'], ['super', 'Superbilar'], ['sport', 'Sportbilar'], ['classic', 'Klassiker'], ['normal', 'Vanliga bilar'], ['moped', 'Moped']];
+    const GROUPS = [['new', 'Exklusiva, bara här'], ['super', 'Superbilar'], ['sport', 'Sportbilar'], ['classic', 'Klassiker'], ['normal', 'Vanliga bilar'], ['moped', 'Moped']];
     const groupOf = (M) => (M.buy ? 'new' : M.moped ? 'moped' : M.group === 'super' ? 'super' : M.group === 'classic' ? 'classic' : M.sport ? 'sport' : 'normal');
 
     /* ---------- the cars you own ---------- */
