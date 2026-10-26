@@ -192,12 +192,14 @@
     if (heli) drawHeliIcon(g, heli.x, heli.z, heli.h, 1 / s, true);
     FLY.drawMini(g, px, pz, 1 / s);
     MP.drawMini(g, px, pz, 1 / s);
+    WAYPOINT.drawMini(g, px, pz, 1 / s);
     const rot = driving ? driving.h : player.rot, u = 1 / s;
     g.translate(px, pz); g.rotate(-rot);
     g.beginPath(); g.moveTo(0, 9 * u); g.lineTo(6.5 * u, -6 * u); g.lineTo(0, -2.5 * u); g.lineTo(-6.5 * u, -6 * u); g.closePath();
     g.fillStyle = driving ? hex(driving.color) : '#ffffff'; g.strokeStyle = '#0a5ba8'; g.lineWidth = 2 * u; g.lineJoin = 'round';
     g.fill(); g.stroke();
     g.restore();
+    WAYPOINT.drawLabel(g, S);
   }
 
   // the helicopter on the maps: the light on the ground, then a blue body under a turning rotor (u: metres per pixel)
@@ -361,6 +363,7 @@
     FLY.drawBig(g, toX, toY, text);
     CHUTE.drawBig(g, toX, toY, text);
     MP.drawBig(g, toX, toY, text);
+    WAYPOINT.drawBig(g, toX, toY, k);
     const p = driving || player, rot = driving ? driving.h : player.rot, X = toX(p.x), Y = toY(p.z);
     g.save(); g.translate(X, Y); g.rotate(-rot);
     g.beginPath(); g.moveTo(0, 13); g.lineTo(9, -8); g.lineTo(0, -3); g.lineTo(-9, -8); g.closePath();
@@ -380,7 +383,7 @@
       drawBigmap();
     };
     bm.cv.addEventListener('wheel', (e) => { e.preventDefault(); zoomBy(-e.deltaY * 0.0018, e.clientX, e.clientY); }, { passive: false });
-    bm.cv.addEventListener('pointerdown', (e) => { bigmap.drag = { id: e.pointerId, x: e.clientX, y: e.clientY }; bm.cv.setPointerCapture(e.pointerId); });
+    bm.cv.addEventListener('pointerdown', (e) => { bigmap.drag = { id: e.pointerId, x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY }; try { bm.cv.setPointerCapture(e.pointerId); } catch (err) { /* (the mouse still locked a moment) */ } });
     bm.cv.addEventListener('pointermove', (e) => {
       const d = bigmap.drag;
       if (!d || d.id !== e.pointerId) return;
@@ -390,9 +393,21 @@
       drawBigmap();
     });
     const endDrag = (e) => { if (bigmap.drag && bigmap.drag.id === e.pointerId) bigmap.drag = null; };
-    bm.cv.addEventListener('pointerup', endDrag);
+    // a click that didn't drag puts your own goal there (or, on it, takes it away); a moment later, as a double click
+    // finds you instead
+    let tapT = 0;
+    bm.cv.addEventListener('pointerup', (e) => {
+      const d = bigmap.drag;
+      if (d && d.id === e.pointerId && Math.hypot(e.clientX - d.x0, e.clientY - d.y0) < 6) {
+        const r = bm.cv.getBoundingClientRect(), k = bigmapFit() * Math.pow(2, bigmap.zoom), mx = e.clientX - r.left - r.width / 2, my = e.clientY - r.top - r.height / 2;
+        const x = bigmap.cx + mx / k, z = bigmap.cz + my / k, G = WAYPOINT.goal, near = G ? Math.hypot((G.x - bigmap.cx) * k - mx, (G.z - bigmap.cz) * k - (my + 9)) : Infinity;
+        clearTimeout(tapT);
+        tapT = setTimeout(() => { WAYPOINT.tap(x, z, near); drawBigmap(); }, 280);
+      }
+      endDrag(e);
+    });
     bm.cv.addEventListener('pointercancel', endDrag);
-    bm.cv.addEventListener('dblclick', () => { const p = driving || player; bigmap.cx = p.x; bigmap.cz = p.z; drawBigmap(); });
+    bm.cv.addEventListener('dblclick', () => { clearTimeout(tapT); const p = driving || player; bigmap.cx = p.x; bigmap.cz = p.z; drawBigmap(); });
     $('bigmapIn').addEventListener('click', () => zoomBy(0.6));
     $('bigmapOut').addEventListener('click', () => zoomBy(-0.6));
     $('bigmapClose').addEventListener('click', closeBigmap);

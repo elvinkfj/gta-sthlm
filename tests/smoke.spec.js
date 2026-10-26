@@ -929,6 +929,65 @@ test('jobbtavlan: J utan jobb visar alla jobb, och Kör! ger fordonet och starta
   expect(errors).toEqual([]);
 });
 
+test('vägbeskrivning: ett eget mål visar vägen, försvinner när man är framme och sätts med ett klick på stora kartan', async () => {
+  const r = await page.evaluate(() => {
+    const t = gubbeTest, W = t.waypoint, s = {};
+    t.hold(true);
+    if (JOBS.job) t.press('KeyJ');
+    if (t.state().driving) t.press('KeyE');
+    if (t.wanted) t.endChase(false);
+    W.clear();
+    const at = (name) => { const e = edges.find((x) => x.name === name && x.len > 100), f = edgeFrame(e.a, e.b); return { x: f.A.x + f.ux * e.len / 2 + f.rx * (e.hw + 2), z: f.A.z + f.uz * e.len / 2 + f.rz * (e.hw + 2) }; };
+    const a = at('Ringvägen'), b = at('Götgatan');
+    t.teleport(a.x, a.z); t.run(0.2, 1 / 60, false);
+    s.set = W.set(b.x, b.z, 'Götgatan');
+    s.goal = !!W.goal; s.route = W.route.length; s.left = W.left; s.pillar = W.debug.pillar.visible;
+    // not on the water: the goal stays where it was
+    let wx = 0, wz = 0;
+    for (let x = -500; x < 500 && walkable(wx, wz); x += 7) for (let z = -500; z < 500; z += 7) if (!walkable(x, z)) { wx = x; wz = z; break; }
+    s.water = W.set(wx, wz); s.still = W.goal && W.goal.name;
+    t.run(2, 1 / 30, false); s.later = !!W.route;
+    // there: it goes by itself
+    t.teleport(b.x, b.z); t.run(0.3, 1 / 60, false);
+    s.there = { goal: W.goal, pillar: W.debug.pillar.visible };
+    // the job board puts it at a race's start
+    t.teleport(a.x, a.z); t.run(0.2, 1 / 60, false);
+    t.press('KeyJ'); document.querySelector('#jobsRaces button').click();
+    s.race = { open: JOBS.boardOpen, name: W.goal && W.goal.name };
+    W.clear();
+    // the big map, its middle at Götgatan
+    t.press('KeyK'); bigmap.cx = b.x; bigmap.cz = b.z; drawBigmap();
+    const r = document.getElementById('bigmapCanvas').getBoundingClientRect();
+    s.mid = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    s.k = bigmapFit() * Math.pow(2, bigmap.zoom); s.b = b;
+    s.bad = t.state().bad;
+    return s;
+  });
+  expect(r.set).toBe(true);
+  expect(r.goal).toBe(true);
+  expect(r.route).toBeGreaterThan(1);
+  expect(r.left).toBeGreaterThan(100);
+  expect(r.pillar).toBe(true);
+  expect(r.water).toBe(false);
+  expect(r.still).toBe('Götgatan');
+  expect(r.later).toBe(true);
+  expect(r.there).toEqual({ goal: null, pillar: false });
+  expect(r.race.open).toBe(false);
+  expect(typeof r.race.name).toBe('string');
+  expect(r.bad).toEqual([]);
+  // a click puts the goal there, a click on it takes it away
+  await page.mouse.click(r.mid.x, r.mid.y);
+  await page.waitForFunction(() => gubbeTest.waypoint.goal);
+  const g = await page.evaluate(() => gubbeTest.waypoint.goal);
+  expect(Math.hypot(g.x - r.b.x, g.z - r.b.z)).toBeLessThan(2 / r.k + 0.5);
+  await page.waitForTimeout(600);
+  await page.mouse.click(r.mid.x, r.mid.y - 10);
+  await page.waitForFunction(() => !gubbeTest.waypoint.goal);
+  const end = await page.evaluate(() => { const t = gubbeTest, g = t.waypoint.goal; t.press('KeyK'); t.hold(false); return { g, open: bigmap.open }; });
+  expect(end).toEqual({ g: null, open: false });
+  expect(errors).toEqual([]);
+});
+
 // (last: it loads the page again, with every Dalahäst found)
 test('alla dalahästar hittade sedan förut: spelet laddar och trofén delas ut', async () => {
   await page.evaluate(() => { localStorage.setItem('gubbe-dalahastar', JSON.stringify(HORSES.map((h) => h[0]))); localStorage.removeItem('gubbe-niva'); });
