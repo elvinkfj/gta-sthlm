@@ -297,11 +297,19 @@
     });
     SECRET.forEach((M, i) => $(M.mil ? 'gridArmy' : 'gridPolice').appendChild(pickerButton(M, i)));
   }
+  // the exclusive cars you have bought at the garage's dealer's are yours to take with B too, at the top (the others
+  // that are only sold there never show)
+  function pickerMine() {
+    const mine = GARAGE.owned.map((id) => MODEL[id]).filter((M) => M && M.buy), grid = $('gridMine'), ids = mine.map((M) => M.id).join();
+    $('pickMine').hidden = !mine.length;
+    if (grid.dataset.ids !== ids) { grid.dataset.ids = ids; grid.replaceChildren(...mine.map((M) => pickerButton(M, 99))); }
+  }
   function openPicker() {
     if (!started) return;
     // no new car while you are under arrest or in the cell
     if (policeStop && policeStop.locked) { toast('Det går inte nu, du är gripen.'); return; }
     pickerOpen = true;
+    pickerMine();
     setPickerSecret(false);
     $('picker').hidden = false;
     if (document.pointerLockElement && document.exitPointerLock) document.exitPointerLock();
@@ -387,10 +395,12 @@
     if (spawnedCar) removeCar(spawnedCar);
     if (!spot) spot = findSpawnSpot(M);
     if (!spot) { toast(M.boat ? 'Det finns inget vatten här i närheten. Gå ner till en kaj och försök igen.' : 'Det finns ingen plats för ' + M.def + ' här. Gå ut på en gata och försök igen.'); return; }
-    // found every Dalahäst: your cars come in gold; what you bought for this model at the workshop comes with it
-    const kept = WORKSHOP.kept(M);
-    const c = makeCar(M, kept && kept.paint !== null ? kept.paint : goldCars && !M.police && !M.mil && !M.boat && M.id !== 'taxi' ? 0xc9a227 : M.colors[Math.floor(Math.random() * M.colors.length)]);
+    // found every Dalahäst: your cars come in gold; what you bought for this model at the workshop comes with it. An
+    // exclusive car of yours comes in the colour you bought it in, and it is yours (the garage takes it back in)
+    const kept = WORKSHOP.kept(M), mine = M.buy ? GARAGE.mine(M.id) : null;
+    const c = makeCar(M, kept && kept.paint !== null ? kept.paint : mine ? mine.color : goldCars && !M.police && !M.mil && !M.boat && M.id !== 'taxi' ? 0xc9a227 : M.colors[Math.floor(Math.random() * M.colors.length)]);
     WORKSHOP.fit(c, kept);
+    if (mine) c.owned = true;
     c.x = spot.x; c.z = spot.z; c.h = spot.h;
     spawnedCar = c;
     enterCar(c);

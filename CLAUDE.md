@@ -11,7 +11,7 @@ The game used to be one big file and was split into the files below following **
 - New code goes in the file it belongs to (a new car in `src/vehicles/models.js`, a new sound in `src/sound.js`, and so on). Update the map below when a file gets a new job.
 - A file that grows over about 1,500 lines is split, at a section header, into two files that load one after the other. Add the new `<script>` tag in `index.html` right after the old one, and update the map.
 - Leftover clean-up ideas are under "Saker att fixa senare" at the end of `PLAN.md`.
-- Every PR that changes the game raises `VERSION.nr` at the top of `src/core.js` by one and sets `VERSION.date` to the day (in Swedish, like `21 oktober 2026`). The version stands in the bottom right corner, and friends in a room are told when theirs differ.
+- Every PR that changes the game raises `VERSION.nr` at the top of `src/core.js` by one and sets `VERSION.date` to the day (in Swedish, like `21 oktober 2026`). The version stands in the bottom right corner, and friends in a room are told when theirs differ. The same number stands as `?v=` on every `src/` script and on `style.css` in `index.html`, so a browser never mixes new files with old ones from its cache (GitHub Pages lets it keep them for ten minutes); raise them together (from 59 to 60: `sed -i 's/?v=59"/?v=60"/' index.html`), and a smoke test checks that they match. A new `<script>` tag gets the `?v=` too.
 - The big update Elvin wants next is planned in **`UPPDATERING.md`** (in Swedish). Work through it in order, one item per PR, and tick each item off when it is done.
 
 ## Language
@@ -131,7 +131,7 @@ Add one object to the `MODELS` array in `src/vehicles/models.js`, copying a simi
 - Size and performance: `W`, `L`, `R` (wheel radius), `wb` (wheelbase), `max` (top speed m/s), `zero`, `brake`, `mass`, `grip`
 - `colors`, `gears`, `idle`, `red`, `eng` (must be a key in `ENGINE_SOUNDS`), `rim`
 - `shape`: the body lines; the comment above `MODELS` explains every field
-- Flags: `sport`, `ev`, `bus`, `moped`, `boat`, `police`, `mil`, `buy`. Everything except police and military vehicles is on the car picker's normal pages (`PICKABLE`). Police and military vehicles are on the picker's secret page (B twice, or a double tap on its heading), built from `SECRET`. A car with `buy` (and its own `price`) is only sold at the garage's dealer's: it is not on the picker and never in the traffic or the car park (`PICKABLE` and `SPORTS` leave it out).
+- Flags: `sport`, `ev`, `bus`, `moped`, `boat`, `police`, `mil`, `buy`. Everything except police and military vehicles is on the car picker's normal pages (`PICKABLE`). Police and military vehicles are on the picker's secret page (B twice, or a double tap on its heading), built from `SECRET`. A car with `buy` (and its own `price`) is only sold at the garage's dealer's: it is never in the traffic or the car park (`PICKABLE` and `SPORTS` leave it out), and it is on the picker only once bought, at the top under "Dina exklusiva bilar" (`pickerMine` in `src/gameplay.js`, from `GARAGE.owned`).
 
 Then mention the car in `README.md` if it lists similar cars.
 
