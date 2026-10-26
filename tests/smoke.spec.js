@@ -824,6 +824,43 @@ test('mer pengar: pengapåsar, belöning från polisen, nära ögat och drift', 
   expect(errors).toEqual([]);
 });
 
+test('polisuppdrag i fred: polisen stoppar dig inte medan du jagar en rånare', async () => {
+  const r = await page.evaluate(() => {
+    const t = gubbeTest, s = {};
+    t.hold(true);
+    if (t.state().driving) t.press('KeyE');
+    if (t.wanted) t.endChase(false);
+    t.choose('polis'); t.run(0.3, 1 / 60, false);
+    // wanted when the job starts: the chase ends
+    t.startChase('fart', 40); s.before = !!t.wanted;
+    t.press('KeyJ'); t.run(0.2, 1 / 60, false);
+    s.job = JOBS.job && JOBS.job.kind; s.after = !!t.wanted;
+    // speeding, ramming, a water balloon: nothing
+    t.startChase('fart', 60); t.startChase('krock', 0); t.startChase('ballong'); s.none = !t.wanted;
+    // far too fast past a patrol
+    const c = t.driving, p = cars.find((x) => x.police && !x.dead && x !== c);
+    if (p) { p.x = c.x + Math.sin(c.h) * 15; p.z = c.z + Math.cos(c.h) * 15; }
+    c.vx = Math.sin(c.h) * 40; c.vz = Math.cos(c.h) * 40;
+    t.run(0.5, 1 / 60, false); s.speeding = !!t.wanted;
+    // off duty again (J ends the job): the police care again
+    t.press('KeyJ'); t.run(0.2, 1 / 60, false);
+    s.offJob = JOBS.job; t.startChase('krock', 0); s.offDuty = !!t.wanted;
+    t.endChase(false);
+    s.bad = t.state().bad;
+    t.hold(false);
+    return s;
+  });
+  expect(r.before).toBe(true);
+  expect(r.job).toBe('polis');
+  expect(r.after).toBe(false);
+  expect(r.none).toBe(true);
+  expect(r.speeding).toBe(false);
+  expect(r.offJob).toBeNull();
+  expect(r.offDuty).toBe(true);
+  expect(r.bad).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
 // (last: it loads the page again, with every Dalahäst found)
 test('alla dalahästar hittade sedan förut: spelet laddar och trofén delas ut', async () => {
   await page.evaluate(() => { localStorage.setItem('gubbe-dalahastar', JSON.stringify(HORSES.map((h) => h[0]))); localStorage.removeItem('gubbe-niva'); });

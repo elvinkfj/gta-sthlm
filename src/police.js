@@ -169,9 +169,11 @@
     if (!seen) for (const c of cars) if (c.police && !c.dead && sees(c, x, z, 70)) { seen = true; break; }
     if (seen) startChase(kind, over);
   }
+  // on a police job (J in a police car) you are one of them: they don't stop you for anything
+  const onDuty = () => !!JOBS.job && JOBS.job.kind === 'polis';
   function startChase(kind, over) {
-    // in a game with friends the police leave you alone
-    if (PARTY.busy()) return;
+    // in a game with friends the police leave you alone, and on a police job too
+    if (PARTY.busy() || onDuty()) return;
     if (!wanted) {
       wanted = { kinds: new Set(), counts: {}, bonus: 0, stars: 1, starT: 0, over: 0, lostT: 0, searchT: 0, stopT: 0, t: 0, fleeT: 0, seen: playerTarget(), inSight: true };
       toast(kind === 'fart' ? 'Polisen såg dig köra för fort. Stanna bilen!' : kind === 'ballong' ? 'Plask! Du träffade polisen med en vattenballong. Nu är de efter dig!' : 'Polisen är efter dig!');
@@ -370,7 +372,7 @@
     // speeding where a patrol can see it
     if (driving && !driving.M.boat && !wanted && policeCool <= 0 && !driving.siren) {
       const kmh = Math.hypot(driving.vx, driving.vz) * 3.6, over = kmh - limitAt(driving.x, driving.z);
-      if (over > TOLERANCE) for (const c of cars) if (c.police && !c.dead && clocks(c, T.x, T.z)) { startChase('fart', over); wanted.limit = limitAt(driving.x, driving.z); break; }
+      if (over > TOLERANCE) for (const c of cars) if (c.police && !c.dead && clocks(c, T.x, T.z)) { startChase('fart', over); if (wanted) wanted.limit = limitAt(driving.x, driving.z); break; }
     }
     if (!wanted) return;
     wanted.t += dt;
