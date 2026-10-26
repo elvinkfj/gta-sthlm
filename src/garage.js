@@ -15,7 +15,7 @@
     const price = (M) => M.price || Math.round(((M.moped ? 1200 : M.sport ? 2000 + Math.max(0, M.max - 60) * 120 : 900 + M.max * 18) * (M.group === 'classic' ? 1.3 : 1)) / 100) * 100;
     const resale = (M) => Math.round(price(M) / 2 / 100) * 100;
     const FOR_SALE = MODELS.filter((M) => !M.boat && !M.police && !M.mil && !M.bus);
-    const GROUPS = [['new', 'Nyheter, bara här'], ['super', 'Superbilar'], ['sport', 'Sportbilar'], ['classic', 'Klassiker'], ['normal', 'Vanliga bilar'], ['moped', 'Moped']];
+    const GROUPS = [['new', 'Exklusiva, bara här'], ['super', 'Superbilar'], ['sport', 'Sportbilar'], ['classic', 'Klassiker'], ['normal', 'Vanliga bilar'], ['moped', 'Moped']];
     const groupOf = (M) => (M.buy ? 'new' : M.moped ? 'moped' : M.group === 'super' ? 'super' : M.group === 'classic' ? 'classic' : M.sport ? 'sport' : 'normal');
 
     /* ---------- the cars you own ---------- */
@@ -51,11 +51,16 @@
     {
       const m = new Merger(), bx = (x0, y0, z0, x1, y1, z1, col) => m.box(x1 - x0, y1 - y0, z1 - z0, col, (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
       const GREY = 0x6f757b, RIB = 0x5a6066, FRAME = 0x2b2f33, YELLOW = 0xf2c200;
-      // the shutter, ribbed, in a dark frame, with a bump stop each side and the box painted on the pavement
-      bx(-1.7, 0, -0.08, 1.7, 2.7, -0.02, GREY);
-      for (let y = 0.15; y < 2.7; y += 0.18) bx(-1.7, y, -0.1, 1.7, y + 0.04, -0.08, RIB);
-      bx(-1.95, 0, -0.16, -1.7, 3.0, 0, FRAME); bx(1.7, 0, -0.16, 1.95, 3.0, 0, FRAME); bx(-1.95, 2.7, -0.16, 1.95, 3.0, 0, FRAME);
-      for (const x of [-2.25, 2.25]) bx(x - 0.12, 0, -0.5, x + 0.12, 0.9, -0.26, YELLOW);
+      // a concrete portal built out from the facade (out past the house's shop windows and their sign, which stand 0.17 m
+      // proud of it and would hide the door), the ribbed shutter set into it under its box, a bump stop each side and the
+      // box painted on the pavement
+      const CONCRETE = 0x9a9ea2, P0 = -0.36;
+      bx(-2.2, 0, P0, -1.7, 3.7, 0, CONCRETE); bx(1.7, 0, P0, 2.2, 3.7, 0, CONCRETE); bx(-2.2, 2.75, P0, 2.2, 3.7, 0, CONCRETE);
+      bx(-2.24, 3.7, P0 - 0.04, 2.24, 3.82, 0, FRAME);
+      bx(-1.7, 0, -0.3, 1.7, 2.75, -0.24, GREY);
+      for (let y = 0.15; y < 2.6; y += 0.18) bx(-1.7, y, -0.32, 1.7, y + 0.04, -0.3, RIB);
+      bx(-1.74, 2.6, -0.35, 1.74, 2.75, -0.24, FRAME);
+      for (const x of [-2.45, 2.45]) bx(x - 0.12, 0, -0.7, x + 0.12, 0.9, -0.42, YELLOW);
       bx(-2, 0.02, -6.4, -1.85, 0.035, -0.4, YELLOW); bx(1.85, 0.02, -6.4, 2, 0.035, -0.4, YELLOW); bx(-2, 0.02, -6.4, 2, 0.035, -6.25, YELLOW);
       for (let z = -5.8; z < -0.8; z += 1.2) bx(-0.5, 0.02, z, 0.5, 0.035, z + 0.12, 0xd9b000);
       const g = new THREE.Group();
@@ -68,8 +73,9 @@
         c.fillStyle = '#ffffff'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = '900 70px Overpass, "Arial Black", Arial, sans-serif';
         c.fillText('P', 64, 68); c.font = '900 64px Overpass, "Arial Black", Arial, sans-serif'; c.fillText('GARAGE', 300, 68);
       });
-      const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 0.85), std({ map: tex, roughness: 0.6, emissive: 0x0a1424, emissiveMap: tex }));
-      sign.position.set(0, 3.55, -0.12); sign.rotation.y = Math.PI;
+      // (lit from inside, so it reads at night too)
+      const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.3, 0.8), std({ map: tex, roughness: 0.6, emissive: 0x5a6a88, emissiveMap: tex }));
+      sign.position.set(0, 3.22, P0 - 0.02); sign.rotation.y = Math.PI;
       g.add(sign);
       g.position.set(door.x, 0, door.z); g.rotation.y = door.face;
       scene.add(g);

@@ -711,7 +711,8 @@
       spawnParked(M, color, ...at(b.s, d), Math.atan2(wx * out, wz * out), true);
     };
     const bays = LOT.bays.slice().sort((a, b) => Math.abs(a.s - SPAWN.s + 8) - Math.abs(b.s - SPAWN.s + 8));
-    const first = ['f40', 'chiron', 'x5', 'laferrari', 'mg5', 'stalker', 'countach', 'jesko', 'cobra', 'superbil', 'gt3rs', 'sport', 'muskel', 'halvkombi', 'sedan', 'polestar', 'kombi', 'v240', 'saab', 'taxi', 'suv', 'skapbil'];
+    // (the cars only the garage's dealer sells are not here: see buy in src/vehicles/models.js)
+    const first = ['f40', 'chiron', 'x5', 'laferrari', 'mg5', 'stalker', 'countach', 'jesko', 'cobra', 'superbil', 'gt3rs', 'sport', 'muskel', 'halvkombi', 'sedan', 'polestar', 'kombi', 'v240', 'saab', 'taxi', 'suv', 'skapbil'].filter((id) => !MODEL[id].buy);
     const show = first.concat(PICKABLE.filter((M) => !M.bus && !M.boat && !first.includes(M.id)).map((M) => M.id));
     show.forEach((id, i) => inBay(MODEL[id], MODEL[id].colors[0], bays[i], true));
     for (const b of bays.slice(show.length)) {

@@ -17,7 +17,8 @@
     lastPrompt = undefined;
     sizeMap();
   }
-  function startGame() {
+  // (mood false: ten in the morning in the sun, as the tests want it)
+  function startGame(mood) {
     if (started) return;
     started = true;
     el.start.hidden = true;
@@ -26,6 +27,13 @@
     initAudio();
     setTouchMode(isTouch);
     requestLock();
+    // a time and weather of its own each time, not always the morning sun (in a friend's room, theirs come with it)
+    if (mood !== false && !(MP.inRoom && !MP.host)) {
+      WEATHER.surprise(); DAYNIGHT.surprise();
+      const h = DAYNIGHT.hour, clock = String(Math.floor(h)).padStart(2, '0') + ':' + String(Math.floor((h % 1) * 60)).padStart(2, '0');
+      const when = h >= 22 || h < 5 ? ' på natten' : h < 9 ? ' på morgonen' : h >= 18 ? ' på kvällen' : '';
+      toast('Klockan är ' + clock + when + (WEATHER.kind === 1 ? '. Det regnar och åskar!' : WEATHER.kind === 2 ? '. Det snöar!' : '.'));
+    }
   }
   $('play').addEventListener('click', startGame);
   $('pickerClose').addEventListener('click', () => { closePicker(); requestLock(); });
