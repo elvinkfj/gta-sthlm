@@ -46,7 +46,7 @@ Elvin önskade de här den 26 oktober 2026, så de kommer före storyn.
 - [x] **Olika tid och väder när spelet startar.** Inte alltid dag och sol. Det kan vara natt med åska, snö på kvällen eller något annat. (Klar: när du trycker Spela slumpar `WEATHER.surprise` och `DAYNIGHT.surprise` vädret och tiden, och en skylt säger vad klockan är. I en väns rum gäller den som har rummets tid och väder.)
 - [x] **Alla jobb på en tavla.** En tangent som visar alla jobb man kan göra, vad de ger och vilken bil som behövs. (Klar: J när det inte finns något jobb att starta, eller knappen Jobb på mobilen, öppnar tavlan. Kör! hämtar fordonet och startar jobbet.)
 - [x] **Vägbeskrivning.** Sätt ett eget mål på kartan, så visar GPS:en vägen dit, på kartan i hörnet och med en ljuspelare i stan.
-- [ ] **Konto med inloggning.** Logga in med namn och lösenord, så sparas nivån, garaget, de trimmade bilarna och resten på en server (förslag: Firebase, gratis), och du får tillbaka allt var du än spelar.
+- [x] **Konto med inloggning.** Logga in med namn och lösenord, så sparas nivån, garaget, de trimmade bilarna och resten på en server (förslag: Firebase, gratis), och du får tillbaka allt var du än spelar.
 
 ## Del 7: Storyn
 

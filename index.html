@@ -24,6 +24,7 @@
     <div class="tag"><span class="key">K</span>Karta</div>
     <div class="tag"><span class="key">T</span><span id="soundLabel">Ljud på</span></div>
     <div class="tag" id="mpTag"><span class="key">P</span><span id="mpTagText">Spela med vänner</span></div>
+    <div class="tag acct-tag" id="acctTag" title="Ditt konto: logga in så sparas allt du har"><svg class="who" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="6.5" r="3.6" fill="#fff"/><path d="M3 17.5c.6-3.9 3.4-6 7-6s6.4 2.1 7 6z" fill="#fff"/></svg><span id="acctText">Logga in</span></div>
     <div class="tag fine" id="fineTag" hidden>Böter <b id="fines">0 kr</b></div>
     <div class="tag cash" id="cashTag" hidden title="Dina pengar: fickpengarna och det du tjänat på jobb">Kassa <b id="cash">0 kr</b></div>
     <div class="tag lv-tag" id="lvTag" title="Nivå, utmaningar och troféer (I)"><b id="lvNum">1</b><span class="lv-text">Nivå<span class="lv-bar"><i id="lvBar"></i></span></span></div>
@@ -115,6 +116,7 @@
     <span class="key">T</span><span>Ljud av och på</span>
     <span class="key">Q</span><span>Grafikkvalitet: hög, mellan eller enkel</span>
     <span class="key">P</span><span>Spela med vänner: skapa ett rum eller gå med i en väns rum, gå till en vän, starta en lek</span>
+    <span class="key">Konto</span><span>Klicka på gubben uppe till vänster för att logga in, så sparas allt du har på ett konto</span>
     <span class="key">Y</span><span>Chatta med dina vänner i rummet</span>
     <span class="key">Esc</span><span>Släpp musen</span>
   </div>
@@ -167,6 +169,7 @@
       <div class="start-actions">
         <button id="play" class="btn-sign" type="button">Spela</button>
         <button id="playFriends" class="btn-sign alt" type="button">Spela med vänner</button>
+        <button id="playAccount" class="btn-sign small alt" type="button">Logga in</button>
       </div>
     </div>
   </div>
@@ -300,6 +303,32 @@
   </div>
 </div>
 
+<div id="account" hidden role="dialog" aria-modal="true" aria-labelledby="acTitle">
+  <div class="sign mp-sign">
+    <div class="sign-inner">
+      <div class="mp-head">
+        <h2 id="acTitle">Ditt konto</h2>
+        <button id="acClose" class="btn-sign picker-close" type="button">Stäng</button>
+      </div>
+      <p class="lede" id="acOff" hidden>Konton är inte igång än. Servern (Firebase) behöver ställas in först, och hur man gör står i README.</p>
+      <form id="acForm" class="ac-form" hidden>
+        <p class="lede">Logga in, så sparas din nivå, ditt garage, dina trimmade bilar, kassan och resten. Då får du tillbaka allt var du än spelar.</p>
+        <label class="mp-field">Namn<input id="acName" class="mp-input" maxlength="14" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="Ditt namn" enterkeyhint="next"></label>
+        <label class="mp-field">Lösenord<input id="acPass" class="mp-input" type="password" maxlength="64" autocomplete="current-password" placeholder="Minst 6 tecken" enterkeyhint="go"></label>
+        <div class="mp-actions"><button id="acLogin" class="btn-sign" type="submit">Logga in</button><button id="acNew" class="btn-sign alt" type="button">Skapa konto</button></div>
+        <p class="tr-note">Har du inget konto än? Skriv ett namn och ett lösenord och tryck Skapa konto, så följer det du har nu med. Skriv upp lösenordet, för det går inte att få ett nytt om du glömmer det.</p>
+      </form>
+      <div id="acIn" class="ac-form" hidden>
+        <p class="lede">Inloggad som <b id="acWho"></b>.</p>
+        <p class="tr-note" id="acSaved"></p>
+        <div class="mp-actions"><button id="acSave" class="btn-sign alt" type="button">Spara nu</button><button id="acOut" class="btn-sign small alt" type="button">Logga ut</button></div>
+        <p class="tr-note">Loggar du ut sparas allt först, och sedan börjar spelet om från början på den här datorn tills någon loggar in.</p>
+      </div>
+      <p class="ac-msg" id="acMsg" role="status" aria-live="polite"></p>
+    </div>
+  </div>
+</div>
+
 <div id="bigmap" hidden role="dialog" aria-modal="true" aria-labelledby="bigmapTitle">
   <div class="bigmap-panel">
     <div class="bigmap-head">
@@ -376,6 +405,7 @@
 <script src="src/post.js"></script>
 <script src="src/multiplayer.js"></script>
 <script src="src/party.js"></script>
+<script src="src/account.js"></script>
 <script src="src/main.js"></script>
 </body>
 </html>

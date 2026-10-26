@@ -988,6 +988,18 @@ test('vägbeskrivning: ett eget mål visar vägen, försvinner när man är fram
   expect(errors).toEqual([]);
 });
 
+test('konto: kontorutan visar inloggningen och pausar spelet', async () => {
+  const r = await page.evaluate(() => {
+    ACCOUNT.open();
+    const s = { ready: ACCOUNT.ready, open: ACCOUNT.isOpen, paused: paused(), off: !document.getElementById('acOff').hidden, form: !document.getElementById('acForm').hidden };
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape' }));
+    s.closed = !ACCOUNT.isOpen;
+    return s;
+  });
+  expect(r).toEqual({ ready: true, open: true, paused: true, off: false, form: true, closed: true });
+  expect(errors).toEqual([]);
+});
+
 // (last: it loads the page again, with every Dalahäst found)
 test('alla dalahästar hittade sedan förut: spelet laddar och trofén delas ut', async () => {
   await page.evaluate(() => { localStorage.setItem('gubbe-dalahastar', JSON.stringify(HORSES.map((h) => h[0]))); localStorage.removeItem('gubbe-niva'); });

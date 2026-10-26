@@ -60,6 +60,7 @@ The game is these files, loaded in this order:
 - `src/post.js` (about 320 lines): graphics quality levels and post-processing.
 - `src/multiplayer.js` (about 1,070 lines): playing with friends.
 - `src/party.js` (about 540 lines): games with friends: Polis och tjuv, Kurragömma and Gatlopp mot varandra.
+- `src/account.js` (about 230 lines): logging in, and keeping what you have on the account (Firebase).
 - `src/main.js` (about 160 lines): the main loop, adaptive resolution and the test hooks. Loaded last.
 
 Each part of the JavaScript starts with a section header comment. Grep for the header (or a name from the table) and read only that range:
@@ -110,6 +111,7 @@ Line numbers drift with every change, so search instead of trusting numbers. Eac
 | `src/post.js` | `post-processing` | Graphics quality levels and effects | `POST` |
 | `src/multiplayer.js` | `playing with friends` | Multiplayer over WebRTC (PeerJS), with MQTT as fallback. Libraries load only when used. | `MP` |
 | `src/party.js` | `games with friends` | Games for everyone in a room (Polis och tjuv, Kurragömma, Gatlopp mot varandra). Kurragömma is Polis och tjuv with a dark screen while the seeker counts, and the hiders' signs and map dots hidden from the seeker (`MP.badge(…, hide)`). The one who has the room keeps the score and sends it to the others as `game` events. A race against friends is an ordinary street race in each game (`JOBS.partyRace`) that reports its progress and time. | `PARTY` |
+| `src/account.js` | `your account` | Logging in with a name and a password, and the save on a server: a Firebase project through its REST API with `fetch` (no library). Its config is `FIREBASE` at the top, Elvin's project `gubbe-pa-vagen` (left empty, the sign says accounts aren't on yet; `window.GUBBE_FIREBASE` overrides it for `tests/account.spec.js`, which answers with a pretend Firebase through `page.route`); how to set one up is in `README.md`. A name becomes an e-mail address in the project's `authDomain`. The save is the game's own localStorage keys (`SAVE`: add a new one there) as strings, at `saves/<uid>` in the Realtime Database, with a number `rev`; the session (with the refresh token) is in `gubbe-konto`. A higher `rev` on the server than this browser had is written into localStorage and the page reloads (also again at `pagehide`, after `PROGRESS` and `DAILY` have saved what they had in memory); otherwise a changed save is sent every 20 s and as the page closes, but only once the first look at the server went well. Logging out saves, wipes the keys and reloads. `PROGRESS.flush()` and `DAILY.flush()` write what they have before a save is taken. The sign pauses the game like the others. | `ACCOUNT` |
 | `src/main.js` | `loop` | The main loop, adaptive resolution and the test hooks | `tick`, `frame`, `window.gubbeTest` |
 
 ## How the parts depend on each other

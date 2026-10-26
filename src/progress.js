@@ -232,6 +232,8 @@
 
     return {
       update, did, gain, hud, show,
+      // what is in memory into localStorage now (ACCOUNT, before it sends the save)
+      flush() { if (dirty) save(); },
       get level() { return L.lv; }, get xp() { return S.xp; }, get open() { return open; },
       // a job of this kind paid kr (JOBS)
       job(kr, kind) { did('jobs'); did('job:' + kind); S.st.jobKr = val('jobKr') + kr; DAILY.add('jobKr', kr); check(); return gain(Math.max(10, Math.round(kr / 6))); },

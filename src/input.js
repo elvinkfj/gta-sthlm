@@ -81,6 +81,7 @@
     else if (code === 'KeyP') MP.openPanel();
   }
   window.addEventListener('keydown', (e) => {
+    if (ACCOUNT.keydown(e)) return;
     if (MP.keydown(e)) return;
     if (METRO.keydown(e)) return;
     if (WORKSHOP.keydown(e)) return;
