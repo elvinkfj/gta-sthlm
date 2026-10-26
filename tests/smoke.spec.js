@@ -616,6 +616,65 @@ test('nivåer och troféer: XP ger nivåer och troféer, I visar tavlan, och ver
   expect(errors).toEqual([]);
 });
 
+test('dagliga utmaningar: tre om dagen, de räknas, ger pengar och XP, och nästa dag kommer nya', async () => {
+  const r = await page.evaluate(() => {
+    const t = gubbeTest, D = t.daily.debug, s = {};
+    t.hold(true);
+    if (t.state().driving) t.press('KeyE');
+    // the same date always gives the same three, an easy, a harder and a hard one
+    s.same = D.choose('2026-10-25').join() === D.choose('2026-10-25').join();
+    s.tiers = D.choose('2026-11-02').map((id) => D.POOL.find((c) => c.id === id).tier);
+    s.today = t.daily.ids.length;
+    // two taxi fares, a free fall, the speed: counted where they happen
+    D.set(['taxi', 'fall', 'kmh']);
+    const cash = t.jobs.earned, xp = t.progress.xp;
+    t.progress.job(200, 'taxi'); s.one = D.D.v[0];
+    t.progress.job(200, 'taxi'); s.taxi = t.daily.done[0];
+    DAILY.add('fall', 30); s.short = t.daily.done[1];
+    DAILY.add('fall', 55); s.fall = t.daily.done[1];
+    t.choose('suv'); t.run(0.2, 1 / 30, false);
+    const c = t.driving;
+    c.vx = 0; c.vz = 70; DAILY.update(0); c.vz = 0;
+    s.fast = t.daily.done[2];
+    s.bonus = D.D.bonus;
+    s.paid = t.jobs.earned - cash;
+    s.xp = t.progress.xp - xp;
+    // on the level board, and in the corner
+    t.press('KeyI');
+    s.rows = document.querySelectorAll('#trDaily li').length; s.got = document.querySelectorAll('#trDaily li.got').length;
+    t.press('KeyI');
+    t.run(0.1, 1 / 30, false);
+    s.tag = document.getElementById('dailyCount').textContent;
+    // a new day: three new ones, from nothing, and they are kept in the browser
+    D.newDay(); t.run(0.1, 1 / 30, false);
+    s.fresh = { done: t.daily.done.filter(Boolean).length, day: D.D.day === D.dayOf(new Date()) };
+    t.run(4, 1 / 30, false);
+    s.kept = JSON.parse(localStorage.getItem('gubbe-dagens')).ids.join() === t.daily.ids.join();
+    s.bad = t.state().bad;
+    t.hold(false);
+    return s;
+  });
+  expect(r.same).toBe(true);
+  expect(r.tiers).toEqual([1, 2, 3]);
+  expect(r.today).toBe(3);
+  expect(r.one).toBe(1);
+  expect(r.taxi).toBe(true);
+  expect(r.short).toBe(false);
+  expect(r.fall).toBe(true);
+  expect(r.fast).toBe(true);
+  expect(r.bonus).toBe(true);
+  expect(r.paid).toBe(150 + 300 + 500 + 300);
+  // (the two fares' XP and the challenges', and maybe a trophy or two)
+  expect(r.xp).toBeGreaterThanOrEqual(2 * 67 + 75 + 150 + 250 + 200);
+  expect(r.rows).toBe(3);
+  expect(r.got).toBe(3);
+  expect(r.tag).toBe('3/3');
+  expect(r.fresh).toEqual({ done: 0, day: true });
+  expect(r.kept).toBe(true);
+  expect(r.bad).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
 // (last: it loads the page again, with every Dalahäst found)
 test('alla dalahästar hittade sedan förut: spelet laddar och trofén delas ut', async () => {
   await page.evaluate(() => { localStorage.setItem('gubbe-dalahastar', JSON.stringify(HORSES.map((h) => h[0]))); localStorage.removeItem('gubbe-niva'); });

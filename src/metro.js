@@ -108,6 +108,7 @@
     function arrive() {
       const r = R;
       R = null;
+      PROGRESS.did('metro');
       E.ride.hidden = true;
       document.body.classList.remove('metro');
       // up the stairs, beside the sign
