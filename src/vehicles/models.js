@@ -686,11 +686,64 @@
     { id: 'miltruck', name: 'Lastterrängbil', kind: 'Scania 6×6', def: 'lastbilen', mil: 'truck', W: 2.55, L: 8.5, R: 0.6, wb: 5.6, max: 25, zero: [50, 11], brake: 14, rev: 6, mass: 15, grip: 1.0,
       axles: [3.0, -1.35, -2.75], steers: 1, colors: [0x5b6b45], gears: 8, idle: 600, red: 2400, eng: 'bus', rim: 'mil', shape: {} }
   );
+  // The newest and best, which only the dealer's in the garage sells (buy, and their own price): not on the car picker,
+  // and never out in the traffic or the car park. Bugatti Tourbillon (2026): a V16 that revs to 9 000 with three
+  // electric motors, 1 800 hp, 445 km/h, the fastest thing in town, with the horseshoe and a light bar across the tail.
+  // Rimac Nevera: the Croatian electric hypercar, four motors and 1 914 hp, 0–100 in under two seconds, 412 km/h.
+  // Ferrari F80 (2025): a twin-turbo V6 hybrid of 1 200 hp, the headlamps in a black band across the nose, the wing
+  // built into the tail. McLaren W1 (2025): a twin-turbo V8 hybrid of 1 275 hp, the big intakes in the flanks, the pipes
+  // high in the middle of the tail and an active wing; it grips like nothing else
+  MODELS.push(
+    { id: 'tourbillon', name: 'Bugatti Tourbillon', kind: 'Hyperbil', def: 'Tourbillonen', sport: true, group: 'super', buy: true, price: 30000, rearEngine: true, W: 2.05, L: 4.671, R: 0.37, wb: 2.79, max: 123.6, zero: [100, 2.0], brake: 44, rev: 10, mass: 2.0, grip: 1.34,
+      colors: [0x2a5fa8, 0x1d3c7c, 0x111214, 0xf2f2ee, 0x9b1b1b, 0xb5b8bb], gears: 8, idle: 1000, red: 9000, eng: 'v12', rim: 'sport',
+      shape: {
+        sill: [[-2.3355, 0.4], [-2.12, 0.25], [-1.8, 0.2], [1.8, 0.2], [2.1, 0.22], [2.3355, 0.27]],
+        belt: [[-2.3355, 0.9], [-2.14, 0.97], [-1.25, 0.98], [-0.42, 0.89], [0.5, 0.76], [1.35, 0.66], [1.95, 0.54], [2.3355, 0.4]],
+        roof: [[-0.82, 1.15], [-0.45, 1.19], [-0.1, 1.19]], cab: [-1.7, -0.82, -0.1, 1.02], rc: [0.3, 0.5], p: [2.6, 2.2],
+        shoulder: 0.15, tumble: 0.27, crown: [0.02, 0.0, 0.02], glass: [-0.75, 0.97], trim: 'chrome', rearCol: 'under',
+        doors: [0.97, -0.55], head: { y: [-0.1, -0.035], x: 0.55, d: 0.32 }, grille: { y: [0.6, -0.06], x: 0.22, d: 0.12 },
+        intake: { y: [0.24, 0.44], x: 1.0, d: 0.18 }, sideIntake: { z: [-1.0, -0.5], y: [0.48, 0.84] }, tail: { y: [-0.1, -0.05], x: 0, d: 0.18, rev: [0.2, 0.28] },
+        badge: { kind: 'bar', y: 0.5, w: 0.0001 }, diffuser: 0.6, wing: true, pipes: [[-0.1, 0.5], [0.1, 0.5]], plate: [0.3, 0.6]
+      } },
+    { id: 'nevera', name: 'Rimac Nevera', kind: 'Elhyperbil', def: 'Neveran', sport: true, ev: true, group: 'super', buy: true, price: 25000, rearEngine: true, W: 1.986, L: 4.75, R: 0.36, wb: 2.745, max: 114.4, zero: [100, 1.9], brake: 44, rev: 10, mass: 2.3, grip: 1.36,
+      colors: [0x3a4f5f, 0xf2f2ee, 0x111316, 0x1d6b4a, 0xb5b8bb, 0xc8102e], gears: 1, idle: 0, red: 17000, eng: 'ev', rim: 'black',
+      shape: {
+        sill: [[-2.375, 0.38], [-2.16, 0.24], [-1.85, 0.19], [1.85, 0.19], [2.14, 0.21], [2.375, 0.26]],
+        belt: [[-2.375, 0.88], [-2.16, 0.96], [-1.25, 0.97], [-0.42, 0.89], [0.42, 0.77], [1.25, 0.65], [1.9, 0.53], [2.375, 0.37]],
+        roof: [[-0.8, 1.16], [-0.42, 1.21], [-0.1, 1.21]], cab: [-1.8, -0.8, -0.1, 1.0], rc: [0.28, 0.55], p: [2.8, 2.0],
+        shoulder: 0.15, tumble: 0.28, crown: [0.02, -0.01, 0.02], glass: [-0.75, 0.95], trim: 'gloss', rearCol: 'gloss',
+        doors: [0.95, -0.5], head: { y: [-0.08, -0.02], x: 0.52, d: 0.36 }, intake: { y: [0.22, 0.4], x: 0.95, d: 0.2 },
+        sideIntake: { z: [-1.15, -0.6], y: [0.42, 0.76] }, tail: { y: [-0.1, -0.04], x: 0, d: 0.3, rev: [0.25, 0.32] }, diffuser: 0.55, wing: true, plate: [0.3, 0.5]
+      } },
+    { id: 'f80', name: 'Ferrari F80', kind: 'Hyperbil', def: 'F80:n', sport: true, group: 'super', buy: true, price: 20000, rearEngine: true, W: 2.06, L: 4.84, R: 0.35, wb: 2.665, max: 97.2, zero: [100, 2.15], brake: 46, rev: 10, mass: 1.55, grip: 1.4,
+      colors: [0xc8100c, 0xa8101a, 0x111214, 0xf6d000, 0xf2f2ee], gears: 8, idle: 1000, red: 9000, eng: 'f40', rim: 'black',
+      shape: {
+        sill: [[-2.42, 0.36], [-2.2, 0.22], [-1.85, 0.17], [1.85, 0.17], [2.16, 0.19], [2.42, 0.23]],
+        belt: [[-2.42, 0.84], [-2.2, 0.93], [-1.3, 0.94], [-0.38, 0.84], [0.45, 0.7], [1.3, 0.58], [2.0, 0.45], [2.42, 0.28]],
+        roof: [[-0.62, 1.09], [-0.3, 1.13], [-0.08, 1.13]], cab: [-1.9, -0.62, -0.08, 1.04], rc: [0.25, 0.55], p: [3, 2.1],
+        shoulder: 0.15, tumble: 0.3, crown: [0.02, -0.01, 0.015], glass: [-0.6, 1.0], trim: 'gloss', rearCol: 'under',
+        doors: [1.0, -0.5], head: { y: [-0.06, -0.02], x: 0.42, d: 0.5 }, intake: { y: [0.2, 0.38], x: 1.0, d: 0.22 },
+        sideIntake: { z: [-1.15, -0.55], y: [0.38, 0.72] }, tail: { y: [-0.08, -0.04], x: 0, d: 0.3, rev: [0.28, 0.34] },
+        diffuser: 0.6, wing: true, pipes: [[-0.08, 0.48], [0.08, 0.48]], plate: [0.3, 0.5]
+      } },
+    { id: 'w1', name: 'McLaren W1', kind: 'Hyperbil', def: 'W1:an', sport: true, group: 'super', buy: true, price: 20000, rearEngine: true, W: 2.07, L: 4.635, R: 0.36, wb: 2.68, max: 97.2, zero: [100, 2.7], brake: 46, rev: 10, mass: 1.4, grip: 1.42,
+      colors: [0xf28b1c, 0x111316, 0x8a8f94, 0xf2f2ee, 0x1f4fae], gears: 8, idle: 950, red: 9200, eng: 'v8flat', rim: 'sport',
+      shape: {
+        sill: [[-2.3175, 0.37], [-2.1, 0.22], [-1.78, 0.17], [1.78, 0.17], [2.06, 0.19], [2.3175, 0.24]],
+        belt: [[-2.3175, 0.88], [-2.1, 0.96], [-1.25, 0.97], [-0.38, 0.87], [0.5, 0.73], [1.3, 0.6], [1.92, 0.47], [2.3175, 0.31]],
+        roof: [[-0.75, 1.13], [-0.4, 1.18], [-0.1, 1.18]], cab: [-1.95, -0.75, -0.1, 1.04], rc: [0.28, 0.55], p: [2.8, 2.0],
+        shoulder: 0.17, tumble: 0.3, crown: [0.02, -0.01, 0.02], glass: [-1.1, 1.0], pillars: [[-0.6, 0.1]], trim: 'gloss', rearCol: 'gloss',
+        doors: [1.0, -0.4], head: { y: [-0.09, -0.02], x: 0.55, d: 0.3 }, intake: { y: [0.2, 0.38], x: 1.0, d: 0.22 },
+        sideIntake: { z: [-1.05, -0.45], y: [0.36, 0.76] }, tail: { y: [-0.08, -0.04], x: 0.2, d: 0.25, rev: [0.25, 0.32] }, diffuser: 0.6, wing: true,
+        pipes: [[-0.1, 0.62], [0.1, 0.62]], plate: [0.3, 0.5]
+      } }
+  );
   const MODEL = Object.fromEntries(MODELS.map((m) => [m.id, m]));
-  const PICKABLE = MODELS.filter((m) => !m.police && !m.mil);
+  // (the ones only the garage's dealer sells are not on the picker, and not in the traffic)
+  const PICKABLE = MODELS.filter((m) => !m.police && !m.mil && !m.buy);
   // on the picker's secret page: everything the police and then the army drive, each with the boats last
   const SECRET = MODELS.filter((m) => m.police || m.mil).sort((a, b) => (a.mil ? 2 : 0) + (a.boat ? 1 : 0) - (b.mil ? 2 : 0) - (b.boat ? 1 : 0));
-  const REGULARS = MODELS.filter((m) => !m.sport && !m.bus && !m.police && !m.moped && !m.boat && !m.mil), SPORTS = MODELS.filter((m) => m.sport);
+  const REGULARS = MODELS.filter((m) => !m.sport && !m.bus && !m.police && !m.moped && !m.boat && !m.mil), SPORTS = MODELS.filter((m) => m.sport && !m.buy);
   const MILITARY = MODELS.filter((m) => m.mil);
   const BOATS = MODELS.filter((m) => m.boat);
 

@@ -40,7 +40,7 @@ Lekarna läggs i en ny fil, `src/party.js`, som laddas direkt efter `src/multipl
 
 Elvin önskade de här den 26 oktober 2026, så de kommer före storyn.
 
-- [ ] **Fyra nya superbilar som måste köpas.** Bugatti Tourbillon, Rimac Nevera, Ferrari F80 och McLaren W1 blir de bästa bilarna i spelet. De går bara att köpa i bilhandeln i garaget. Man kan inte välja dem med B eller ta dem i trafiken.
+- [x] **Fyra nya superbilar som måste köpas.** Bugatti Tourbillon, Rimac Nevera, Ferrari F80 och McLaren W1 blir de bästa bilarna i spelet. De går bara att köpa i bilhandeln i garaget. Man kan inte välja dem med B eller ta dem i trafiken. (Klar: de ligger sist i `MODELS` i `src/vehicles/models.js` med `buy` och ett eget pris, under "Nyheter, bara här" i bilhandeln.)
 - [ ] **Polisuppdrag i fred.** När du kör ett polisuppdrag kan polisen inte stoppa dig.
 - [ ] **Olika tid och väder när spelet startar.** Inte alltid dag och sol. Det kan vara natt med åska, snö på kvällen eller något annat.
 - [ ] **Konto med inloggning.** Logga in med namn och lösenord, så sparas nivån, garaget, de trimmade bilarna och resten på en server (förslag: Firebase, gratis), och du får tillbaka allt var du än spelar.

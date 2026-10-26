@@ -125,7 +125,7 @@ Add one object to the `MODELS` array in `src/vehicles/models.js`, copying a simi
 - Size and performance: `W`, `L`, `R` (wheel radius), `wb` (wheelbase), `max` (top speed m/s), `zero`, `brake`, `mass`, `grip`
 - `colors`, `gears`, `idle`, `red`, `eng` (must be a key in `ENGINE_SOUNDS`), `rim`
 - `shape`: the body lines; the comment above `MODELS` explains every field
-- Flags: `sport`, `ev`, `bus`, `moped`, `boat`, `police`, `mil`. Everything except police and military vehicles is on the car picker's normal pages (`PICKABLE`). Police and military vehicles are on the picker's secret page (B twice, or a double tap on its heading), built from `SECRET`.
+- Flags: `sport`, `ev`, `bus`, `moped`, `boat`, `police`, `mil`, `buy`. Everything except police and military vehicles is on the car picker's normal pages (`PICKABLE`). Police and military vehicles are on the picker's secret page (B twice, or a double tap on its heading), built from `SECRET`. A car with `buy` (and its own `price`) is only sold at the garage's dealer's: it is not on the picker and never in the traffic or the car park (`PICKABLE` and `SPORTS` leave it out).
 
 Then mention the car in `README.md` if it lists similar cars.
 
