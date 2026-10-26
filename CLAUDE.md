@@ -51,7 +51,7 @@ The game is these files, loaded in this order:
 - `src/daynight.js` (about 230 lines): the time of day: the sun, the sky, the light, the moon and stars, lamps, lit windows and headlights at night.
 - `src/progress.js` (about 250 lines): levels and trophies: XP, the level in the corner, new trophies and levels on the screen, the board (I).
 - `src/daily.js` (about 200 lines): the daily challenges: three a day picked by the date, counting them, the pay and XP, their list on the board.
-- `src/cash.js` (about 190 lines): more ways to earn money: the daily money bags, drifts and near misses, the reward for getting away from the police.
+- `src/cash.js` (about 160 lines): more ways to earn money: the daily money bags, drifts and near misses, the reward for getting away from the police.
 - `src/gameplay.js` (about 610 lines): input state, the car picker, traffic upkeep, one simulation step, moving the meshes and the camera.
 - `src/hud.js` (about 390 lines): on-screen text, the minimap and the big map.
 - `src/sound.js` (about 360 lines): synthesised engine sounds and effects.
