@@ -43,7 +43,7 @@ Elvin önskade de här den 26 oktober 2026, så de kommer före storyn.
 - [x] **Fyra nya superbilar som måste köpas.** Bugatti Tourbillon, Rimac Nevera, Ferrari F80 och McLaren W1 blir de bästa bilarna i spelet. De går bara att köpa i bilhandeln i garaget. Man kan inte välja dem med B eller ta dem i trafiken. (Klar: de ligger sist i `MODELS` i `src/vehicles/models.js` med `buy` och ett eget pris, under "Nyheter, bara här" i bilhandeln.)
 - [x] **Fler sätt att tjäna pengar.** Elvin tyckte att de nya bilarna blev väldigt dyra. (Klar: `src/cash.js`. Jobben och gatloppen betalar dubbelt, 15 pengapåsar gömmer sig i stan varje dag, drift och "nära ögat" ger pengar, och du får 250 kr per stjärna när du kommer undan polisen.)
 - [x] **Polisuppdrag i fred.** När du kör ett polisuppdrag kan polisen inte stoppa dig. (Klar: `startChase` i `src/police.js` gör ingenting medan du har ett polisuppdrag, och en jakt du redan är i slutar när uppdraget börjar.)
-- [ ] **Olika tid och väder när spelet startar.** Inte alltid dag och sol. Det kan vara natt med åska, snö på kvällen eller något annat.
+- [x] **Olika tid och väder när spelet startar.** Inte alltid dag och sol. Det kan vara natt med åska, snö på kvällen eller något annat. (Klar: när du trycker Spela slumpar `WEATHER.surprise` och `DAYNIGHT.surprise` vädret och tiden, och en skylt säger vad klockan är. I en väns rum gäller den som har rummets tid och väder.)
 - [ ] **Konto med inloggning.** Logga in med namn och lösenord, så sparas nivån, garaget, de trimmade bilarna och resten på en server (förslag: Firebase, gratis), och du får tillbaka allt var du än spelar.
 
 ## Del 7: Storyn

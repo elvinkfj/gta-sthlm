@@ -861,6 +861,34 @@ test('polisuppdrag i fred: polisen stoppar dig inte medan du jagar en rånare', 
   expect(errors).toEqual([]);
 });
 
+test('olika tid och väder när spelet startar: ibland natt, regn och åska eller snö', async () => {
+  const r = await page.evaluate(() => {
+    const t = gubbeTest, real = Math.random, s = {};
+    t.hold(true);
+    const dice = (v) => { let i = 0; Math.random = () => v[Math.min(i++, v.length - 1)]; };
+    // a night with rain (snow in the winter months), falling hard at once, the streets already wet or white
+    dice([0.7, 0.5, 0.5]); WEATHER.surprise(); dice([0.9, 0.9]); DAYNIGHT.surprise();
+    s.storm = { kind: WEATHER.kind, amount: WEATHER.amount, ground: WEATHER.debug.wet + WEATHER.debug.cover, hour: DAYNIGHT.hour };
+    // a sunny day
+    dice([0.1, 0.5]); WEATHER.surprise(); dice([0.2, 0.2]); DAYNIGHT.surprise();
+    s.sunny = { kind: WEATHER.kind, amount: WEATHER.amount, hour: Math.round(DAYNIGHT.hour * 10) / 10 };
+    Math.random = real;
+    WEATHER.debug.now(0, 0); DAYNIGHT.set(10);
+    t.run(0.2, 1 / 30, false);
+    s.bad = t.state().bad;
+    t.hold(false);
+    return s;
+  });
+  expect(r.storm.kind).not.toBe(0);
+  expect(r.storm.amount).toBe(1);
+  expect(r.storm.ground).toBeGreaterThan(0.5);
+  expect(r.storm.hour).toBeGreaterThanOrEqual(0);
+  expect(r.storm.hour).toBeLessThan(5);
+  expect(r.sunny).toEqual({ kind: 0, amount: 0, hour: 10.6 });
+  expect(r.bad).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
 // (last: it loads the page again, with every Dalahäst found)
 test('alla dalahästar hittade sedan förut: spelet laddar och trofén delas ut', async () => {
   await page.evaluate(() => { localStorage.setItem('gubbe-dalahastar', JSON.stringify(HORSES.map((h) => h[0]))); localStorage.removeItem('gubbe-niva'); });

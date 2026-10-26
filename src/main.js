@@ -84,7 +84,7 @@
     run(seconds, dt = 1 / 60, draw = true) { const n = Math.round(seconds / dt); for (let i = 0; i < n; i++) tick(dt); if (draw) POST.render(); return this.state(); },
     key(code, down) { keys[code] = down; },
     press(code) { keys[code] = true; onKey(code, false); keys[code] = false; },
-    start() { startGame(); },
+    start(mood = false) { startGame(mood); },
     teleport(x, z, y = 0) { player.x = x; player.z = z; player.y = y; camTarget.set(x, y + 1.6, z); },
     draken: DRAKEN, indoorSpan, lift: LIFT,
     // park one car of each model in a row (facing +x) and photograph them with a fixed camera

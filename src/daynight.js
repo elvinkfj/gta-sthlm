@@ -209,6 +209,11 @@
       update, set,
       get hour() { return hour; }, get lights() { return L; }, get head() { return headK; }, get parked() { return parkedK; }, get tail() { return tailK; },
       // O: an hour on (with friends, only the one who has the room)
+      // when the game starts: not always ten in the morning, often the evening or the night
+      surprise() {
+        const r = Math.random();
+        set(r < 0.35 ? 9 + Math.random() * 8 : r < 0.5 ? 5.5 + Math.random() * 3 : r < 0.7 ? 19 + Math.random() * 2.5 : 22 + Math.random() * 6);
+      },
       key() {
         if (MP.inRoom && !MP.host) { toast('Det är den som har rummet som bestämmer tiden.'); return; }
         set(hour + 1);

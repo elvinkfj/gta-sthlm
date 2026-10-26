@@ -215,6 +215,15 @@
         start((kind + 1) % 3);
         sendT = 0;
       },
+      // when the game starts: half the time something else than sun (snow rather than rain in the winter months), already
+      // falling hard, the streets wet or white, and in the rain thunder in a few seconds
+      surprise() {
+        const r = Math.random(), k = r < 0.5 ? CLEAR : winter() ? (r < 0.85 ? SNOW : RAIN) : RAIN;
+        kind = k; if (k) falls = k;
+        amount = k ? 1 : 0; wet = k === RAIN ? 0.8 : 0; cover = k === SNOW ? 0.7 : 0;
+        nextT = k === CLEAR ? 360 + Math.random() * 480 : 180 + Math.random() * 180; thunderT = 4 + Math.random() * 6;
+        wetU.value = wet; snowU.value = cover;
+      },
       // the weather from the one who has the room (MP's 'weather' event, and when you join)
       heard(fromHost, w) { if (fromHost && (w === CLEAR || w === RAIN || w === SNOW)) start(w, false); },
       // for the tests
