@@ -97,7 +97,7 @@
     <span class="key">Militär</span><span>Vid fem stjärnor kommer militären: stridsvagnar, pansarbilar och lastbilar med soldater</span>
     <span class="key">Sjöpolis</span><span>Flyr du ut på vattnet kommer polisbåtar och vattenskotrar, och vid fem stjärnor marinens stridsbåtar. Stannar du bredvid en polisbåt blir du gripen</span>
     <span class="key">Dalahäst</span><span>20 st gömda i stan, 9 i Gamla stan. Gå eller kör in i dem. 50 kr i hittelön</span>
-    <span class="key">J</span><span>Jobb: taxi i taxin, paket i Sprintern, busslinje i bussen, mat på mopeden, rånare i polisbilen, båttaxi i motorbåtarna. Vid en gul ljuspelare: starta gatlopp. Vid bilskroten i Hammarby hamn: sälj en bil du tagit</span>
+    <span class="key">J</span><span>Jobb: taxi i taxin, paket i Sprintern, busslinje i bussen, mat på mopeden, rånare i polisbilen, båttaxi i motorbåtarna. Vid en gul ljuspelare: starta gatlopp. Vid bilskroten i Hammarby hamn: sälj en bil du tagit. Annars visar J en tavla med alla jobb, och där kan du välja ett</span>
     <span class="key">Helikopter</span><span>Står på plattan i slutet av parkeringen vid Skeppsbron. E kliver in. Mellanslag stiger, Shift sjunker, W och S flyger, A och D svänger. Landa på marken och tryck E för att kliva ur. Prova att landa på Kaknästornet!</span>
     <span class="key">Fallskärm</span><span>Tryck E i helikoptern uppe i luften, eller vid foten av Kaknästornet eller Hötorgsskrapan vid Sveavägen, så hoppar du. Mellanslag vecklar ut fallskärmen. A och D svänger, W glider fortare och S långsammare</span>
     <span class="key">T-bana</span><span>Gå fram till en blå T-skylt och tryck E. Välj station (eller tryck 1–9), betala 39 kr och åk. Utan pengar kan du planka, men då kan det bli biljettkontroll</span>
@@ -186,6 +186,21 @@
       <section class="shop-sec"><h3>Motor</h3><div class="shop-opts" id="shopEngine"></div><p class="shop-note" id="shopStats"></p></section>
       <section class="shop-sec"><h3>Laga</h3><div class="shop-opts" id="shopFix"></div></section>
       <div class="shop-foot"><span id="shopSum">Välj något att köpa</span><button id="shopBuy" class="btn-sign small" type="button" disabled>Köp</button></div>
+    </div>
+  </div>
+</div>
+
+<div id="jobs" hidden role="dialog" aria-modal="true" aria-labelledby="jobsTitle">
+  <div class="sign jobs-sign">
+    <div class="sign-inner">
+      <div class="mp-head">
+        <h2 id="jobsTitle"><span class="job-icon" aria-hidden="true">J</span>Jobb</h2>
+        <button id="jobsClose" class="btn-sign picker-close" type="button">Stäng</button>
+      </div>
+      <p class="jobs-lede">Tryck Kör! så får du fordonet och jobbet börjar direkt. Du kan också ta fordonet i trafiken eller med B och trycka J. J igen avslutar jobbet.</p>
+      <ul class="jobs-list" id="jobsList"></ul>
+      <section class="tr-sec"><h3>Gatlopp</h3><p class="tr-note">Kör mot klockan från de gula ljuspelarna (de syns på kartan). Stanna vid pelaren i en bil och tryck J. Nytt rekord ger 1 200 kr, annars 500 kr.</p><ul class="jobs-races" id="jobsRaces"></ul></section>
+      <section class="tr-sec"><h3>Fler sätt att tjäna pengar</h3><p class="tr-note">Sälj bilar du tagit i trafiken på bilskroten i Hammarby hamn. Leta pengapåsar, drifta, kör nära andra bilar i hög fart, kom undan polisen och klara dagens utmaningar (I).</p></section>
     </div>
   </div>
 </div>
