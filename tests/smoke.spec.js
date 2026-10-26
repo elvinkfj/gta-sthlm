@@ -36,6 +36,15 @@ test('versionen står i hörnet', async () => {
   expect(v).toMatch(/^Version \d+ · /);
 });
 
+test('filerna har versionen i adressen, så att webbläsaren aldrig blandar gamla och nya', async () => {
+  const r = await page.evaluate(() => ({
+    nr: VERSION.nr,
+    files: [...document.querySelectorAll('script[src^="src/"], link[rel="stylesheet"][href^="style.css"]')].map((e) => e.getAttribute('src') || e.getAttribute('href'))
+  }));
+  expect(r.files.length).toBeGreaterThan(30);
+  expect(r.files.filter((f) => !f.endsWith('?v=' + r.nr))).toEqual([]);
+});
+
 test('spelet startar och kan köra 10 sekunder', async () => {
   const state = await page.evaluate(() => { gubbeTest.start(); return gubbeTest.run(10); });
   expect(state.bad).toEqual([]);
