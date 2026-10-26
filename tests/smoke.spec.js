@@ -541,7 +541,7 @@ test('nivåer och troféer: XP ger nivåer och troféer, I visar tavlan, och ver
     t.hold(true);
     if (t.state().driving) t.press('KeyE');
     if (t.wanted) t.endChase(false);
-    // a job that pays 300 kr gives 100 XP, and the first time a trophy with 50 more (the races earlier may have taken it)
+    // a job that pays 300 kr gives 50 XP, and the first time a trophy with 50 more (the races earlier may have taken it)
     const xp0 = P.xp, had = !!D.S.got.jobb;
     s.jobXp = P.job(300);
     s.gained = P.xp - xp0 - (had ? 0 : 50);
@@ -593,8 +593,8 @@ test('nivåer och troféer: XP ger nivåer och troféer, I visar tavlan, och ver
     t.hold(false);
     return s;
   });
-  expect(r.jobXp).toBe(100);
-  expect(r.gained).toBe(100);
+  expect(r.jobXp).toBe(50);
+  expect(r.gained).toBe(50);
   expect(r.first).toBe(true);
   expect(r.escape).toBe(true);
   expect(r.fast).toBe(true);
@@ -665,7 +665,7 @@ test('dagliga utmaningar: tre om dagen, de räknas, ger pengar och XP, och näst
   expect(r.bonus).toBe(true);
   expect(r.paid).toBe(150 + 300 + 500 + 300);
   // (the two fares' XP and the challenges', and maybe a trophy or two)
-  expect(r.xp).toBeGreaterThanOrEqual(2 * 67 + 75 + 150 + 250 + 200);
+  expect(r.xp).toBeGreaterThanOrEqual(2 * 33 + 75 + 150 + 250 + 200);
   expect(r.rows).toBe(3);
   expect(r.got).toBe(3);
   expect(r.tag).toBe('3/3');
@@ -768,6 +768,59 @@ test('de nya hyperbilarna går bara att köpa i bilhandeln', async () => {
   expect(r.dealer).toBe(true);
   expect(r.prices).toEqual([30000, 25000, 20000, 20000]);
   expect(r.fastest).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test('mer pengar: pengapåsar, belöning från polisen, nära ögat och drift', async () => {
+  const r = await page.evaluate(() => {
+    const t = gubbeTest, C = t.cash, s = {};
+    t.hold(true);
+    if (t.state().driving) t.press('KeyE');
+    if (t.wanted) t.endChase(false);
+    // the same date lays the same fifteen bags, each on a pavement
+    const a = C.debug.lay('2026-11-02'), b = C.debug.lay('2026-11-02');
+    s.bags = { n: a.length, same: JSON.stringify(a) === JSON.stringify(b), ok: a.every((x) => walkable(x.x, x.z) && !blockedAt(x.x, x.z, 0.5)) };
+    // walking onto one picks it up, and it stays picked up today
+    const L = C.debug.list, i = L.findIndex((x, k) => !C.debug.got.has(k)), bag = L[i];
+    let cash = t.jobs.earned;
+    t.teleport(bag.x, bag.z); t.run(0.2, 1 / 60, false);
+    s.bag = { got: t.jobs.earned - cash, kr: bag.kr, kept: JSON.parse(localStorage.getItem('gubbe-pasar')).got.includes(i) };
+    // getting away from three stars pays 250 kr a star
+    cash = t.jobs.earned; C.bounty(3); s.bounty = t.jobs.earned - cash;
+    // on a long straight, the traffic out of the way: a near miss past a parked car at 25 m/s, half a metre to spare
+    const e = edges.find((x) => x.name === 'Strandvägen' && x.len > 150), f = edgeFrame(e.a, e.b), h = Math.atan2(f.ux, f.uz);
+    const at = (d, l) => [f.A.x + f.ux * d + f.rx * l, f.A.z + f.uz * d + f.rz * l];
+    t.teleport(...at(10, 2)); t.run(0.2, 1 / 60, false);
+    t.choose('superbil'); t.run(0.2, 1 / 60, false);
+    const c = t.driving, o = cars.find((x) => x !== c && !x.M.boat && !x.M.police && !x.remote);
+    for (const x of cars.slice()) if (x !== c && x !== o && !x.remote && Math.hypot(x.x - c.x, x.z - c.z) < 250) removeCar(x);
+    o.bot = null; o.keep = true; [o.x, o.z] = at(60, 2 + (c.M.W + o.M.W) / 2 + 0.5); o.h = h; o.vx = o.vz = 0;
+    [c.x, c.z] = at(10, 2); c.h = h; c.vx = f.ux * 25; c.vz = f.uz * 25;
+    cash = t.jobs.earned;
+    t.key('KeyW', true);
+    for (let k = 0; k < 150; k++) t.run(1 / 60, 1 / 60, false);
+    t.key('KeyW', false);
+    s.miss = { got: t.jobs.earned - cash, touched: o.health < 100 };
+    // a handbrake turn at speed: a drift of over a second pays
+    [c.x, c.z] = at(10, 2); c.h = h; c.vx = f.ux * 26; c.vz = f.uz * 26; c.hitT = 0;
+    cash = t.jobs.earned;
+    t.key('KeyW', true); t.key('Space', true); t.key('KeyA', true);
+    t.run(2, 1 / 60, false);
+    t.key('Space', false); t.key('KeyA', false); t.key('KeyW', false); t.key('KeyS', true);
+    t.run(1.5, 1 / 60, false); t.key('KeyS', false);
+    s.drift = t.jobs.earned - cash;
+    if (t.wanted) t.endChase(false);
+    s.bad = t.state().bad;
+    t.hold(false);
+    return s;
+  });
+  expect(r.bags).toEqual({ n: 15, same: true, ok: true });
+  expect(r.bag.got).toBe(r.bag.kr);
+  expect(r.bag.kept).toBe(true);
+  expect(r.bounty).toBe(750);
+  expect(r.miss).toEqual({ got: 25, touched: false });
+  expect(r.drift).toBeGreaterThan(0);
+  expect(r.bad).toEqual([]);
   expect(errors).toEqual([]);
 });
 

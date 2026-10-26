@@ -28,6 +28,7 @@
     <div class="tag cash" id="cashTag" hidden title="Dina pengar: fickpengarna och det du tjänat på jobb">Kassa <b id="cash">0 kr</b></div>
     <div class="tag lv-tag" id="lvTag" title="Nivå, utmaningar och troféer (I)"><b id="lvNum">1</b><span class="lv-text">Nivå<span class="lv-bar"><i id="lvBar"></i></span></span></div>
     <div class="tag daily-tag" id="dailyTag" title="Dagens utmaningar: klicka för att se dem (I)"><svg class="cal" viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="4" width="15" height="13.5" rx="2" fill="#fff"/><rect x="2.5" y="4" width="15" height="4.5" rx="2" fill="#0a5ba8"/><path d="M6 2.5v3M14 2.5v3" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M6.5 12.5l2.4 2.3 4.6-4.6" fill="none" stroke="#0a5ba8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><b id="dailyCount">0/3</b></div>
+    <div class="tag bag-tag" title="Pengapåsar du hittat i dag. Det ligger nya varje dag, och de syns på kartan när du är nära"><svg class="bag" viewBox="0 0 20 20" aria-hidden="true"><path d="M7 3h6l-1.6 2.6c3.6 1.4 5.6 4.6 5.6 7.9 0 2.8-2.6 4.5-7 4.5s-7-1.7-7-4.5c0-3.3 2-6.5 5.6-7.9z" fill="#3f7a3a" stroke="#fff" stroke-width="1"/><circle cx="10" cy="12.2" r="2.6" fill="#f2c200"/></svg><b id="bagCount">0/15</b></div>
     <div class="tag dala-tag" title="Dalahästar du hittat"><svg class="dala" viewBox="0 0 20 20" aria-hidden="true"><path d="M4 18V11L3 10V8l2-1 1-4h3l1 2-2 1v1h7l1 1v8h-3v-4H8v4z" fill="#c8102e" stroke="#fff" stroke-width="1"/></svg><b id="horses">0/20</b></div>
     <div class="tag wb-tag" id="wbTag" hidden title="Vattenballonger: klicka med musen, eller tryck F när du går, för att kasta"><svg class="wb" viewBox="0 0 20 20" aria-hidden="true"><ellipse cx="10" cy="8.6" rx="5.8" ry="6.8" fill="#4fc3f7" stroke="#fff" stroke-width="1"/><path d="M8.7 15.3h2.6L10 17.8z" fill="#4fc3f7" stroke="#fff" stroke-width="0.8"/></svg><b id="wbCount">0</b></div>
   </div>
@@ -62,6 +63,7 @@
   <form id="chatBar" hidden autocomplete="off"><input id="chatInput" class="mp-input" maxlength="120" placeholder="Skriv till dina vänner …" aria-label="Meddelande till dina vänner" enterkeyhint="send"><button class="btn-sign small" type="submit">Skicka</button></form>
   <div id="toast" hidden></div>
   <div id="xpPop" hidden aria-hidden="true"></div>
+  <div id="cashPop" hidden role="status"></div>
   <div id="dailyNote" hidden role="status"></div>
   <div id="award" hidden role="status" aria-live="polite"><svg class="cup" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10v2h3.5v2.5a4.5 4.5 0 0 1-4.6 4.5A5 5 0 0 1 13 15v2.5h3V21H8v-3.5h3V15a5 5 0 0 1-2.9-3A4.5 4.5 0 0 1 3.5 7.5V5H7zm0 4H5.5v.5A2.5 2.5 0 0 0 7.4 10 5 5 0 0 1 7 8zm10 0v1a5 5 0 0 1-.4 2 2.5 2.5 0 0 0 1.9-2.5V7z"/></svg><svg class="cal" viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="4" width="15" height="13.5" rx="2" fill="#fff"/><rect x="2.5" y="4" width="15" height="4.5" rx="2" fill="#0a5ba8"/><path d="M6 2.5v3M14 2.5v3" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M6.5 12.5l2.4 2.3 4.6-4.6" fill="none" stroke="#0a5ba8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span><small id="awardKind">Ny trofé</small><b id="awardTitle"></b><span id="awardSub"></span></span></div>
   <div id="prompt" hidden><span class="key">E</span><span id="promptText">Kliv in</span></div>
@@ -103,6 +105,7 @@
     <span class="key">Glass</span><span>Glasskiosk och ballongförsäljare vid Skeppsbron, i Kungsträdgården, på Medborgarplatsen och på Djurgården. Gå fram och tryck E för att köpa</span>
     <span class="key">V</span><span>Släpp en ballong</span>
     <span class="key">Verkstad</span><span>På Götgatan på Söder, mellan Åsögatan och Skånegatan. Kör in genom porten och stanna på den gula rutan. Där köper du ny lack, fälgar, sänkt fjädring och bättre motor, och kan laga bilen. Det du köper sparas för den bilmodellen. Ny lack när polisen jagar dig gör att de tappar bort dig</span>
+    <span class="key">Pengar</span><span>Jobb och gatlopp betalar bra. Varje dag ligger 15 pengapåsar gömda på trottoarerna i stan (de syns på kartan när du är nära). Du får också pengar för en lång drift, för att köra nära förbi en annan bil i hög fart och för att komma undan polisen. Och bilar du tar i trafiken kan du sälja på bilskroten</span>
     <span class="key">Garaget</span><span>Under gula huset i Drakens gränd, med porten på Skeppsbron vid hörnet av gränden. Stanna på den gula rutan framför porten (eller gå fram och tryck E). Där köper du bilar i bilhandeln, och de står kvar i garaget med sin färg och sina delar från verkstaden. Välj en och kör ut. Det finns tio platser</span>
     <span class="key">Vattenballonger</span><span>Köp 5 st för 25 kr i hinken bredvid ballongförsäljaren. Klicka med musen, eller tryck F när du går, så kastar du dit du tittar. Den du träffar blir blöt. Träffar du polisen blir du jagad!</span>
     <span class="key">O</span><span>Spola fram tiden en timme. Ett dygn i spelet tar 20 minuter, och på natten tänds gatlamporna, fönstren och billjusen</span>
@@ -349,6 +352,7 @@
 <script src="src/daynight.js"></script>
 <script src="src/progress.js"></script>
 <script src="src/daily.js"></script>
+<script src="src/cash.js"></script>
 <script src="src/gameplay.js"></script>
 <script src="src/hud.js"></script>
 <script src="src/sound.js"></script>

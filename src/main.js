@@ -32,6 +32,7 @@
       DAYNIGHT.update(dt);
       PROGRESS.update(dt);
       DAILY.update(dt);
+      CASH.update(dt);
     }
     PARTY.update();
     FLY.hud();
@@ -99,7 +100,7 @@
     // stop the frame loop and draw what the game camera sees now (for screenshots), or let it run again
     hold(on) { testHold = !!on; if (on) POST.render(); },
     shot(cx, cy, cz, tx, ty, tz) { testHold = true; camera.position.set(cx, cy, cz); camera.lookAt(tx, ty, tz); camera.updateMatrixWorld(); sky.position.copy(camera.position); POST.render(); },
-    quality(l) { POST.setLevel(l, true); }, get post() { return POST; }, jobs: JOBS, vendors: VENDORS, splash: SPLASH, workshop: WORKSHOP, garage: GARAGE, weather: WEATHER, daynight: DAYNIGHT, progress: PROGRESS, daily: DAILY,
+    quality(l) { POST.setLevel(l, true); }, get post() { return POST; }, jobs: JOBS, vendors: VENDORS, splash: SPLASH, workshop: WORKSHOP, garage: GARAGE, weather: WEATHER, daynight: DAYNIGHT, progress: PROGRESS, daily: DAILY, cash: CASH,
     look(yaw, pitch) { camYaw = yaw; if (pitch !== undefined) camPitch = pitch; lastLook = performance.now(); },
     choose(id) { chooseModel(MODEL[id]); },
     openPicker, closePicker, crash, limitAt, startChase, endChase, openBigmap, closeBigmap, drawBigmap, bigmap, carShape, MODELS,

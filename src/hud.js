@@ -178,6 +178,7 @@
     VENDORS.drawMini(g, px, pz, 1 / s);
     WORKSHOP.drawMini(g, px, pz, 1 / s);
     GARAGE.drawMini(g, px, pz, 1 / s);
+    CASH.drawMini(g, px, pz, 1 / s);
     for (const c of cars) {
       // (a friend at the wheel is their dot, drawn below)
       if (c === driving || (c.remote && c.occupant) || Math.abs(c.x - px) > 160 || Math.abs(c.z - pz) > 160) continue;
