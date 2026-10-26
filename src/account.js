@@ -11,10 +11,11 @@
   // starts. Otherwise what changed here is sent every 20 seconds, and when the page is closed. Until the first look at
   // the server has gone well nothing is sent, so an old save here never covers a newer one there.
   const FIREBASE = {
-    // from the Firebase console: Project settings → General → Your apps → firebaseConfig (see README)
-    apiKey: '',
-    authDomain: '',
-    databaseURL: ''
+    // from the Firebase console: Project settings → General → Your apps → firebaseConfig (see README). Not secret: the
+    // database's rules keep each save to its own player
+    apiKey: 'AIzaSyAUjqS_FazITelfNoqjNRK_tbtZK5OfRoA',
+    authDomain: 'gubbe-pa-vagen.firebaseapp.com',
+    databaseURL: 'https://gubbe-pa-vagen-default-rtdb.europe-west1.firebasedatabase.app'
   };
   const ACCOUNT = (() => {
     // (the tests put a pretend server here)

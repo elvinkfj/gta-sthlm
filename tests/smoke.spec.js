@@ -988,15 +988,15 @@ test('vägbeskrivning: ett eget mål visar vägen, försvinner när man är fram
   expect(errors).toEqual([]);
 });
 
-test('konto: utan en server säger kontorutan att det inte är igång', async () => {
+test('konto: kontorutan visar inloggningen och pausar spelet', async () => {
   const r = await page.evaluate(() => {
     ACCOUNT.open();
-    const s = { ready: ACCOUNT.ready, open: ACCOUNT.isOpen, paused: paused(), off: !document.getElementById('acOff').hidden, form: document.getElementById('acForm').hidden };
+    const s = { ready: ACCOUNT.ready, open: ACCOUNT.isOpen, paused: paused(), off: !document.getElementById('acOff').hidden, form: !document.getElementById('acForm').hidden };
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape' }));
     s.closed = !ACCOUNT.isOpen;
     return s;
   });
-  expect(r).toEqual({ ready: false, open: true, paused: true, off: true, form: true, closed: true });
+  expect(r).toEqual({ ready: true, open: true, paused: true, off: false, form: true, closed: true });
   expect(errors).toEqual([]);
 });
 
