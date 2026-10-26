@@ -103,6 +103,7 @@
     <span class="key">Glass</span><span>Glasskiosk och ballongförsäljare vid Skeppsbron, i Kungsträdgården, på Medborgarplatsen och på Djurgården. Gå fram och tryck E för att köpa</span>
     <span class="key">V</span><span>Släpp en ballong</span>
     <span class="key">Verkstad</span><span>På Götgatan på Söder, mellan Åsögatan och Skånegatan. Kör in genom porten och stanna på den gula rutan. Där köper du ny lack, fälgar, sänkt fjädring och bättre motor, och kan laga bilen. Det du köper sparas för den bilmodellen. Ny lack när polisen jagar dig gör att de tappar bort dig</span>
+    <span class="key">Garaget</span><span>Under gula huset i Drakens gränd, med porten på Skeppsbron vid hörnet av gränden. Stanna på den gula rutan framför porten (eller gå fram och tryck E). Där köper du bilar i bilhandeln, och de står kvar i garaget med sin färg och sina delar från verkstaden. Välj en och kör ut. Det finns tio platser</span>
     <span class="key">Vattenballonger</span><span>Köp 5 st för 25 kr i hinken bredvid ballongförsäljaren. Klicka med musen, eller tryck F när du går, så kastar du dit du tittar. Den du träffar blir blöt. Träffar du polisen blir du jagad!</span>
     <span class="key">O</span><span>Spola fram tiden en timme. Ett dygn i spelet tar 20 minuter, och på natten tänds gatlamporna, fönstren och billjusen</span>
     <span class="key">U</span><span>Byt väder: sol, regn eller snö. Vädret byter också av sig självt ibland. I regn och snö är det halt på vägarna</span>
@@ -182,6 +183,22 @@
       <section class="shop-sec"><h3>Motor</h3><div class="shop-opts" id="shopEngine"></div><p class="shop-note" id="shopStats"></p></section>
       <section class="shop-sec"><h3>Laga</h3><div class="shop-opts" id="shopFix"></div></section>
       <div class="shop-foot"><span id="shopSum">Välj något att köpa</span><button id="shopBuy" class="btn-sign small" type="button" disabled>Köp</button></div>
+    </div>
+  </div>
+</div>
+
+<div id="garage" hidden role="dialog" aria-modal="true" aria-labelledby="garageTitle">
+  <div class="sign shop-sign garage-sign">
+    <div class="sign-inner">
+      <div class="mp-head">
+        <h2 id="garageTitle"><span class="gar-p" aria-hidden="true">P</span>Garaget</h2>
+        <button id="garageClose" class="btn-sign picker-close" type="button">Stäng</button>
+      </div>
+      <div class="gar-tabs" role="tablist"><button id="garTabMine" type="button" role="tab">Mina bilar <small id="garCount">0/10</small></button><button id="garTabShop" type="button" role="tab">Bilhandeln</button></div>
+      <p class="shop-car"><span id="garCash">Kassa 0 kr</span></p>
+      <div class="gar-list" id="garList"></div>
+      <div class="shop-paint" id="garColors" hidden></div>
+      <div class="shop-foot"><span id="garSum"></span><span class="gar-btns"><button id="garSell" class="btn-sign small alt" type="button" hidden>Sälj</button><button id="garGo" class="btn-sign small" type="button">Kör ut</button></span></div>
     </div>
   </div>
 </div>
@@ -327,6 +344,7 @@
 <script src="src/rides.js"></script>
 <script src="src/water-balloons.js"></script>
 <script src="src/workshop.js"></script>
+<script src="src/garage.js"></script>
 <script src="src/weather.js"></script>
 <script src="src/daynight.js"></script>
 <script src="src/progress.js"></script>

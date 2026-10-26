@@ -308,7 +308,7 @@
       // (no helicopter in a game: down to the ground with you)
       // (and the police give up the chase: while you play they leave you alone)
       if (fresh && (G.ph === 'count' || G.ph === 'grid') && G.ids.includes(MP.myId)) {
-        FLY.bail(); CHUTE.bail(); METRO.bail(); RIDES.bail(); WORKSHOP.bail();
+        FLY.bail(); CHUTE.bail(); METRO.bail(); RIDES.bail(); WORKSHOP.bail(); GARAGE.bail();
         if (wanted) { endChase(false); toast('Polisen lämnar dig i fred medan ni leker.'); }
       }
       if (G.n !== 'race') {

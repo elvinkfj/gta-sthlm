@@ -3,7 +3,7 @@
   /* ================= game state ================= */
   let started = false, pickerOpen = false, nearCar = null;
   // the car picker and the big map both pause the game
-  const paused = () => pickerOpen || bigmap.open || MP.panelOpen || METRO.boardOpen || WORKSHOP.open || PROGRESS.open;
+  const paused = () => pickerOpen || bigmap.open || MP.panelOpen || METRO.boardOpen || WORKSHOP.open || GARAGE.open || PROGRESS.open;
   let camYaw = player.rot, camPitch = 0.3, camDist = 6, lastLook = -1e9, clipT = 1;
   const camTarget = new THREE.Vector3(player.x, 1.6, player.z);
   let jumpQueued = false;
@@ -583,8 +583,8 @@
     return Math.max(0.1, tmin);
   }
   function updateCamera(dt) {
-    // on a ride at Gröna Lund the camera sits in your seat; at the workshop it looks at your car
-    const seatView = RIDES.view() || WORKSHOP.view();
+    // on a ride at Gröna Lund the camera sits in your seat; at the workshop it looks at your car, in the garage at yours
+    const seatView = RIDES.view() || WORKSHOP.view() || GARAGE.view();
     if (seatView) {
       const p = seatView.pos, d = seatView.dir;
       camera.position.copy(p); camTarget.copy(p);

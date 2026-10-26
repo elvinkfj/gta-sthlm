@@ -32,7 +32,7 @@
   function updateHUD(dt) {
     // at a kiosk, a balloon seller or a bucket of water balloons E buys, otherwise it is for the car you stand by
     // riding along with a friend, or by a friend's car you can get in
-    const mpP = started ? MP.prompt() : null, flyP = started ? FLY.prompt() || CHUTE.prompt() || METRO.prompt() || RIDES.prompt() : null;
+    const mpP = started ? MP.prompt() : null, flyP = started ? FLY.prompt() || CHUTE.prompt() || METRO.prompt() || GARAGE.prompt() || RIDES.prompt() : null;
     const liftP = started && !driving && !FLY.on ? LIFT.prompt() : null, shop = !liftP && started && !driving && !FLY.on ? SPLASH.prompt() || VENDORS.prompt() : null;
     const prompt = mpP || flyP || liftP || shop || (started && !driving && nearCar ? (nearCar.bot ? 'Ta ' + nearCar.M.def : 'Kliv in i ' + nearCar.M.def) : null);
     if (prompt !== lastPrompt) {
@@ -177,6 +177,7 @@
     JOBS.drawMini(g, px, pz, 1 / s);
     VENDORS.drawMini(g, px, pz, 1 / s);
     WORKSHOP.drawMini(g, px, pz, 1 / s);
+    GARAGE.drawMini(g, px, pz, 1 / s);
     for (const c of cars) {
       // (a friend at the wheel is their dot, drawn below)
       if (c === driving || (c.remote && c.occupant) || Math.abs(c.x - px) > 160 || Math.abs(c.z - pz) > 160) continue;
@@ -329,6 +330,7 @@
     }
     VENDORS.drawBig(g, toX, toY, k);
     WORKSHOP.drawBig(g, toX, toY, k);
+    GARAGE.drawBig(g, toX, toY, k);
     JOBS.drawBig(g, toX, toY, k);
     // the army: dark green squares
     for (const c of cars) {

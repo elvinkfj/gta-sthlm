@@ -27,7 +27,7 @@ Lekarna läggs i en ny fil, `src/party.js`, som laddas direkt efter `src/multipl
 
 - [x] **Nivåer och troféer.** Du får XP för allt du gör: jobb, gatlopp, dalahästar, lekarna med kompisar. Nya nivåer låser upp saker (till exempel verkstadens dyraste delar). Troféer för saker som "kör 300 km/h", "fly från fem stjärnor" eller "ta alla dalahästar". Allt sparas i webbläsaren. (Klar: `src/progress.js`. Tryck I för nivån och de 18 troféerna. Nivåerna låser upp verkstadens bästa fälgar, fjädring, guldlack och motor.)
 - [x] **Dagliga utmaningar.** Tre nya små utmaningar varje dag, till exempel "hitta 2 dalahästar", "kör 5 km taxi" eller "hoppa 50 meter". De ger pengar och XP. (Klar: `src/daily.js`. En lätt, en svårare och en svår varje dag, valda efter datumet. "Hoppa 50 meter" blev 50 meters fritt fall med fallskärmen, eftersom bilarna inte kan hoppa. De står på tavlan under I.)
-- [ ] **Garaget.** Köp bilar för pengarna du tjänar och ställ dem i ett eget garage (förslag: under det gula huset i Drakens gränd). Bilarna du köpt står kvar med sin färg och sina delar från verkstaden.
+- [x] **Garaget.** Köp bilar för pengarna du tjänar och ställ dem i ett eget garage (förslag: under det gula huset i Drakens gränd). Bilarna du köpt står kvar med sin färg och sina delar från verkstaden. (Klar: `src/garage.js`. Porten ligger på Skeppsbron vid hörnet av Drakens gränd, och hallen med tio platser under gula huset. Bilhandeln finns i garaget.)
 
 ## Del 5: Upp i luften och under jorden
 
@@ -36,7 +36,16 @@ Lekarna läggs i en ny fil, `src/party.js`, som laddas direkt efter `src/multipl
 - [x] **Tunnelbanan.** Gå ner i en tunnelbaneuppgång och välj en annan station. Tåget åker genom en tunnel och du kommer upp vid den stationen. (Klar: `src/metro.js`. Biljetten kostar 39 kr, och utan pengar kan man planka.)
 - [x] **Gröna Lunds attraktioner.** Gå fram till fritt fall-tornet, karusellen eller berg-och-dalbanan och tryck E för att åka. Kameran sitter i vagnen. (Klar: `src/rides.js`. Pariserhjulet går också att åka, och berg-och-dalbanan fick ett tåg.)
 
-## Del 6: Storyn
+## Del 6: Nya önskemål
+
+Elvin önskade de här den 26 oktober 2026, så de kommer före storyn.
+
+- [ ] **Fyra nya superbilar som måste köpas.** Bugatti Tourbillon, Rimac Nevera, Ferrari F80 och McLaren W1 blir de bästa bilarna i spelet. De går bara att köpa i bilhandeln i garaget. Man kan inte välja dem med B eller ta dem i trafiken.
+- [ ] **Polisuppdrag i fred.** När du kör ett polisuppdrag kan polisen inte stoppa dig.
+- [ ] **Olika tid och väder när spelet startar.** Inte alltid dag och sol. Det kan vara natt med åska, snö på kvällen eller något annat.
+- [ ] **Konto med inloggning.** Logga in med namn och lösenord, så sparas nivån, garaget, de trimmade bilarna och resten på en server (förslag: Firebase, gratis), och du får tillbaka allt var du än spelar.
+
+## Del 7: Storyn
 
 - [ ] **Uppdrag med en story.** En rad uppdrag som hänger ihop, till exempel ett stort rån som slutar med en jakt genom hela stan och en flykt med båt. Den kommer sist, eftersom den kan använda allt det andra (helikoptern, fallskärmen, nitron, natten).
 
