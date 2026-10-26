@@ -750,6 +750,27 @@ test('garaget: köp bilar i bilhandeln, de står kvar, kör ut en och parkera de
   expect(errors).toEqual([]);
 });
 
+test('de nya hyperbilarna går bara att köpa i bilhandeln', async () => {
+  const r = await page.evaluate(() => {
+    const ids = ['tourbillon', 'nevera', 'f80', 'w1'], G = gubbeTest.garage;
+    return {
+      all: ids.every((id) => MODEL[id] && MODEL[id].buy),
+      picker: PICKABLE.some((m) => m.buy) || ids.some((id) => document.getElementById('model-' + id)),
+      traffic: SPORTS.some((m) => m.buy) || REGULARS.some((m) => m.buy) || cars.some((c) => c.M.buy && c !== driving),
+      dealer: ids.every((id) => G.debug.FOR_SALE.includes(MODEL[id])),
+      prices: ids.map((id) => G.price(MODEL[id])),
+      fastest: Math.max(...MODELS.map((m) => m.max)) === MODEL.tourbillon.max
+    };
+  });
+  expect(r.all).toBe(true);
+  expect(r.picker).toBe(false);
+  expect(r.traffic).toBe(false);
+  expect(r.dealer).toBe(true);
+  expect(r.prices).toEqual([30000, 25000, 20000, 20000]);
+  expect(r.fastest).toBe(true);
+  expect(errors).toEqual([]);
+});
+
 // (last: it loads the page again, with every Dalahäst found)
 test('alla dalahästar hittade sedan förut: spelet laddar och trofén delas ut', async () => {
   await page.evaluate(() => { localStorage.setItem('gubbe-dalahastar', JSON.stringify(HORSES.map((h) => h[0]))); localStorage.removeItem('gubbe-niva'); });
