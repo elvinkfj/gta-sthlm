@@ -50,7 +50,7 @@ Elvin önskade de här den 26 oktober 2026, så de kommer före storyn.
 
 ## Del 7: Storyn
 
-- [ ] **Uppdrag med en story.** En rad uppdrag som hänger ihop, till exempel ett stort rån som slutar med en jakt genom hela stan och en flykt med båt. Den kommer sist, eftersom den kan använda allt det andra (helikoptern, fallskärmen, nitron, natten).
+- [x] **Uppdrag med en story.** En rad uppdrag som hänger ihop, till exempel ett stort rån som slutar med en jakt genom hela stan och en flykt med båt. Den kommer sist, eftersom den kan använda allt det andra (helikoptern, fallskärmen, nitron, natten). (Klar: `src/story.js`. Elvin ville att polisen ska vara de goda, så du hjälper kommissarie Kicki Lind att stoppa en kupp mot Nationalmuseum i fem uppdrag: tipset, spaningen med helikoptern, larmet på natten, båtjakten och hoppet från Kaknästornet.)
 
 ---
 

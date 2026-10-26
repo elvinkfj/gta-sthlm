@@ -169,8 +169,9 @@
     if (!seen) for (const c of cars) if (c.police && !c.dead && sees(c, x, z, 70)) { seen = true; break; }
     if (seen) startChase(kind, over);
   }
-  // on a police job (J in a police car) you are one of them: they don't stop you for anything
-  const onDuty = () => !!JOBS.job && JOBS.job.kind === 'polis';
+  // on a police job (J in a police car), or helping Kicki in the story, you are one of them: they don't stop you for
+  // anything
+  const onDuty = () => (!!JOBS.job && JOBS.job.kind === 'polis') || STORY.duty;
   function startChase(kind, over) {
     // in a game with friends the police leave you alone, and on a police job too
     if (PARTY.busy() || onDuty()) return;

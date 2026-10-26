@@ -1038,6 +1038,119 @@ test('konto: kontorutan visar inloggningen och pausar spelet', async () => {
   expect(errors).toEqual([]);
 });
 
+test('storyn: fem uppdrag för Kicki, från tipset till hoppet från Kaknästornet', async () => {
+  const r = await page.evaluate(() => {
+    const t = gubbeTest, S = t.story, D = S.debug, s = {};
+    const run = (sec) => t.run(sec, 1 / 30, false);
+    const step = () => (D.R ? D.R.M.id + '#' + D.R.i : null);
+    t.hold(true);
+    if (JOBS.job) t.press('KeyJ');
+    if (t.state().driving) t.press('KeyE');
+    if (t.wanted) t.endChase(false);
+    D.done = 0;
+    // the boats' way out over Saltsjön is water all the way, and Kicki and the boss stand on land
+    let bad = 0;
+    for (let i = 1; i < D.BOAT_PATH.length; i++) {
+      const [x0, z0] = D.BOAT_PATH[i - 1], [x1, z1] = D.BOAT_PATH[i], L = Math.hypot(x1 - x0, z1 - z0), h = Math.atan2(x1 - x0, z1 - z0);
+      for (let d = 0; d <= L; d += 4) if (!boatFits(MODEL.anytec, x0 + (x1 - x0) * d / L, z0 + (z1 - z0) * d / L, h)) bad++;
+    }
+    s.places = { water: bad, kicki: walkable(D.KICKI.x, D.KICKI.z), boss: walkable(D.BOSS.x, D.BOSS.z) && FLY.heightAt(D.BOSS.x, D.BOSS.z, 3) === 0 };
+    // Kicki outside the police station: E opens her sign, which pauses the game
+    t.teleport(D.KICKI.x + 1.5, D.KICKI.z); run(0.5);
+    s.kicki = { there: !!D.kicki, prompt: S.prompt() };
+    t.press('KeyE');
+    s.offer = { open: S.signOpen, paused: paused(), title: document.getElementById('stTitle').textContent };
+    document.getElementById('stGo').click();
+    s.m1 = [step()];
+    // 1: the photo of the gang's car, then following it; too close and they see you, and you can try again
+    let car = D.R.car;
+    t.teleport(car.x + 6, car.z + 3); run(2);
+    s.m1.push(step(), !!car.bot);
+    for (let i = 0; i < 16 && D.R; i++) { const h = Math.atan2(car.vx, car.vz) || car.h; t.teleport(car.x - Math.sin(h) * 5, car.z - Math.cos(h) * 5); run(0.5); }
+    s.seen = { sign: S.signOpen, text: document.getElementById('stLines').textContent, again: document.getElementById('stGo').textContent };
+    D.close(true);
+    car = D.R.car; t.teleport(car.x + 6, car.z + 3); run(2);
+    for (let i = 0; i < 8 && D.R; i++) { const h = Math.atan2(car.vx, car.vz) || car.h; t.teleport(car.x - Math.sin(h) * 35, car.z - Math.cos(h) * 35); run(0.5); }
+    s.m1.push(step());
+    car.x = D.HIDEOUT.x; car.z = D.HIDEOUT.z; run(0.3);
+    const cash = JOBS.earned;
+    s.m1.push(S.done, S.signOpen);
+    D.close(false);
+    // 2: the helicopter over Nationalmuseum, and down on the pad again
+    t.teleport(D.KICKI.x + 1.5, D.KICKI.z); run(0.3); t.press('KeyE'); document.getElementById('stGo').click();
+    const P = FLY.debug.PAD; t.teleport(P.x + 3, P.z); run(0.3); t.press('KeyE'); run(0.3);
+    s.m2 = [FLY.on, step()];
+    const H = FLY.heli;
+    for (let i = 0; i < 12 && D.R && D.R.i === 1; i++) { H.x = D.MUSEUM.x; H.z = D.MUSEUM.z; H.y = 45; H.vx = H.vy = H.vz = 0; H.ground = false; run(0.5); }
+    s.m2.push(step());
+    H.x = P.x; H.z = P.z; H.y = 0; H.vy = 0; H.ground = true; run(0.5);
+    s.m2.push(S.done);
+    D.close(false);
+    t.press('KeyE'); run(0.5);
+    // 3: at night, the police car, and the gang's car stopped
+    t.teleport(D.KICKI.x + 1.5, D.KICKI.z); run(0.3); t.press('KeyE'); document.getElementById('stGo').click();
+    s.night = Math.round(DAYNIGHT.hour);
+    const pc = D.R.police; t.teleport(pc.x + 2.5, pc.z); run(0.3); t.press('KeyE'); run(0.3);
+    s.m3 = [driving && driving.M.id, step()];
+    driving.x = D.MUSEUM.x + 20; driving.z = D.MUSEUM.z + 70; run(3);
+    const gang = D.R.car;
+    s.m3.push(step(), !!gang.getaway, Math.hypot(gang.vx, gang.vz) > 5, S.duty);
+    gang.dead = true; run(0.5);
+    s.m3.push(S.done, document.getElementById('stGo').textContent);
+    // 4 follows straight on: the police boat at the quay, and the thieves' boat caught
+    D.close(true);
+    t.press('KeyE'); run(0.3);
+    const pb = D.R.police, q = boatExitSpot(pb);
+    t.teleport(q.x + (pb.x - q.x) * 0.12, q.z + (pb.z - q.z) * 0.12); run(0.3); t.press('KeyE'); run(0.5);
+    const tb = D.R.boat;
+    s.m4 = [driving && driving.M.id, step()];
+    run(5);
+    s.m4.push(Math.round(Math.hypot(tb.vx, tb.vz)));
+    for (let i = 0; i < 12 && D.R && D.R.i === 1; i++) { driving.x = tb.x + 6; driving.z = tb.z; driving.vx = tb.vx; driving.vz = tb.vz; run(0.5); }
+    s.m4.push(S.done);
+    // 5: up Kaknästornet and down by the boss's car, flying the parachute
+    D.close(true);
+    driving.x = 433; driving.z = -290; driving.h = Math.PI; driving.vx = driving.vz = 0; run(0.2); t.press('KeyE'); run(0.3);
+    t.teleport(D.TOWER.x, D.TOWER.z); run(0.3); t.press('KeyE'); run(0.5);
+    s.m5 = [CHUTE.on, step()];
+    t.press('Space');
+    for (let i = 0; i < 120 && CHUTE.on; i++) {
+      let dh = Math.atan2(D.BOSS.x - player.x, D.BOSS.z - player.z) - CHUTE.debug.S.h; while (dh > Math.PI) dh -= 2 * Math.PI; while (dh < -Math.PI) dh += 2 * Math.PI;
+      t.key('KeyW', true); t.key('KeyA', dh > 0.1); t.key('KeyD', dh < -0.1); run(0.25);
+    }
+    t.key('KeyW', false); t.key('KeyA', false); t.key('KeyD', false);
+    run(0.5);
+    s.m5.push(Math.hypot(player.x - D.BOSS.x, player.z - D.BOSS.z) < 45, S.done, document.getElementById('stTitle').textContent);
+    D.close(false);
+    s.end = { pay: JOBS.earned - cash, trophy: !!PROGRESS.debug.S.got.hjalte, kept: JSON.parse(localStorage.getItem('gubbe-story')).done, account: ACCOUNT.debug.SAVE.includes('gubbe-story'), duty: S.duty };
+    t.press('KeyJ'); s.end.board = document.getElementById('jobsStoryText').textContent; JOBS.board.close();
+    s.bad = t.state().bad;
+    t.hold(false);
+    return s;
+  });
+  expect(r.places).toEqual({ water: 0, kicki: true, boss: true });
+  expect(r.kicki).toEqual({ there: true, prompt: 'Prata med Kicki' });
+  expect(r.offer).toEqual({ open: true, paused: true, title: 'Tipset' });
+  expect(r.m1).toEqual(['tips#0', 'tips#2', true, 'tips#2', 1, true]);
+  expect(r.seen.sign).toBe(true);
+  expect(r.seen.text).toMatch(/såg dig/);
+  expect(r.seen.again).toBe('Försök igen');
+  expect(r.m2).toEqual([true, 'spaning#1', 'spaning#2', 2]);
+  expect(r.night).toBe(2);
+  expect(r.m3).toEqual(['polis', 'larm#1', 'larm#2', true, true, true, 3, 'Kör!']);
+  expect(r.m4).toEqual(['polisbat', 'bat#1', 16, 4]);
+  expect(r.m5).toEqual([true, 'hopp#1', true, 5, 'Hoppet: klart!']);
+  // (and maybe a little more, from a daily challenge done on the way)
+  expect(r.end.pay).toBeGreaterThanOrEqual(2000 + 3000 + 4000 + 15000);
+  expect(r.end.trophy).toBe(true);
+  expect(r.end.kept).toBe(5);
+  expect(r.end.account).toBe(true);
+  expect(r.end.duty).toBe(false);
+  expect(r.end.board).toMatch(/klarat hela storyn/);
+  expect(r.bad).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
 // (last: it loads the page again, with every Dalahäst found)
 test('alla dalahästar hittade sedan förut: spelet laddar och trofén delas ut', async () => {
   await page.evaluate(() => { localStorage.setItem('gubbe-dalahastar', JSON.stringify(HORSES.map((h) => h[0]))); localStorage.removeItem('gubbe-niva'); });

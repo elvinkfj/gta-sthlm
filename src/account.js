@@ -21,7 +21,7 @@
     // (the tests put a pretend server here)
     const CFG = window.GUBBE_FIREBASE || FIREBASE, ready = !!(CFG.apiKey && CFG.authDomain && CFG.databaseURL);
     const SESSION_KEY = 'gubbe-konto', BACKUP_KEY = 'gubbe-konto-forut', HELLO_KEY = 'gubbe-konto-hej', EVERY = 20;
-    const SAVE = ['gubbe-niva', 'gubbe-garage', 'gubbe-verkstad', 'gubbe-kassa', 'gubbe-gatlopp', 'gubbe-dalahastar', 'gubbe-kaknas', 'gubbe-dagens', 'gubbe-pasar', 'gubbe-namn', 'gubbe-trojfarg'];
+    const SAVE = ['gubbe-niva', 'gubbe-garage', 'gubbe-verkstad', 'gubbe-kassa', 'gubbe-gatlopp', 'gubbe-dalahastar', 'gubbe-kaknas', 'gubbe-dagens', 'gubbe-pasar', 'gubbe-namn', 'gubbe-trojfarg', 'gubbe-story'];
     const ls = {
       get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
       set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* a private window */ } },
