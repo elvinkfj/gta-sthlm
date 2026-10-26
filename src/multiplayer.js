@@ -849,7 +849,7 @@
       const spot = spotNear(at.x, at.z);
       if (!spot) { status('Hittade ingen plats bredvid ' + P.name + ' just nu. Försök igen om en stund.', true); return; }
       if (S.ride) unride(true);
-      FLY.bail(); CHUTE.bail(); METRO.bail(); RIDES.bail(); WORKSHOP.bail();
+      FLY.bail(); CHUTE.bail(); METRO.bail(); RIDES.bail(); WORKSHOP.bail(); GARAGE.bail();
       if (driving && !exitCar()) { closePanel(); return; }
       player.x = spot.x; player.z = spot.z; player.y = 0; player.vx = player.vz = player.vy = 0;
       player.rot = camYaw = Math.atan2(at.x - spot.x, at.z - spot.z);

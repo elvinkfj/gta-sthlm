@@ -675,6 +675,81 @@ test('dagliga utmaningar: tre om dagen, de räknas, ger pengar och XP, och näst
   expect(errors).toEqual([]);
 });
 
+test('garaget: köp bilar i bilhandeln, de står kvar, kör ut en och parkera den igen', async () => {
+  // (the garage opens and closes behind a fade, with timers)
+  const isOpen = () => gubbeTest.garage.open && !gubbeTest.garage.debug.busy, isShut = () => !gubbeTest.garage.open && !gubbeTest.garage.debug.busy;
+  await page.evaluate(() => {
+    const t = gubbeTest, G = t.garage.debug;
+    t.hold(true);
+    if (t.state().driving) t.press('KeyE');
+    if (t.wanted) t.endChase(false);
+    t.jobs.reward(20000);
+    t.teleport(...G.OUT); t.run(0.2, 1 / 60, false);
+    t.press('KeyE');
+  });
+  await page.waitForFunction(isOpen);
+  const r = await page.evaluate(() => {
+    const t = gubbeTest, GA = t.garage, G = GA.debug, s = {};
+    s.paused = paused(); s.view = !!GARAGE.view();
+    s.empty = GA.owned.length;
+    // a Chiron from the dealer's: it turns on the turntable, and once bought it stands in bay 1
+    G.tab = 'shop'; G.pick = MODEL.chiron;
+    s.preview = !!G.preview;
+    const cash = t.jobs.earned;
+    G.buy(); s.paid = cash - t.jobs.earned; s.price = GA.price(MODEL.chiron);
+    G.tab = 'shop'; G.pick = MODEL.chiron; G.buy(); s.twice = GA.owned.length;
+    G.tab = 'shop'; G.pick = MODEL.sedan; G.buy();
+    s.owned = GA.owned; s.shown = G.shown.length; s.below = G.shown.every((c) => c.group.position.y < -5 && !cars.includes(c));
+    s.kept = JSON.parse(localStorage.getItem('gubbe-garage')).cars.map((c) => c.id);
+    G.sel = 0; G.driveOut();
+    return s;
+  });
+  await page.waitForFunction(isShut);
+  const r2 = await page.evaluate(() => {
+    const t = gubbeTest, G = t.garage.debug, s = {};
+    s.out = { id: driving && driving.M.id, owned: !!(driving && driving.owned), atDoor: !!driving && G.inMark(driving.x, driving.z), paused: paused() };
+    // off the box and back onto it, stopped: it opens by itself, and the car is parked again
+    const c = driving;
+    [c.x, c.z] = G.toW(0, -14); c.vx = c.vz = 0; t.run(0.2, 1 / 60, false);
+    [c.x, c.z] = G.OUT; c.vx = c.vz = 0; t.run(0.2, 1 / 60, false);
+    return s;
+  });
+  await page.waitForFunction(isOpen);
+  const r3 = await page.evaluate(() => {
+    const t = gubbeTest, GA = t.garage, G = GA.debug, s = {};
+    s.parked = { driving: !!driving, out: cars.filter((c) => c.owned).length, shown: G.shown.length };
+    // selling the sedan: once to ask, once more to sell, for half
+    const cash = t.jobs.earned;
+    G.sel = 1; G.sellIt(); s.asked = GA.owned.length; G.sellIt();
+    s.sold = { owned: GA.owned, got: t.jobs.earned - cash, half: Math.round(GA.price(MODEL.sedan) / 2 / 100) * 100 };
+    G.leave();
+    return s;
+  });
+  await page.waitForFunction(isShut);
+  const r4 = await page.evaluate(() => {
+    const t = gubbeTest, s = { paused: paused(), hidden: document.getElementById('garage').hidden, onFoot: !driving, bad: t.state().bad };
+    t.hold(false);
+    return s;
+  });
+  expect(r.paused).toBe(true);
+  expect(r.view).toBe(true);
+  expect(r.empty).toBe(0);
+  expect(r.preview).toBe(true);
+  expect(r.paid).toBe(r.price);
+  expect(r.twice).toBe(1);
+  expect(r.owned).toEqual(['chiron', 'sedan']);
+  expect(r.shown).toBe(2);
+  expect(r.below).toBe(true);
+  expect(r.kept).toEqual(['chiron', 'sedan']);
+  expect(r2.out).toEqual({ id: 'chiron', owned: true, atDoor: true, paused: false });
+  expect(r3.parked).toEqual({ driving: false, out: 0, shown: 2 });
+  expect(r3.asked).toBe(2);
+  expect(r3.sold.owned).toEqual(['chiron']);
+  expect(r3.sold.got).toBe(r3.sold.half);
+  expect(r4).toEqual({ paused: false, hidden: true, onFoot: true, bad: [] });
+  expect(errors).toEqual([]);
+});
+
 // (last: it loads the page again, with every Dalahäst found)
 test('alla dalahästar hittade sedan förut: spelet laddar och trofén delas ut', async () => {
   await page.evaluate(() => { localStorage.setItem('gubbe-dalahastar', JSON.stringify(HORSES.map((h) => h[0]))); localStorage.removeItem('gubbe-niva'); });

@@ -461,7 +461,7 @@ body.touch #chatLog { bottom: auto; top: calc(200px + env(safe-area-inset-top, 0
 body.metro #touch, body.metro #hud { visibility: hidden; }
 /* ---------- the workshop ---------- */
 /* the board on the right (at the bottom on a phone), with the car in view beside it */
-#shop { position: fixed; top: 0; right: 0; bottom: 0; display: flex; align-items: center; padding: 16px; box-sizing: border-box; pointer-events: none; }
+#shop, #garage { position: fixed; top: 0; right: 0; bottom: 0; display: flex; align-items: center; padding: 16px; box-sizing: border-box; pointer-events: none; }
 /* (the inside scrolls, not the sign: a scrolling box with a solid background can hide the game above it) */
 .shop-sign { width: min(410px, calc(100vw - 32px)); max-height: 100%; display: flex; flex-direction: column; overflow: hidden; pointer-events: auto; background: #c8102e; }
 .shop-sign .sign-inner { gap: 8px; padding: 14px 16px 0; overflow-y: auto; min-height: 0; }
@@ -494,9 +494,10 @@ body.metro #touch, body.metro #hud { visibility: hidden; }
 /* (the price and the buy button stay in view at the bottom while the rest scrolls) */
 .shop-foot { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0 14px; border-top: 2px solid rgba(255, 255, 255, 0.3); background: #c8102e; font-weight: 900; }
 .shop-foot .short { color: #ffe08a; }
+body.garage #touch, body.garage .tags, body.garage #map, body.garage #btnFriends, body.garage #btnLevel, body.garage #dash, body.garage #limit, body.garage #prompt, body.garage #loc, body.garage #stars, body.garage #rainScreen, body.garage #wetScreen, body.garage #job, body.garage #award, body.garage #xpPop, body.garage #dailyNote,
 body.shop #touch, body.shop .tags, body.shop #map, body.shop #btnFriends, body.shop #btnLevel, body.shop #dash, body.shop #limit, body.shop #prompt, body.shop #loc, body.shop #stars { visibility: hidden; }
 @media (max-width: 760px) {
-  #shop { left: 0; top: auto; height: 60vh; align-items: flex-end; padding: 8px; }
+  #shop, #garage { left: 0; top: auto; height: 60vh; align-items: flex-end; padding: 8px; }
   .shop-sign { width: 100%; min-width: 0; }
 }
 .metro-led { justify-self: center; display: flex; align-items: center; gap: 14px; padding: 10px 18px; border-radius: 10px; background: #050505; box-shadow: inset 0 0 0 3px #3a3f45; max-width: 100%; box-sizing: border-box; }
@@ -652,3 +653,24 @@ body.touch #dailyNote { bottom: calc(334px + env(safe-area-inset-bottom, 0px)); 
 .tr-list.daily li.got .lv-bar i { background: #7be08f; }
 .dl-num { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; background: var(--sign-blue); box-shadow: inset 0 0 0 2px var(--snow); font: 900 0.8rem/1 var(--font-gauge); }
 li.got .dl-num { background: #2f9e4a; }
+/* ---------- the garage: its board is the workshop's, in the dark blue of a parking sign ---------- */
+.garage-sign { background: #14325c; }
+.garage-sign .shop-foot { background: #14325c; }
+.gar-p { width: 1.1em; height: 1.1em; display: grid; place-items: center; border-radius: 6px; background: #1f6bc4; box-shadow: inset 0 0 0 2px var(--snow); font: 900 0.8em/1 var(--font-sign); }
+.gar-tabs { display: flex; gap: 6px; }
+.gar-tabs button { flex: 1; padding: 8px 10px 6px; border: 0; border-radius: 8px; cursor: pointer; background: rgba(255, 255, 255, 0.14); color: var(--snow); font: 900 0.92rem/1 var(--font-sign); }
+.gar-tabs button small { font-weight: 700; opacity: 0.8; font-variant-numeric: tabular-nums; }
+.gar-tabs button.on { background: var(--snow); color: #14325c; }
+.gar-tabs button:focus-visible { outline: 3px solid var(--sign-yellow); outline-offset: 2px; }
+.gar-list { display: grid; gap: 5px; }
+.gar-list h3 { margin: 6px 0 0; font: 900 0.95rem/1.1 var(--font-sign); opacity: 0.9; }
+.gar-item { display: grid; grid-template-columns: 80px minmax(0, 1fr) auto; align-items: center; gap: 9px; padding: 5px 10px 5px 6px; border: 0; border-radius: 8px; cursor: pointer; background: rgba(255, 255, 255, 0.12); color: var(--snow); font-family: inherit; text-align: left; }
+.gar-item canvas { width: 80px; height: 30px; }
+.gar-item b { display: block; font-weight: 900; font-size: 0.88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gar-item small { display: block; font-weight: 700; font-size: 0.72rem; opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gar-right { font: 700 0.8rem/1 var(--font-gauge); font-variant-numeric: tabular-nums; white-space: nowrap; color: #ffe08a; }
+.gar-item:hover, .gar-item:focus-visible { background: rgba(255, 255, 255, 0.24); outline: none; }
+.gar-item.on { background: var(--snow); color: #14325c; }
+.gar-item.on .gar-right { color: #14325c; }
+.gar-btns { display: flex; gap: 8px; }
+#garSell.sure { background: var(--sign-red); color: var(--snow); }

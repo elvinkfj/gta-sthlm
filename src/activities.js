@@ -412,6 +412,7 @@
     let nearScrap = false;
     function sell() {
       const c = driving, M = c.M;
+      if (c.owned) { toast('Bilskroten: Din egen bil? Den säljer du i garaget i stället.'); return; }
       if (c === spawnedCar) { toast('Bilen du valde med B kan du inte sälja. Ta en bil ute i trafiken och kom tillbaka med den.'); return; }
       if (M.police || M.mil) { toast('Bilskroten: Den köper vi inte! Ska vi åka fast allihop?'); return; }
       if (M.bus) { toast('Bilskroten: En SL-buss? Nej tack, den vill SL ha tillbaka.'); return; }
