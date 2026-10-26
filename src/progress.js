@@ -26,7 +26,8 @@
       { id: 'lopp', name: 'Gatans kung', text: 'Kör alla ' + JOBS.RACES.length + ' gatlopp i mål.', stat: 'races', n: JOBS.RACES.length, xp: 400 },
       { id: 'bilar', name: 'Bilsamlaren', text: 'Kör 25 olika fordon.', stat: 'models', n: 25, xp: 400 },
       { id: 'mil', name: 'Långfärden', text: 'Kör 100 km.', stat: 'km', n: 100, unit: ' km', xp: 400 },
-      { id: 'slit', name: 'Slitvargen', text: 'Tjäna 10 000 kr på jobb.', stat: 'jobKr', n: 10000, unit: ' kr', xp: 400 },
+      { id: 'slit', name: 'Slitvargen', text: 'Tjäna 20 000 kr på jobb.', stat: 'jobKr', n: 20000, unit: ' kr', xp: 400 },
+      { id: 'pasar', name: 'Skattjägaren', text: 'Hitta 50 pengapåsar.', stat: 'bags', n: 50, xp: 400 },
       { id: 'fart', name: '300 km/h', text: 'Kör i 300 km/h.', stat: 'kmh', n: 300, unit: ' km/h', xp: 500 },
       { id: 'fem', name: 'Ogripbar', text: 'Kom undan polisen från fem stjärnor.', stat: 'escape5', n: 1, xp: 500 },
       { id: 'dala', name: 'Dalahästjägaren', text: 'Hitta alla ' + HORSES.length + ' dalahästar.', stat: 'horses', n: HORSES.length, xp: 500 },
@@ -233,7 +234,7 @@
       update, did, gain, hud, show,
       get level() { return L.lv; }, get xp() { return S.xp; }, get open() { return open; },
       // a job of this kind paid kr (JOBS)
-      job(kr, kind) { did('jobs'); did('job:' + kind); S.st.jobKr = val('jobKr') + kr; DAILY.add('jobKr', kr); check(); return gain(Math.max(10, Math.round(kr / 3))); },
+      job(kr, kind) { did('jobs'); did('job:' + kind); S.st.jobKr = val('jobKr') + kr; DAILY.add('jobKr', kr); check(); return gain(Math.max(10, Math.round(kr / 6))); },
       // you got away from the police with this many stars
       escaped(stars) { did('escapes'); if (stars >= 3) did('escape3'); if (stars >= 5) did('escape5'); gain(40 * stars); },
       // a game with friends is over: you played, and maybe won

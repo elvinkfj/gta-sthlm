@@ -2,7 +2,7 @@
   const $ = (id) => document.getElementById(id);
   // the game's version: one up in every pull request that changes the game (see CLAUDE.md). It stands in the bottom right
   // corner, and friends in a room see each other's
-  const VERSION = { nr: 52, date: '26 oktober 2026' };
+  const VERSION = { nr: 53, date: '26 oktober 2026' };
   $('version').textContent = 'Version ' + VERSION.nr + ' · ' + VERSION.date;
   if (!window.THREE) {
     $('lede').textContent = 'Kunde inte ladda 3D-motorn. Kontrollera att mappen lib ligger bredvid index.html och ladda om sidan.';

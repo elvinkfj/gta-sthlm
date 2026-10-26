@@ -22,11 +22,12 @@
       { id: 'km', tier: 1, stat: 'km', n: 5, unit: ' km', text: 'Kör 5 km' },
       { id: 'models', tier: 1, stat: 'models', n: 4, distinct: true, text: 'Kör 4 olika fordon' },
       { id: 'scrap', tier: 1, stat: 'scrap', n: 1, text: 'Sälj en bil på bilskroten i Hammarby hamn' },
+      { id: 'bags', tier: 1, stat: 'bags', n: 3, text: 'Hitta 3 pengapåsar' },
       { id: 'horses', tier: 2, stat: 'horses', n: 2, text: 'Hitta 2 dalahästar', ok: () => HORSES.length - horsesFound.size >= 2 },
       { id: 'taxiKm', tier: 2, stat: 'taxiKm', n: 5, unit: ' km', text: 'Kör 5 km taxi' },
       { id: 'races', tier: 2, stat: 'races', n: 2, text: 'Kör 2 gatlopp i mål' },
       { id: 'escapes', tier: 2, stat: 'escapes', n: 2, text: 'Kom undan polisen 2 gånger' },
-      { id: 'jobKr', tier: 2, stat: 'jobKr', n: 1500, unit: ' kr', text: 'Tjäna 1 500 kr på jobb' },
+      { id: 'jobKr', tier: 2, stat: 'jobKr', n: 3000, unit: ' kr', text: 'Tjäna 3 000 kr på jobb' },
       { id: 'fall', tier: 2, stat: 'fall', n: 50, best: true, unit: ' m', text: 'Hoppa fallskärm med 50 meters fritt fall' },
       { id: 'boatKm', tier: 2, stat: 'boatKm', n: 3, unit: ' km', text: 'Kör 3 km båt' },
       { id: 'battaxi', tier: 2, stat: 'job:battaxi', n: 2, text: 'Kör 2 resor med båttaxi' },
@@ -35,7 +36,7 @@
       { id: 'escape3', tier: 3, stat: 'escape3', n: 1, text: 'Kom undan polisen från tre stjärnor' },
       { id: 'kmh', tier: 3, stat: 'kmh', n: 250, best: true, unit: ' km/h', text: 'Kör i 250 km/h' },
       { id: 'kaknas', tier: 3, stat: 'kaknas', n: 1, text: 'Landa helikoptern på Kaknästornet' },
-      { id: 'jobKr3', tier: 3, stat: 'jobKr', n: 4000, unit: ' kr', text: 'Tjäna 4 000 kr på jobb' },
+      { id: 'jobKr3', tier: 3, stat: 'jobKr', n: 8000, unit: ' kr', text: 'Tjäna 8 000 kr på jobb' },
       { id: 'tour', tier: 3, stat: 'rides', n: 4, distinct: true, text: 'Åk alla fyra attraktionerna på Gröna Lund' }
     ];
     // what each tier pays, and all three

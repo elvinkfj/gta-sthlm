@@ -494,7 +494,7 @@ body.metro #touch, body.metro #hud { visibility: hidden; }
 /* (the price and the buy button stay in view at the bottom while the rest scrolls) */
 .shop-foot { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0 14px; border-top: 2px solid rgba(255, 255, 255, 0.3); background: #c8102e; font-weight: 900; }
 .shop-foot .short { color: #ffe08a; }
-body.garage #touch, body.garage .tags, body.garage #map, body.garage #btnFriends, body.garage #btnLevel, body.garage #dash, body.garage #limit, body.garage #prompt, body.garage #loc, body.garage #stars, body.garage #rainScreen, body.garage #wetScreen, body.garage #job, body.garage #award, body.garage #xpPop, body.garage #dailyNote,
+body.garage #touch, body.garage .tags, body.garage #map, body.garage #btnFriends, body.garage #btnLevel, body.garage #dash, body.garage #limit, body.garage #prompt, body.garage #loc, body.garage #stars, body.garage #rainScreen, body.garage #wetScreen, body.garage #job, body.garage #award, body.garage #xpPop, body.garage #dailyNote, body.garage #cashPop,
 body.shop #touch, body.shop .tags, body.shop #map, body.shop #btnFriends, body.shop #btnLevel, body.shop #dash, body.shop #limit, body.shop #prompt, body.shop #loc, body.shop #stars { visibility: hidden; }
 @media (max-width: 760px) {
   #shop, #garage { left: 0; top: auto; height: 60vh; align-items: flex-end; padding: 8px; }
@@ -674,3 +674,15 @@ li.got .dl-num { background: #2f9e4a; }
 .gar-item.on .gar-right { color: #14325c; }
 .gar-btns { display: flex; gap: 8px; }
 #garSell.sure { background: var(--sign-red); color: var(--snow); }
+/* ---------- more ways to earn money: +kr over the middle of the screen, the money bags found today ---------- */
+#cashPop {
+  position: absolute; left: 50%; bottom: calc(222px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); white-space: nowrap;
+  font: 900 1.15rem/1 var(--font-sign); color: var(--snow); text-shadow: 0 2px 0 rgba(0, 0, 0, 0.4), 0 0 12px rgba(0, 0, 0, 0.5);
+}
+#cashPop.gold { color: #7be08f; font-size: 1.35rem; }
+#cashPop.go { animation: cashUp 2.2s ease-out forwards; }
+@keyframes cashUp { 0% { opacity: 0; scale: 0.8; } 10% { opacity: 1; scale: 1.08; } 20% { scale: 1; } 75% { opacity: 1; } 100% { opacity: 0; translate: 0 -20px; } }
+body.touch #cashPop { bottom: calc(420px + env(safe-area-inset-bottom, 0px)); }
+.bag-tag { padding: 5px 11px 5px 7px; }
+.bag-tag b { color: #7be08f; font-variant-numeric: tabular-nums; }
+.bag { width: 18px; height: 18px; display: block; }
