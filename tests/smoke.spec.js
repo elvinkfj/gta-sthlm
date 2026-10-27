@@ -1157,7 +1157,111 @@ test('storyn: fem uppdrag för Kicki, från tipset till hoppet från Kaknästorn
   expect(r.end.kept).toBe(5);
   expect(r.end.account).toBe(true);
   expect(r.end.duty).toBe(false);
-  expect(r.end.board).toMatch(/klarat hela storyn/);
+  // (chapter 2 comes next)
+  expect(r.end.board).toMatch(/^Kapitel 2, Kungakronan, uppdrag 1 av 5: Tipsaren/);
+  expect(r.bad).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test('storyn, kapitel 2: tunnelbanan, Högvakten, pariserhjulet, stormen och vattenskotern', async () => {
+  const r = await page.evaluate(() => {
+    const t = gubbeTest, S = t.story, D = S.debug, s = {};
+    const run = (sec) => t.run(sec, 1 / 30, false);
+    const step = () => (D.R ? D.R.M.id + '#' + D.R.i : null);
+    t.hold(true);
+    if (JOBS.job) t.press('KeyJ');
+    if (t.state().driving) t.press('KeyE');
+    if (t.wanted) t.endChase(false);
+    t.jobs.reward(500);
+    D.done = 5;
+    // (chapter 1 done: its five count towards the trophy, also when this test runs on its own)
+    for (const M of D.MISSIONS.slice(0, 5)) PROGRESS.did('story', M.id, true);
+    // the jet ski's way is water all the way
+    let bad = 0;
+    for (let i = 1; i < D.JET_PATH.length; i++) {
+      const [x0, z0] = D.JET_PATH[i - 1], [x1, z1] = D.JET_PATH[i], L = Math.hypot(x1 - x0, z1 - z0), h = Math.atan2(x1 - x0, z1 - z0);
+      for (let d = 0; d <= L; d += 4) if (!boatFits(MODEL.jetski, x0 + (x1 - x0) * d / L, z0 + (z1 - z0) * d / L, h)) bad++;
+    }
+    s.water = bad;
+    t.teleport(D.KICKI.x + 1.5, D.KICKI.z); run(0.3); t.press('KeyE');
+    s.offer = [document.getElementById('stKicker').textContent, document.getElementById('stTitle').textContent];
+    document.getElementById('stGo').click();
+    // 6: the tunnelbana from Gamla stan to Hötorget, then the tipster
+    t.teleport(D.GAMLA.x + 1.5, D.GAMLA.z); run(0.3); t.press('KeyE');
+    METRO.debug.go(METRO.debug.STOPS.find((x) => x.name === 'Hötorget'));
+    s.m6 = [METRO.riding, step()];
+    for (let i = 0; i < 60 && METRO.riding; i++) run(1);
+    run(0.3);
+    s.m6.push(step());
+    const tip = D.R.tip; t.teleport(tip.x + 1.5, tip.z); run(0.3);
+    s.m6.push(S.done);
+    D.close(false);
+    // 7: the helper among the tourists at the changing of the guard, and the run after them
+    t.teleport(D.KICKI.x + 1.5, D.KICKI.z); run(0.3); t.press('KeyE'); document.getElementById('stGo').click();
+    t.teleport(D.CROWD.x, D.CROWD.z + 15); run(0.3);
+    s.m7 = [step()];
+    const tourist = D.R.crowd.find((p) => p !== D.R.sus), sus = D.R.sus;
+    t.teleport(tourist.x + 1.2, tourist.z); run(0.3);
+    s.m7.push(step(), !!tourist.told);
+    t.teleport(sus.x + 3.5, sus.z); run(0.3);
+    s.m7.push(step(), sus.ai.state);
+    run(2);
+    s.m7.push(Math.hypot(sus.vx, sus.vz) > 3);
+    t.teleport(sus.x + 1, sus.z); run(0.3);
+    s.m7.push(S.done, !!sus.cuffed);
+    D.close(false);
+    // 8: up the Ferris wheel, then a soaked chauffeur
+    t.teleport(D.KICKI.x + 1.5, D.KICKI.z); run(0.3); t.press('KeyE'); document.getElementById('stGo').click();
+    t.teleport(D.WHEEL.x, D.WHEEL.z + 5); run(0.3); t.press('KeyE'); run(0.5);
+    s.m8 = [RIDES.ride, step()];
+    run(9);
+    s.m8.push(step(), SPLASH.count >= 5);
+    D.R.driver.wetT = 2; run(0.3);
+    s.m8.push(S.done);
+    D.close(false);
+    for (let i = 0; i < 90 && RIDES.on; i++) run(1);
+    // 9: the stormy night, the helicopter over the palace, and the jeep followed from the air
+    t.teleport(D.KICKI.x + 1.5, D.KICKI.z); run(0.3); t.press('KeyE'); document.getElementById('stGo').click();
+    s.storm = [Math.round(DAYNIGHT.hour * 2) / 2, WEATHER.kind];
+    const P = FLY.debug.PAD, H = FLY.heli;
+    FLY.debug.home(); t.teleport(P.x + 3, P.z); run(0.3); t.press('KeyE'); run(0.3);
+    s.m9 = [FLY.on, step()];
+    H.x = D.PALACE.x + 20; H.z = D.PALACE.z + 20; H.y = 40; H.vx = H.vy = H.vz = 0; H.ground = false; run(0.3);
+    const jeep = D.R.car;
+    s.m9.push(step(), jeep && jeep.M.id, !!(jeep && jeep.getaway));
+    for (let i = 0; i < 60 && D.R && D.R.i === 2; i++) { H.x = jeep.x + 10; H.z = jeep.z; H.y = 50; H.vx = H.vy = H.vz = 0; run(1); }
+    s.m9.push(S.done, document.getElementById('stGo').textContent);
+    // 10 follows straight on: down from the helicopter, onto the police jet ski, and alongside his
+    D.close(true);
+    H.x = 600; H.z = -700; H.y = 0; H.vy = 0; H.ground = true; run(0.3); t.press('KeyE'); run(0.3);
+    const pj = D.R.police, q = boatExitSpot(pj);
+    t.teleport(q.x + (pj.x - q.x) * 0.12, q.z + (pj.z - q.z) * 0.12); run(0.3); t.press('KeyE'); run(0.5);
+    const js = D.R.boat;
+    s.m10 = [driving && driving.M.id, step()];
+    run(6);
+    s.m10.push(Math.round(Math.hypot(js.vx, js.vz)));
+    for (let i = 0; i < 12 && D.R && D.R.i === 1; i++) { driving.x = js.x + 4; driving.z = js.z; driving.vx = js.vx; driving.vz = js.vz; run(0.5); }
+    s.m10.push(S.done, document.getElementById('stTitle').textContent, document.getElementById('stPay').textContent);
+    D.close(false);
+    s.trophy = !!PROGRESS.debug.S.got.kronan;
+    s.bad = t.state().bad;
+    t.hold(false);
+    return s;
+  });
+  expect(r.water).toBe(0);
+  expect(r.offer).toEqual(['Kapitel 2: Kungakronan · uppdrag 1 av 5', 'Tipsaren']);
+  expect(r.m6).toEqual([true, 'tipsare#0', 'tipsare#1', 6]);
+  expect(r.m7).toEqual(['vakt#1', 'vakt#1', true, 'vakt#2', 'flee', true, 7, true]);
+  expect(r.m8).toEqual(['wheel', 'hjulet#1', 'hjulet#2', true, 8]);
+  expect(r.storm).toEqual([23.5, 1]);
+  expect(r.m9).toEqual([true, 'storm#1', 'storm#2', 'g63', true, 9, 'Kör!']);
+  expect(r.m10[0]).toBe('polisjet');
+  expect(r.m10[1]).toBe('jet#1');
+  expect(r.m10[2]).toBe(21);
+  expect(r.m10[3]).toBe(10);
+  expect(r.m10[4]).toBe('Vattenskotern: klart!');
+  expect(r.m10[5]).toMatch(/klarat hela storyn/);
+  expect(r.trophy).toBe(true);
   expect(r.bad).toEqual([]);
   expect(errors).toEqual([]);
 });

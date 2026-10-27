@@ -52,6 +52,11 @@ Elvin önskade de här den 26 oktober 2026, så de kommer före storyn.
 
 - [x] **Uppdrag med en story.** En rad uppdrag som hänger ihop, till exempel ett stort rån som slutar med en jakt genom hela stan och en flykt med båt. Den kommer sist, eftersom den kan använda allt det andra (helikoptern, fallskärmen, nitron, natten). (Klar: `src/story.js`. Elvin ville att polisen ska vara de goda, så du hjälper kommissarie Kicki Lind att stoppa en kupp mot Nationalmuseum i fem uppdrag: tipset, spaningen med helikoptern, larmet på natten, båtjakten och hoppet från Kaknästornet.)
 
+## Del 8: Mer story
+
+- [x] **Storyn, kapitel 2.** Elvin tyckte att storyn var kul och ville ha fler uppdrag som hänger ihop. (Klar: kapitel 2, Kungakronan, i `src/story.js`. Bossen från kapitel 1 jobbade åt Mästaren, som vill stjäla kungakronan. Fem uppdrag med tunnelbanan, Högvakten, pariserhjulet och vattenballonger, en stormig natt i helikoptern och en jakt på vattenskoter.)
+- [ ] **Storyn, kapitel 3.** Elvin och Claude hittar på den tillsammans.
+
 ---
 
 ## Fler idéer

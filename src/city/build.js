@@ -91,12 +91,38 @@
     return !isTaken(P);
   }
   // fill a flat polygon at height y; uvScale maps world metres to texture repeats
-  function triangulate(B, P, y, col, uvScale) {
+  function triangulatePiece(B, P, y, col, uvScale) {
     const contour = P.map(([x, z]) => new THREE.Vector2(x, z));
     if (THREE.ShapeUtils.isClockWise(contour)) contour.reverse();
     for (const [i, j, k] of THREE.ShapeUtils.triangulateShape(contour, [])) {
       const t = [contour[i], contour[j], contour[k]];
       B.tri([t[0].x, y, t[0].y], [t[1].x, y, t[1].y], [t[2].x, y, t[2].y], col, [0, 1, 0], uvScale ? t.map((v) => [v.x / uvScale, -v.y / uvScale]) : null);
+    }
+  }
+  // a big polygon is cut into squares of 50 m first. Land or a lawn in a few triangles kilometres long gets its depth so
+  // wrong in some renderers (without a graphics card, at some screen sizes) that it covers the street above it.
+  // (Sutherland–Hodgman against each square, which keeps a concave polygon in one piece)
+  function triangulate(B, P, y, col, uvScale, cell = 50) {
+    const [x0, z0, x1, z1] = polyBox(P);
+    if (x1 - x0 <= cell && z1 - z0 <= cell) { triangulatePiece(B, P, y, col, uvScale); return; }
+    const clip = (Q, inside, cut) => {
+      const out = [];
+      for (let i = 0; i < Q.length; i++) {
+        const a = Q[i], b = Q[(i + 1) % Q.length], ia = inside(a), ib = inside(b);
+        if (ia) out.push(a);
+        if (ia !== ib) out.push(cut(a, b));
+      }
+      return out;
+    };
+    const atX = (X) => (a, b) => [X, a[1] + (b[1] - a[1]) * (X - a[0]) / (b[0] - a[0])];
+    const atZ = (Z) => (a, b) => [a[0] + (b[0] - a[0]) * (Z - a[1]) / (b[1] - a[1]), Z];
+    for (let cx = Math.floor(x0 / cell) * cell; cx < x1; cx += cell) {
+      const col0 = clip(clip(P, (p) => p[0] >= cx, atX(cx)), (p) => p[0] <= cx + cell, atX(cx + cell));
+      if (col0.length < 3) continue;
+      for (let cz = Math.floor(z0 / cell) * cell; cz < z1; cz += cell) {
+        const Q = clip(clip(col0, (p) => p[1] >= cz, atZ(cz)), (p) => p[1] <= cz + cell, atZ(cz + cell));
+        if (Q.length >= 3) triangulatePiece(B, Q, y, col, uvScale);
+      }
     }
   }
 
@@ -437,10 +463,14 @@
     const c0 = A.r, c1 = e.len - B.r;
     if (c1 - c0 < 0.3) continue;
     const P = (s, lat) => [A.x + ux * s + rx * lat, RY, A.z + uz * s + rz * lat];
-    const corners = [P(c0, -e.hw), P(c1, -e.hw), P(c1, e.hw), P(c0, e.hw)];
+    // the surface in pieces of at most 40 m: one quad the length of the street gets its depth wrong in some renderers,
+    // like land in one piece (triangulate)
+    const pieces = Math.ceil((c1 - c0) / 40), cut = (i) => c0 + (c1 - c0) * i / pieces;
     if (e.kind === 'lane' || e.kind === 'ped') {
-      const uv = corners.map((p) => [p[0] / 4, -p[2] / 4]);
-      (e.kind === 'lane' ? cobbleB : slabB).quad(corners[0], corners[1], corners[2], corners[3], 0xffffff, uv, [0, 1, 0]);
+      for (let i = 0; i < pieces; i++) {
+        const q = [P(cut(i), -e.hw), P(cut(i + 1), -e.hw), P(cut(i + 1), e.hw), P(cut(i), e.hw)];
+        (e.kind === 'lane' ? cobbleB : slabB).quad(q[0], q[1], q[2], q[3], 0xffffff, q.map((p) => [p[0] / 4, -p[2] / 4]), [0, 1, 0]);
+      }
       if (e.stairs) for (let s = c0 + 0.4; s < c1 - 0.4; s += 0.9) {
         const Bs = cityAt(A.x + ux * s, A.z + uz * s);
         Bs.setFrame(A.x + ux * s - rx * e.hw, A.z + uz * s - rz * e.hw, rx, rz);
@@ -449,7 +479,10 @@
       }
     } else {
       const B2 = e.median ? medianB : e.hw >= 8 ? avenueB : roadB;
-      B2.quad(corners[0], corners[1], corners[2], corners[3], 0xffffff, [[0, c0 / 12], [0, c1 / 12], [1, c1 / 12], [1, c0 / 12]], [0, 1, 0]);
+      for (let i = 0; i < pieces; i++) {
+        const s0 = cut(i), s1 = cut(i + 1);
+        B2.quad(P(s0, -e.hw), P(s1, -e.hw), P(s1, e.hw), P(s0, e.hw), 0xffffff, [[0, s0 / 12], [0, s1 / 12], [1, s1 / 12], [1, s0 / 12]], [0, 1, 0]);
+      }
       // kerbs
       if (!e.bridge) for (const side of [1, -1]) {
         const lat = side * (e.hw + 0.12), mid = P((c0 + c1) / 2, lat), Bc = cityAt(mid[0], mid[2]);

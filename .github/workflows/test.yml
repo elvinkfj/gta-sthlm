@@ -9,7 +9,9 @@ on:
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # (room for a slow Ubuntu mirror: the browser's system packages have taken over 10 minutes to download, which left
+    # too little of 15 for the tests)
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

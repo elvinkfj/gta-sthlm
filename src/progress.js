@@ -29,6 +29,7 @@
       { id: 'slit', name: 'Slitvargen', text: 'Tjäna 20 000 kr på jobb.', stat: 'jobKr', n: 20000, unit: ' kr', xp: 400 },
       { id: 'pasar', name: 'Skattjägaren', text: 'Hitta 50 pengapåsar.', stat: 'bags', n: 50, xp: 400 },
       { id: 'hjalte', name: 'Stockholms hjälte', text: 'Hjälp polisen att stoppa kuppen mot Nationalmuseum.', stat: 'story', n: 5, xp: 500 },
+      { id: 'kronan', name: 'Kronans väktare', text: 'Rädda kungakronan från Mästaren.', stat: 'story', n: 10, xp: 800 },
       { id: 'fart', name: '300 km/h', text: 'Kör i 300 km/h.', stat: 'kmh', n: 300, unit: ' km/h', xp: 500 },
       { id: 'fem', name: 'Ogripbar', text: 'Kom undan polisen från fem stjärnor.', stat: 'escape5', n: 1, xp: 500 },
       { id: 'dala', name: 'Dalahästjägaren', text: 'Hitta alla ' + HORSES.length + ' dalahästar.', stat: 'horses', n: HORSES.length, xp: 500 },

@@ -774,7 +774,7 @@
     function renderBoard() {
       // the story first: where you are in it, and the way to Kicki
       const st = STORY.board();
-      $('jobsStoryText').textContent = st.next ? 'Uppdrag ' + (st.done + 1) + ' av ' + st.n + ': ' + st.next + '. Kommissarie Kicki Lind väntar utanför polisstationen på Stora Nygatan i Gamla stan. Gå fram till henne och tryck E.' : 'Du har klarat hela storyn och stoppat kuppen. Bra jobbat!';
+      $('jobsStoryText').textContent = st.next ? st.next + '. Kommissarie Kicki Lind väntar utanför polisstationen på Stora Nygatan i Gamla stan. Gå fram till henne och tryck E.' : 'Du har klarat hela storyn: kuppen på Nationalmuseum och kungakronan. Bra jobbat!';
       $('jobsStoryGo').hidden = !st.next;
       BD.list.textContent = '';
       for (const j of BOARD) {
