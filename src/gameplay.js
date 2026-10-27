@@ -165,7 +165,8 @@
   }
 
   /* ---------- car picker ---------- */
-  function drawSilhouette(cv, M) {
+  // (col: the paint, for a car of yours from the garage)
+  function drawSilhouette(cv, M, col = M.colors[0]) {
     if (M.boat) {
       // a boat from the side, on a band of water: the hull from its stations, then what stands on it
       const g = cv.getContext('2d'), W = cv.width, H = cv.height, s = Math.min((W - 24) / (M.L * 1.08), (H - 24) / 2.2), ox = W / 2, oy = H - 34, P = (z, y) => [ox + z * s, oy - y * s];
@@ -228,13 +229,13 @@
       const line = (pts, w, col) => { g.beginPath(); pts.forEach(([z, y], i) => { const [px, py] = P(z, y); if (i) g.lineTo(px, py); else g.moveTo(px, py); }); g.lineWidth = w * s; g.strokeStyle = col; g.lineCap = 'round'; g.stroke(); };
       g.clearRect(0, 0, W, H);
       line([[-0.18, 0.3], [-0.5, 0.33], [-0.84, 0.45]], 0.1, '#2a2c30');
-      poly([[0.05, 0.34], [-0.15, 0.36], [-0.42, 0.42], [-0.68, 0.52], [-0.88, 0.66], [-0.88, 0.82], [-0.68, 0.79], [-0.42, 0.75], [-0.15, 0.71], [0.05, 0.6]], hex(M.colors[0]));
+      poly([[0.05, 0.34], [-0.15, 0.36], [-0.42, 0.42], [-0.68, 0.52], [-0.88, 0.66], [-0.88, 0.82], [-0.68, 0.79], [-0.42, 0.75], [-0.15, 0.71], [0.05, 0.6]], hex(col));
       poly([[0.06, 0.6], [-0.05, 0.68], [-0.36, 0.72], [-0.46, 0.74], [-0.74, 0.77], [-0.74, 0.87], [-0.46, 0.86], [-0.36, 0.81], [-0.05, 0.79], [0.06, 0.66]], '#16171a');
       poly([[0.12, 0.3], [-0.2, 0.3], [-0.2, 0.34], [0.12, 0.34]], '#1c1d20');
       line([[0.25, 0.8], [0.21, 0.62], [0.15, 0.45], [0.06, 0.34], [0, 0.3]], 0.05, '#aeb3b8');
       line([[0.3, 0.82], [0.61, 0.24]], 0.05, '#2a2c30');
       line([[0.2, 1.01], [0.1, 1.04]], 0.03, '#1c1d20');
-      poly([[0.25, 0.83], [0.42, 0.86], [0.42, 0.98], [0.25, 1.0]], hex(M.colors[0]));
+      poly([[0.25, 0.83], [0.42, 0.86], [0.42, 0.98], [0.25, 1.0]], hex(col));
       poly([[0.27, 1.0], [0.4, 0.99], [0.33, 1.12], [0.25, 1.12]], '#8fa5b5');
       for (const z of [M.wb / 2, -M.wb / 2]) {
         const [px, py] = P(z, M.R);
@@ -252,7 +253,7 @@
     const n = 90, zs = [];
     for (let i = 0; i <= n; i++) zs.push(-hl + (M.L * i) / n);
     const rings = zs.map((z) => sh.ring(z));
-    poly([...zs.map((z, i) => [z, rings[i].top + rings[i].crown]), ...zs.slice().reverse().map((z) => [z, sh.sillAt(z)])], hex(M.colors[0]));
+    poly([...zs.map((z, i) => [z, rings[i].top + rings[i].crown]), ...zs.slice().reverse().map((z) => [z, sh.sillAt(z)])], hex(col));
     // side windows, with the pillars left in body colour
     const win = [];
     zs.forEach((z, i) => { const r = rings[i]; if (z > S.glass[0] && z < S.glass[1] && r.h > 0.08) win.push([z, r.yt + 0.03, r.yt + r.h - Math.min(0.07, r.h * 0.3)]); });
@@ -267,18 +268,19 @@
     }
     if (S.open) { const zf = S.open.z[1], yb = sh.belt(zf), ws = S.open.screen ?? 0.3; poly([[zf, yb], [zf - ws * 0.55, yb + ws], [zf - ws * 0.55 - 0.05, yb + ws], [zf - 0.06, yb]], '#23384b'); }
     // the F40's wing on its swept-up rear wings
-    if (S.f40) { const wy = S.f40.wingY, wa = -hl + 0.03, wb = -hl + 0.4; poly([[wa, sh.belt(wa) - 0.03], [-1.55, sh.belt(-1.55) - 0.03], [wb, wy - 0.02], [wb, wy + 0.01], [wa, wy + 0.03]], hex(shade(M.colors[0], 0.78))); }
+    if (S.f40) { const wy = S.f40.wingY, wa = -hl + 0.03, wb = -hl + 0.4; poly([[wa, sh.belt(wa) - 0.03], [-1.55, sh.belt(-1.55) - 0.03], [wb, wy - 0.02], [wb, wy + 0.01], [wa, wy + 0.03]], hex(shade(col, 0.78))); }
     for (const z of [M.wb / 2, -M.wb / 2]) {
       const [px, py] = P(z, M.R);
       g.fillStyle = '#16181b'; g.beginPath(); g.arc(px, py, M.R * s, 0, TAU); g.fill();
       g.fillStyle = M.rim === 'black' ? '#3a3d42' : '#c6cbd1'; g.beginPath(); g.arc(px, py, M.R * s * 0.62, 0, TAU); g.fill();
     }
   }
-  function pickerButton(M, i) {
+  // (mine: one of your cars in the garage, in its own paint, and yours when you take it)
+  function pickerButton(M, i, mine) {
     const btn = document.createElement('button');
-    btn.type = 'button'; btn.className = 'model'; btn.id = 'model-' + M.id;
+    btn.type = 'button'; btn.className = 'model'; btn.id = (mine ? 'mine-' : 'model-') + M.id;
     const cv = document.createElement('canvas'); cv.width = 320; cv.height = 120;
-    drawSilhouette(cv, M);
+    drawSilhouette(cv, M, mine ? mine.color : M.colors[0]);
     const title = document.createElement('div'); title.className = 'model-title';
     const name = document.createElement('b'); name.textContent = M.name;
     title.append(name);
@@ -287,7 +289,7 @@
     const stats = document.createElement('div'); stats.className = 'stats';
     stats.textContent = M.kind + '\nToppfart ' + Math.round(M.max * 3.6) + ' km/h\n0–' + M.sprint.kmh + ' på ' + M.sprint.t.toFixed(1).replace('.', ',') + ' s\n' + (M.boat ? M.engine : M.ev ? 'Elmotor, en växel' : M.cvt ? 'Tvåtakt, variator' : M.gears + ' växlar');
     btn.append(cv, title, stats);
-    btn.addEventListener('click', () => chooseModel(M));
+    btn.addEventListener('click', () => chooseModel(M, !!mine));
     return btn;
   }
   function buildPicker() {
@@ -297,12 +299,13 @@
     });
     SECRET.forEach((M, i) => $(M.mil ? 'gridArmy' : 'gridPolice').appendChild(pickerButton(M, i)));
   }
-  // the exclusive cars you have bought at the garage's dealer's are yours to take with B too, at the top (the others
-  // that are only sold there never show)
+  // the cars you have in the garage are yours to take with B too, at the top, in their own paint (the workshop's, or
+  // the colour you bought them in). The exclusive ones you haven't bought never show
   function pickerMine() {
-    const mine = GARAGE.owned.map((id) => MODEL[id]).filter((M) => M && M.buy), grid = $('gridMine'), ids = mine.map((M) => M.id).join();
+    const mine = GARAGE.owned.map((id) => { const M = MODEL[id], o = M && GARAGE.mine(id), k = M && WORKSHOP.kept(M); return o && { M, color: k && k.paint !== null ? k.paint : o.color }; }).filter(Boolean);
+    const grid = $('gridMine'), ids = mine.map((o) => o.M.id + ':' + o.color).join();
     $('pickMine').hidden = !mine.length;
-    if (grid.dataset.ids !== ids) { grid.dataset.ids = ids; grid.replaceChildren(...mine.map((M) => pickerButton(M, 99))); }
+    if (grid.dataset.ids !== ids) { grid.dataset.ids = ids; grid.replaceChildren(...mine.map((o) => pickerButton(o.M, 99, o))); }
   }
   function openPicker() {
     if (!started) return;
@@ -368,7 +371,8 @@
     for (const [x, z, h] of tries) if (spotFree(M, x, z, h) && !STATION.inside(x, z)) return { x, z, h };
     return null;
   }
-  function chooseModel(M) {
+  // (own: taken from your cars in the garage, at the top of the picker)
+  function chooseModel(M, own) {
     closePicker();
     if (policeStop && policeStop.locked) return;
     if (FLY.on) { toast('Landa och kliv ur helikoptern först.'); return; }
@@ -395,9 +399,10 @@
     if (spawnedCar) removeCar(spawnedCar);
     if (!spot) spot = findSpawnSpot(M);
     if (!spot) { toast(M.boat ? 'Det finns inget vatten här i närheten. Gå ner till en kaj och försök igen.' : 'Det finns ingen plats för ' + M.def + ' här. Gå ut på en gata och försök igen.'); return; }
-    // found every Dalahäst: your cars come in gold; what you bought for this model at the workshop comes with it. An
-    // exclusive car of yours comes in the colour you bought it in, and it is yours (the garage takes it back in)
-    const kept = WORKSHOP.kept(M), mine = M.buy ? GARAGE.mine(M.id) : null;
+    // found every Dalahäst: your cars come in gold; what you bought for this model at the workshop comes with it. A car
+    // of yours from the garage (and an exclusive one always) comes in the colour you bought it in, and it is yours (the
+    // garage takes it back in)
+    const kept = WORKSHOP.kept(M), mine = M.buy || own ? GARAGE.mine(M.id) : null;
     const c = makeCar(M, kept && kept.paint !== null ? kept.paint : mine ? mine.color : goldCars && !M.police && !M.mil && !M.boat && M.id !== 'taxi' ? 0xc9a227 : M.colors[Math.floor(Math.random() * M.colors.length)]);
     WORKSHOP.fit(c, kept);
     if (mine) c.owned = true;
