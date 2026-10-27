@@ -55,7 +55,7 @@ Elvin önskade de här den 26 oktober 2026, så de kommer före storyn.
 ## Del 8: Mer story
 
 - [x] **Storyn, kapitel 2.** Elvin tyckte att storyn var kul och ville ha fler uppdrag som hänger ihop. (Klar: kapitel 2, Kungakronan, i `src/story.js`. Bossen från kapitel 1 jobbade åt Mästaren, som vill stjäla kungakronan. Fem uppdrag med tunnelbanan, Högvakten, pariserhjulet och vattenballonger, en stormig natt i helikoptern och en jakt på vattenskoter.)
-- [ ] **Storyn, kapitel 3.** Elvin och Claude hittar på den tillsammans.
+- [x] **Storyn, kapitel 3.** Elvin och Claude hittar på den tillsammans. (Klar: kapitel 3, Mästarens hämnd, i `src/story.js`. Elvin valde att Mästaren rymmer, att slutet blir på Globen och att det ska vara biljakter, flygning och smygande. Fem uppdrag: en biljakt från Centralbron, att skugga en medhjälpare till fots till Stureplan, att fota ett lager i Hammarby sjöstad från helikoptern, att stoppa en skåpbil på väg mot Globen, och en final med landning på Globens tak.)
 
 ---
 

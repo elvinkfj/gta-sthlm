@@ -1260,8 +1260,124 @@ test('storyn, kapitel 2: tunnelbanan, Högvakten, pariserhjulet, stormen och vat
   expect(r.m10[2]).toBe(21);
   expect(r.m10[3]).toBe(10);
   expect(r.m10[4]).toBe('Vattenskotern: klart!');
-  expect(r.m10[5]).toMatch(/klarat hela storyn/);
+  expect(r.m10[5]).toMatch(/klarat kapitel 2/);
   expect(r.trophy).toBe(true);
+  expect(r.bad).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test('storyn, kapitel 3: rymningen, skuggningen, lagret, skåpbilen och finalen på Globen', async () => {
+  const r = await page.evaluate(() => {
+    const t = gubbeTest, S = t.story, D = S.debug, s = {};
+    const run = (sec) => t.run(sec, 1 / 30, false);
+    const step = () => (D.R ? D.R.M.id + '#' + D.R.i : null);
+    const kicki = () => { t.teleport(D.KICKI.x + 1.5, D.KICKI.z); run(0.3); t.press('KeyE'); };
+    const behind = (o, h, d) => ({ x: o.x - Math.sin(h) * d, z: o.z - Math.cos(h) * d });
+    // (started already, unless this test runs on its own)
+    if (!started) t.start();
+    t.hold(true);
+    if (JOBS.job) t.press('KeyJ');
+    // (out on the water on chapter 2's jet ski: in to a berth first, where you can step ashore)
+    if (driving && driving.M.boat) { const b = findBerth(driving.M, 600, -680, 80); Object.assign(driving, { x: b.x, z: b.z, h: b.h, vx: 0, vz: 0 }); run(0.3); }
+    if (t.state().driving) t.press('KeyE');
+    if (t.wanted) t.endChase(false);
+    D.done = 10;
+    // (chapters 1 and 2 done: their ten count towards the trophy, also when this test runs on its own)
+    for (const M of D.MISSIONS.slice(0, 10)) PROGRESS.did('story', M.id, true);
+    // the helper and the meeting on the pavement, the roofs by the warehouse well under where they hear you, and
+    // Globen's roof one to land on
+    s.places = {
+      walk: walkable(D.BIRGER.x, D.BIRGER.z) && walkable(D.STUREPLAN.x, D.STUREPLAN.z),
+      roofs: Math.max(...D.SHOTS.map((p) => FLY.heightAt(p.x, p.z, 30))) < D.LOW - 10,
+      globen: FLY.heightAt(D.GLOBEN.x, D.GLOBEN.z, 3)
+    };
+    kicki();
+    s.offer = [document.getElementById('stKicker').textContent, document.getElementById('stTitle').textContent];
+    document.getElementById('stGo').click();
+    // 11: at night, the police car, and Mästaren's car from Centralbron kept up with until he runs for it
+    s.night = Math.round(DAYNIGHT.hour * 2) / 2;
+    let pc = D.R.police; t.teleport(pc.x + 2.5, pc.z); run(0.3); t.press('KeyE'); run(0.3);
+    s.m11 = [driving && driving.M.id, step()];
+    driving.x = D.CENTRALBRON.x; driving.z = D.CENTRALBRON.z - 120; driving.vx = driving.vz = 0; run(0.5);
+    const bmw = D.R.car;
+    s.m11.push(step(), bmw && bmw.M.id, !!(bmw && bmw.getaway));
+    for (let i = 0; i < 45 && D.R && D.R.i === 2; i++) { const q = behind(bmw, Math.atan2(bmw.vx, bmw.vz) || bmw.h, 25); driving.x = q.x; driving.z = q.z; driving.vx = bmw.vx; driving.vz = bmw.vz; run(1); }
+    s.m11.push(step(), D.R && D.R.boss.ai.state, !!bmw.occupant);
+    driving.vx = driving.vz = 0; run(0.3); t.press('KeyE'); run(0.3);
+    const door = exitSpot(bmw) || { x: bmw.x + 2.5, z: bmw.z }; t.teleport(door.x, door.z); run(0.3);
+    s.m11.push(S.done);
+    D.close(false);
+    // 12: the helper followed on foot to Stureplan, not too close, and the meeting photographed
+    kicki(); document.getElementById('stGo').click();
+    const helper = D.R.helper, contact = D.R.contact;
+    t.teleport(helper.x + 20, helper.z); run(0.3);
+    s.m12 = [step(), helper.ai.state];
+    for (let i = 0; i < 400 && D.R && D.R.i === 1; i++) { const q = behind(helper, helper.rot, 15); t.teleport(q.x, q.z); run(0.5); }
+    s.m12.push(step(), Math.hypot(helper.x - contact.x, helper.z - contact.z) < 2.5);
+    player.vx = player.vz = 0; run(4);
+    s.m12.push(S.done);
+    D.close(false);
+    // 13: the helicopter over the warehouse: too low and they hear it, and three photos from high enough
+    kicki(); document.getElementById('stGo').click();
+    const P = FLY.debug.PAD, H = FLY.heli;
+    FLY.debug.home(); t.teleport(P.x + 3, P.z); run(0.3); t.press('KeyE'); run(0.3);
+    s.m13 = [FLY.on, step()];
+    const hover = (x, z, y) => { H.x = x; H.z = z; H.y = y; H.vx = H.vy = H.vz = 0; H.ground = false; };
+    hover(D.SHOTS[0].x, D.SHOTS[0].z, D.LOW - 10); run(1);
+    s.m13.push(/För lågt/.test(D.R.note));
+    for (const p of D.SHOTS) for (let i = 0; i < 8 && D.R && D.R.i === 1; i++) { hover(p.x, p.z, D.LOW + 15); run(0.5); }
+    s.m13.push(S.done);
+    D.close(false);
+    hover(P.x, P.z, 0); H.ground = true; run(0.5); t.press('KeyE'); run(0.5);
+    // 14: in the evening, the police car to the warehouse, and the gang's van stopped on its way to Globen
+    kicki(); document.getElementById('stGo').click();
+    s.evening = Math.round(DAYNIGHT.hour);
+    pc = D.R.police; t.teleport(pc.x + 2.5, pc.z); run(0.3); t.press('KeyE'); run(0.3);
+    s.m14 = [driving && driving.M.id, step()];
+    const n = nearestNode(D.LAGER.x - 150, D.LAGER.z); driving.x = nodes[n].x; driving.z = nodes[n].z; driving.vx = driving.vz = 0; run(0.5);
+    const van = D.R.van;
+    s.m14.push(step(), !!van.getaway);
+    run(4);
+    s.m14.push(Math.hypot(van.vx, van.vz) > 3);
+    van.dead = true; run(0.5);
+    s.m14.push(S.done);
+    D.close(false);
+    driving.vx = driving.vz = 0; run(0.3); t.press('KeyE'); run(0.3);
+    // 15: the helicopter onto Globen's roof, his McLaren followed from the air, and Mästaren run down on foot
+    kicki(); document.getElementById('stGo').click();
+    FLY.debug.home(); t.teleport(P.x + 3, P.z); run(0.3); t.press('KeyE'); run(0.3);
+    s.m15 = [FLY.on, step()];
+    hover(D.GLOBEN.x, D.GLOBEN.z, 86); H.vy = -1; run(1);
+    const mc = D.R.car;
+    s.m15.push(H.ground, step(), mc && mc.M.id, !!(mc && mc.getaway));
+    for (let i = 0; i < 40 && D.R && D.R.i === 2; i++) { hover(mc.x + 10, mc.z, 50); run(1); }
+    const boss = D.R.boss;
+    s.m15.push(step(), boss && boss.ai.state);
+    const land = behind(mc, mc.h, 14); hover(land.x, land.z, 0); H.ground = true; run(0.3); t.press('KeyE'); run(0.3);
+    s.m15.push(FLY.on);
+    t.teleport(boss.x + 1, boss.z); run(0.3);
+    s.m15.push(S.done, !!boss.cuffed, document.getElementById('stTitle').textContent, document.getElementById('stPay').textContent);
+    D.close(false);
+    s.trophy = !!PROGRESS.debug.S.got.mastaren;
+    // Kicki's thanks, and the job board says the story is done
+    kicki(); s.thanks = document.getElementById('stLines').textContent; D.close(false);
+    t.press('KeyJ'); s.board = document.getElementById('jobsStoryText').textContent; JOBS.board.close();
+    s.bad = t.state().bad;
+    t.hold(false);
+    return s;
+  });
+  expect(r.places).toEqual({ walk: true, roofs: true, globen: 85 });
+  expect(r.offer).toEqual(['Kapitel 3: Mästarens hämnd · uppdrag 1 av 5', 'Rymningen']);
+  expect(r.night).toBe(1.5);
+  expect(r.m11).toEqual(['polis', 'rymning#1', 'rymning#2', 'm4', true, 'rymning#3', 'flee', false, 11]);
+  expect(r.m12).toEqual(['telefon#1', 'goto', 'telefon#2', true, 12]);
+  expect(r.m13).toEqual([true, 'lager#1', true, 13]);
+  expect(r.evening).toBe(22);
+  expect(r.m14).toEqual(['polis', 'fallan#1', 'fallan#2', true, true, 14]);
+  expect(r.m15).toEqual([true, 'globen#1', true, 'globen#2', 'mclaren720', true, 'globen#3', 'flee', false, 15, true, 'Finalen på Globen: klart!', expect.stringMatching(/klarat hela storyn/)]);
+  expect(r.trophy).toBe(true);
+  expect(r.thanks).toMatch(/Mästaren sitter inlåst/);
+  expect(r.board).toMatch(/Mästarens hämnd/);
   expect(r.bad).toEqual([]);
   expect(errors).toEqual([]);
 });

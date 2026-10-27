@@ -230,6 +230,8 @@
     // a fare or a bus passenger walking up to the car to get in
     if (p.ai.state === 'board') { const c = p.ai.car, d = c.M.bus ? doorSpot(c, -1, false) : doorNear(c, p.x, p.z, true); return seek(p, walkWaypoint(p.ai.nav || (p.ai.nav = {}), p.x, p.z, d.x, d.z, dt), 2.6, 0.2); }
     if (p.ai.state === 'idle') { if (p.ai.face !== undefined) p.rot = lerpAngle(p.rot, p.ai.face, 0.1); return { mx: 0, mz: 0, speed: 0, jump: false }; }
+    // someone of the story's own (STORY) walking to a place, the way the police on foot find theirs
+    if (p.ai.state === 'goto') return seek(p, walkWaypoint(p.ai.nav || (p.ai.nav = {}), p.x, p.z, p.ai.x, p.ai.z, dt), p.ai.speed, 0.4);
     const ai = p.ai, out = { mx: 0, mz: 0, speed: 0, jump: false };
     if (ai.dodgeT > 0) { ai.dodgeT -= dt; out.mx = ai.dx; out.mz = ai.dz; out.speed = 6.5; return out; }
     if (p.grounded && p.knockT <= 0) {
