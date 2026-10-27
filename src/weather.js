@@ -224,6 +224,13 @@
         nextT = k === CLEAR ? 360 + Math.random() * 480 : 180 + Math.random() * 180; thunderT = 4 + Math.random() * 6;
         wetU.value = wet; snowU.value = cover;
       },
+      // a weather at once, already falling hard, that stays a good while (the story's stormy night); in the rain, thunder soon
+      force(k) {
+        kind = k; if (k) falls = k;
+        amount = k ? 1 : 0; wet = k === RAIN ? 0.8 : 0; cover = k === SNOW ? 0.7 : 0;
+        nextT = 600; thunderT = 3;
+        wetU.value = wet; snowU.value = cover;
+      },
       // the weather from the one who has the room (MP's 'weather' event, and when you join)
       heard(fromHost, w) { if (fromHost && (w === CLEAR || w === RAIN || w === SNOW)) start(w, false); },
       // for the tests

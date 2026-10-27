@@ -143,6 +143,8 @@
     return {
       update, use, bail, view,
       get on() { return !!R; }, get riding() { return !!R && R.phase === 'ride'; },
+      // which one you are on ('wheel', 'tower', 'carousel', 'coaster'), or null
+      get ride() { return R ? R.r.id : null; },
       prompt() { const r = here(); return r ? 'Åk ' + r.name + ' (' + PRICE + ' kr)' : R && R.phase === 'queue' ? 'Gå ur kön' : null; },
       // for the tests
       debug: { get R() { return R; }, RIDE_LIST, station }

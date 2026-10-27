@@ -9,12 +9,16 @@
   // A mission is a list of steps, each with a text for the box at the top of the screen, a target (for the pillar of
   // light and the GPS) and a tick that says when it is done (true) or failed (a reason). Missions three to five follow
   // straight on from each other. How far you have come is kept in localStorage (gubbe-story), and on the account.
+  // Chapter 2, Kungakronan, follows on: the boss worked for someone called Mästaren, who means to steal the crown from
+  // Skattkammaren under the palace. Take the tunnelbana to a tipster at Hötorget, find his helper among the tourists at
+  // the changing of the guard and run them down, spot his chauffeur from the Ferris wheel at Gröna Lund and soak his
+  // phone with a water balloon, follow his jeep from the helicopter on a stormy night, and catch his jet ski.
   // Nothing is built until it is needed (Kicki when you first come near the station), so the scene at load stays as it
   // was (see WAYPOINT for why).
   const STORY = (() => {
-    const KEY = 'gubbe-story', COL = '#ef3e5c', HEX = 0xef3e5c, N = 5;
+    const KEY = 'gubbe-story', COL = '#ef3e5c', HEX = 0xef3e5c;
     let done = 0;
-    try { done = clamp(Math.floor(Number(JSON.parse(localStorage.getItem(KEY) || '{}').done) || 0), 0, N); } catch (e) { /* a private window */ }
+    try { done = Math.max(0, Math.floor(Number(JSON.parse(localStorage.getItem(KEY) || '{}').done) || 0)); } catch (e) { /* a private window */ }
     const save = () => { try { localStorage.setItem(KEY, JSON.stringify({ done })); } catch (e) { /* kept for this visit */ } };
     const fmtDist = (m) => (m < 1000 ? Math.round(m / 10) * 10 + ' m' : (m / 1000).toFixed(1).replace('.', ',') + ' km');
     const fmtClock = (t) => Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0');
@@ -32,6 +36,14 @@
     const BOAT_PATH = [[440, -245], [700, -220], [960, -120], [980, 150], [1010, 420], [1150, 640], [1500, 690], [1850, 650], [2200, 560], [2550, 470], [2750, 420]];
     // (at the foot of the tower on the side towards Gärdet, so that you jump off that way)
     const BOSS = { x: 2332, z: -1098 }, TOWER = (() => { const dx = BOSS.x - KAKNAS.x, dz = BOSS.z - KAKNAS.z, d = Math.hypot(dx, dz); return { x: KAKNAS.x + (dx / d) * 9, z: KAKNAS.z + (dz / d) * 9 }; })();
+    // chapter 2: the tunnelbana from Gamla stan to Hötorget, where the tipster waits on the square; the tourists on Yttre
+    // borggården; the Ferris wheel at Gröna Lund and the chauffeur's van on Djurgårdsvägen; the palace, and Slottsbacken
+    // where Mästaren's jeep stands; the police jet ski at Strandvägen, and the way his jet ski takes out along
+    // Djurgårdsbrunnsviken (all water: a test checks)
+    const station = (name) => { const L = mapLabels.find((l) => l[3] === 'tbana' && l[0] === name); return { x: L[1], z: L[2] }; };
+    const GAMLA = station('Gamla stan'), HOTORGET = station('Hötorget'), SQUARE = { x: -461, z: -918 }, CROWD = { x: -79, z: -6 }, GUARD = { x: -79, z: 30 };
+    const WHEEL = { x: TIVOLI.WHEEL.x, z: TIVOLI.WHEEL.z }, VAN = { x: 1385, z: 560 }, PALACE = { x: 0, z: 0 }, SLOTTSBACKEN = { x: 126, z: 5 };
+    const JET_PATH = [[640, -585], [800, -560], [1068, -522], [1300, -525], [1500, -538], [1800, -560], [2000, -580], [2300, -615], [2500, -645], [2640, -662], [2740, -666]], JET_QUAY = { x: 600, z: -680 };
     // a free place at the kerb of the street nearest to (x, z), facing along it
     function kerbSpot(M, x, z) {
       const ne = nearestEdge(x, z, (e) => e.drive);
@@ -43,6 +55,20 @@
         if (spotFree(M, px, pz, h) && !STATION.inside(px, pz)) return { x: px, z: pz, h };
       }
       return null;
+    }
+    // a free place to stand near (x, z), on the ground
+    function footSpot(x, z) {
+      for (let r = 0; r <= 20; r += 1.5) for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * TAU, px = x + Math.sin(a) * r, pz = z + Math.cos(a) * r;
+        if (walkable(px, pz) && personFits(px, pz) && !blockedAt(px, pz, 0.5) && FLY.heightAt(px, pz, 0.5) === 0) return { x: px, z: pz };
+      }
+      return { x, z };
+    }
+    // someone of the story's own, standing where they are put (facing face), kept until the mission is over
+    function person(R, id, at, face) {
+      const p = makePerson(id, at.x, at.z, { state: 'idle', face, dodgeT: 0 });
+      p.keep = true; p.rot = face; R.people.push(p);
+      return p;
     }
     // a car of the story's own, standing still where it is put, kept until the mission is over
     function place(R, M, color, at) {
@@ -58,6 +84,28 @@
       c.bot = { from: 0, to: 0, next: 0, phase: 'edge', t: 0, passT: 0, waitT: 0, ignoreT: 0, revT: 0, stuckT: 0, stuckTotal: 0, honkT: 0, turnAge: 0, cruise, goal };
       c.getaway = !!getaway;
       resyncBot(c);
+    }
+    // a getaway car runs from you: now and then somewhere new to make for, well away from you (as the robber in JOBS)
+    function flee(R, r, dt) {
+      if (!r.bot || (R.fleeT -= dt) > 0) return;
+      R.fleeT = 3;
+      const p = here(), ax = r.x - p.x, az = r.z - p.z, al = Math.hypot(ax, az) || 1;
+      let best = -1, bv = -Infinity;
+      for (let i = 0; i < 40; i++) {
+        const n = Math.floor(Math.random() * nodes.length), Nd = nodes[n];
+        if (!Nd.nb.length) continue;
+        const dd = Math.hypot(Nd.x - r.x, Nd.z - r.z), v = ((Nd.x - r.x) * ax + (Nd.z - r.z) * az) / al - Math.abs(dd - 450) * 0.3;
+        if (dd > 200 && v > bv) { bv = v; best = n; }
+      }
+      if (best >= 0) { r.bot.goal = { node: best, x: nodes[best].x, z: nodes[best].z }; if (r.bot.phase === 'edge') r.bot.next = chooseNext(r.bot.from, r.bot.to, r.bot.goal, true); }
+    }
+    // a getaway boat or jet ski (R.boat) caught: you beside it (within near metres) in a boat of your own for 3 s
+    function chase(R, dt, near, why) {
+      const d = driving && driving.M.boat ? dist(driving, R.boat) : Infinity;
+      R.held = d < near ? R.held + dt : Math.max(0, R.held - dt);
+      R.note = R.held > 0 ? 'Håll dig bredvid …' : d < Infinity ? fmtDist(d) : 'Kliv i en båt!';
+      if (R.held >= 3) { R.go = false; R.v = 0; return true; }
+      return R.s < 0 ? why : false;
     }
 
     /* ---------- the missions ---------- */
@@ -131,7 +179,7 @@
         ]
       },
       {
-        id: 'larm', title: 'Larmet', kr: 3000, xp: 300, night: true,
+        id: 'larm', title: 'Larmet', kr: 3000, xp: 300, night: 2,
         intro: [
           K('Det är natt, och larmet har just gått på Nationalmuseum! Gänget är där inne.'),
           K('Ta polisbilen utanför stationen och kör dit. Slå på blåljuset med L. Försöker de fly, så stoppar du deras bil: kör ikapp och ställ dig tätt intill den tills den står still.')
@@ -157,19 +205,7 @@
             tick(R, dt) {
               const r = R.car, c = driving;
               if (!cars.includes(r)) return 'Gänget kom undan.';
-              // the gang runs from you: now and then somewhere new to make for, well away from you (as the robber in JOBS)
-              if (r.bot && (R.fleeT -= dt) <= 0) {
-                R.fleeT = 3;
-                const p = here(), ax = r.x - p.x, az = r.z - p.z, al = Math.hypot(ax, az) || 1;
-                let best = -1, bv = -Infinity;
-                for (let i = 0; i < 40; i++) {
-                  const n = Math.floor(Math.random() * nodes.length), Nd = nodes[n];
-                  if (!Nd.nb.length) continue;
-                  const dd = Math.hypot(Nd.x - r.x, Nd.z - r.z), v = ((Nd.x - r.x) * ax + (Nd.z - r.z) * az) / al - Math.abs(dd - 450) * 0.3;
-                  if (dd > 200 && v > bv) { bv = v; best = n; }
-                }
-                if (best >= 0) { r.bot.goal = { node: best, x: nodes[best].x, z: nodes[best].z }; if (r.bot.phase === 'edge') r.bot.next = chooseNext(r.bot.from, r.bot.to, r.bot.goal, true); }
-              }
+              flee(R, r, dt);
               const close = c && dist(r, c) < (r.M.L + c.M.L) / 2 + 3;
               R.held = speedOf(r) < 1.5 && close ? R.held + dt : 0;
               R.note = R.held > 0 ? 'Håll kvar …' : fmtDist(dist(here(), r));
@@ -194,7 +230,7 @@
           R.boat = place(R, MODEL.anytec, 0x1b1d22, { x: x0, z: z0, h: Math.atan2(x1 - x0, z1 - z0) });
           if (!R.police || !R.boat) return false;
           setOccupant(R.boat, makeIdentity());
-          R.seg = 1; R.s = 0; R.v = 0; R.go = false;
+          Object.assign(R, { path: BOAT_PATH, top: 16, seg: 1, s: 0, v: 0, go: false });
           return true;
         },
         steps: [
@@ -203,13 +239,7 @@
             text: 'Kör ikapp tjuvarnas båt och lägg dig bredvid den',
             at: (R) => R.boat,
             start(R) { R.go = true; toast('Tjuvarnas båt lägger ut! Kör ikapp den.'); },
-            tick(R, dt) {
-              const d = driving && driving.M.boat ? dist(driving, R.boat) : Infinity;
-              R.held = d < 10 ? R.held + dt : Math.max(0, R.held - dt);
-              R.note = R.held > 0 ? 'Håll dig bredvid …' : d < Infinity ? fmtDist(d) : 'Kliv i en båt!';
-              if (R.held >= 3) { R.go = false; R.v = 0; return true; }
-              return R.s < 0 ? 'Tjuvarnas båt kom undan.' : false;
-            }
+            tick: (R, dt) => chase(R, dt, 10, 'Tjuvarnas båt kom undan.')
           }
         ]
       },
@@ -240,19 +270,203 @@
             }
           }
         ]
+      },
+
+      /* ---------- chapter 2: Kungakronan ---------- */
+      {
+        id: 'tipsare', title: 'Tipsaren', kr: 2000, xp: 200,
+        intro: [
+          K('Hej igen, hjälten! Bossen vi grep på Gärdet har börjat prata. Hen jobbade åt någon som bara kallas Mästaren.'),
+          K('Mästaren planerar något ännu större: att stjäla kungakronan från Skattkammaren under slottet. En tipsare vill träffa dig vid Hötorget, men Mästarens folk håller koll på gatorna.'),
+          K('Ta tunnelbanan från Gamla stan till Hötorget, så syns du inte. Tipsaren har en gul mössa.')
+        ],
+        outro: [K('Tipsaren berättade att Mästarens medhjälpare spanar på vaktavlösningen vid slottet. Hen har grön jacka och röd keps. Kom till mig när du vill fortsätta.')],
+        start(R) { R.tip = person(R, makeIdentity({ shirt: 0x3a4a6b, hat: 'beanie', hatColor: 0xf2c200 }), footSpot(SQUARE.x, SQUARE.z), 0); return true; },
+        steps: [
+          {
+            text: 'Åk tunnelbana från Gamla stan till Hötorget', how: 'road', at: (R) => (METRO.riding ? null : R.rode ? HOTORGET : GAMLA),
+            tick(R) {
+              if (METRO.riding) { R.rode = true; R.note = 'Tåget går …'; return false; }
+              if (!R.rode) return false;
+              if (dist(player, HOTORGET) < 40) return true;
+              R.rode = false; R.note = 'Fel station! Åk till Hötorget.';
+              return false;
+            }
+          },
+          { text: 'Hitta tipsaren med den gula mössan', at: (R) => R.tip, tick: (R) => !driving && dist(player, R.tip) < 2.5 }
+        ]
+      },
+      {
+        id: 'vakt', title: 'Vaktavlösningen', kr: 3000, xp: 300,
+        intro: [
+          K('Mästarens medhjälpare spanar på vaktavlösningen vid slottet, sa tipsaren. Hen har grön jacka och röd keps.'),
+          K('Gå till Yttre borggården och leta upp hen bland turisterna. Gå fram till rätt person. Hen kommer säkert att springa, så spring ikapp med Shift!')
+        ],
+        outro: [K('Bra sprungit! Medhjälparen hade en lapp i fickan: ”Chauffören väntar vid Gröna Lund. Signal från pariserhjulet.” Kom till mig, så letar vi upp chauffören.')],
+        start(R) {
+          // six people watching the guard, one of them the helper (green jacket, red cap: nobody else wears either)
+          const looks = [{ shirt: 0xc8102e }, { shirt: 0x1d3f8f, hat: 'beanie', hatColor: 0xffffff }, { shirt: 0xf2c200 }, { shirt: 0x6b3fa0, hat: 'cap', hatColor: 0x1b1d22 }, { shirt: 0xe46f2a, hat: 'beanie', hatColor: 0x1d3f8f }];
+          const at = Math.floor(Math.random() * 6);
+          R.crowd = [];
+          for (let i = 0; i < 6; i++) {
+            const a = (i / 6) * TAU + 0.3, s = footSpot(CROWD.x + Math.sin(a) * 7, CROWD.z + Math.cos(a) * 6);
+            const p = person(R, makeIdentity(i === at ? { shirt: 0x2e8b3d, hat: 'cap', hatColor: 0xc8102e } : looks[i % looks.length]), s, Math.atan2(GUARD.x - s.x, GUARD.z - s.z));
+            R.crowd.push(p);
+            if (i === at) R.sus = p;
+          }
+          return true;
+        },
+        steps: [
+          { text: 'Gå till Yttre borggården vid slottet', how: 'road', at: () => CROWD, tick: () => dist(here(), CROWD) < 25 },
+          {
+            text: 'Leta upp personen med grön jacka och röd keps', at: () => CROWD,
+            tick(R) {
+              if (driving || FLY.on) { R.note = 'Kliv ur och gå till fots'; return false; }
+              R.note = '';
+              // (the helper sees you coming a few metres off, and runs)
+              for (const p of R.crowd) {
+                const d = dist(player, p);
+                if (p === R.sus && d < 4.5) { p.ai = { state: 'flee', t: 999, dodgeT: 0 }; toast('Hen såg dig och springer! Spring ikapp med Shift!'); return true; }
+                if (p !== R.sus && d < 2.4 && !p.told) { p.told = true; toast('Det där är en turist. Leta vidare!'); }
+              }
+              return false;
+            }
+          },
+          {
+            text: 'Spring ikapp medhjälparen (Shift)', at: (R) => R.sus, limit: 60,
+            tick(R) {
+              const d = dist(player, R.sus);
+              R.note = fmtDist(d);
+              if (d > 90) return 'Medhjälparen sprang ifrån dig.';
+              if (d > 1.7 || driving || R.t < 1) return false;
+              R.sus.ai = { state: 'idle', face: R.sus.rot, dodgeT: 0 }; R.sus.cuffed = true;
+              return true;
+            }
+          }
+        ]
+      },
+      {
+        id: 'hjulet', title: 'Pariserhjulet', kr: 3500, xp: 350,
+        intro: [
+          K('Mästarens chaufför väntar någonstans vid Gröna Lund, men vi vet inte var. Åk pariserhjulet, så ser du hela området från toppen.'),
+          K('När du har hittat honom får han inte hinna ringa Mästaren! Jag ger dig några vattenballonger. En blöt telefon fungerar inte.')
+        ],
+        outro: [K('Plask! Chaufförens telefon dog, och kollegorna tog hand om honom. I bilen låg en plan: Mästaren bryter sig in i Skattkammaren i natt, mitt i ovädret. Kom till mig när du är redo.')],
+        start(R) {
+          R.van = place(R, MODEL.skapbil, MODEL.skapbil.colors[0], kerbSpot(MODEL.skapbil, VAN.x, VAN.z));
+          if (!R.van) return false;
+          const s = exitSpot(R.van) || footSpot(R.van.x, R.van.z);
+          R.driver = person(R, makeIdentity({ shirt: 0x1b1d22, pants: 0x2b2b2e, hat: 'cap', hatColor: 0x1b1d22 }), s, R.van.h + Math.PI / 2);
+          return true;
+        },
+        steps: [
+          { text: 'Åk pariserhjulet på Gröna Lund', how: 'road', at: () => WHEEL, tick: () => RIDES.riding && RIDES.ride === 'wheel' },
+          {
+            text: 'Titta ut över området från toppen av hjulet', at: () => null,
+            tick(R, dt) {
+              if (!(RIDES.riding && RIDES.ride === 'wheel')) { R.note = 'Åk hjulet igen'; return false; }
+              R.spin += dt; R.note = '';
+              if (R.spin < 8) return false;
+              toast('Där! Chauffören står vid en vit skåpbil på Djurgårdsvägen.');
+              return true;
+            }
+          },
+          {
+            text: 'Blöt ner chauffören med en vattenballong (F eller klick)', at: (R) => R.driver, limit: 150,
+            start() { SPLASH.give(5); toast('Kicki: Här har du fem vattenballonger. Kasta med F eller ett klick!'); },
+            tick(R) {
+              if (R.driver.wetT > 0) { R.driver.cuffed = true; return true; }
+              if (!SPLASH.count) { SPLASH.give(5); toast('Kicki: Här har du fem till!'); }
+              R.note = fmtDist(dist(here(), R.driver)) + ' · ' + SPLASH.count + ' ballonger';
+              return false;
+            }
+          }
+        ]
+      },
+      {
+        id: 'storm', title: 'Stormen', kr: 5000, xp: 500, night: 23.5, storm: true,
+        intro: [
+          K('Det är natt och storm, och larmet har gått i Skattkammaren under slottet! Mästaren har kronan och kommer att fly i bil.'),
+          K('I det här vädret ser vi honom bäst uppifrån. Ta helikoptern, flyg till slottet och följ hans bil från luften, så att polisbilarna hittar honom.')
+        ],
+        outro: [RADIO('Polisen har spärrat broarna, och Mästaren lämnade bilen vid Strandvägen. Men han flyr vidare på en vattenskoter!')],
+        steps: [
+          { text: 'Kliv in i helikoptern', how: 'road', at: () => FLY.heli, tick: () => FLY.on },
+          {
+            text: 'Flyg till Kungliga slottet', at: () => PALACE,
+            tick(R) {
+              if (!FLY.on || dist(FLY.heli, PALACE) > 120 || FLY.heli.y < 15) return false;
+              R.car = place(R, MODEL.g63, 0x15161a, kerbSpot(MODEL.g63, SLOTTSBACKEN.x, SLOTTSBACKEN.z));
+              if (!R.car) return false;
+              drive(R.car, null, 19, true); R.car.bot.turnV = 9; R.fleeT = 0;
+              toast('Där kör Mästaren, i den svarta jeepen! Följ honom.');
+              return true;
+            }
+          },
+          {
+            text: 'Följ Mästarens jeep från luften', at: (R) => R.car,
+            tick(R, dt) {
+              const r = R.car;
+              if (!cars.includes(r)) return 'Mästaren försvann i stormen.';
+              flee(R, r, dt);
+              const d = FLY.on ? dist(FLY.heli, r) : Infinity;
+              if (d < 90) R.held += dt;
+              R.lost = d > 220 ? R.lost + dt : 0;
+              R.note = 'Följ honom ' + Math.min(45, Math.floor(R.held)) + ' av 45 s' + (d >= 90 ? ' · flyg närmare!' : '');
+              if (R.lost > 8) return 'Mästaren försvann i stormen.';
+              if (R.held < 45) return false;
+              r.bot = null; r.getaway = false;
+              return true;
+            }
+          }
+        ]
+      },
+      {
+        id: 'jet', title: 'Vattenskotern', kr: 20000, xp: 1000, chain: true,
+        intro: [RADIO('Mästaren har kronan i en väska och flyr på vattenskoter mot Djurgårdsbrunnsviken! Landa och hoppa på polisens vattenskoter vid kajen på Strandvägen. Kör ikapp honom och lägg dig bredvid tills han ger upp.')],
+        outro: [
+          K('Mästaren gav upp, och kungakronan ligger tryggt kvar i Skattkammaren. Kungen själv har ringt och vill tacka dig!'),
+          K('Först Grevinnan och nu Mästaren. Stockholm har tur som har dig!')
+        ],
+        start(R) {
+          R.police = place(R, MODEL.polisjet, MODEL.polisjet.colors[0], findBerth(MODEL.polisjet, JET_QUAY.x, JET_QUAY.z, 80));
+          const [x0, z0] = JET_PATH[0], [x1, z1] = JET_PATH[1];
+          R.boat = place(R, MODEL.jetski, MODEL.jetski.colors[0], { x: x0, z: z0, h: Math.atan2(x1 - x0, z1 - z0) });
+          if (!R.police || !R.boat) return false;
+          setOccupant(R.boat, makeIdentity({ shirt: 0x1b1d22 }));
+          Object.assign(R, { path: JET_PATH, top: 21, seg: 1, s: 0, v: 0, go: false });
+          return true;
+        },
+        steps: [
+          { text: 'Hoppa på polisens vattenskoter vid Strandvägen', how: 'road', at: (R) => R.police, tick: () => !!driving && !!driving.M.boat },
+          {
+            text: 'Kör ikapp Mästaren och lägg dig bredvid honom', at: (R) => R.boat,
+            start(R) { R.go = true; toast('Mästaren gasar iväg! Kör ikapp honom.'); },
+            tick: (R, dt) => chase(R, dt, 8, 'Mästaren kom undan.')
+          }
+        ]
       }
     ];
+    const N = MISSIONS.length;
+    done = Math.min(done, N);
+    // the chapters: their names, and which missions are theirs
+    const CHAPTERS = [{ title: 'Kuppen på Nationalmuseum', first: 0, n: 5 }, { title: 'Kungakronan', first: 5, n: 5 }];
+    const chapterOf = (k) => { let i = CHAPTERS.length - 1; while (i > 0 && k < CHAPTERS[i].first) i--; return Object.assign({ i }, CHAPTERS[i]); };
+    const inChapter = (k) => { const c = chapterOf(k); return 'uppdrag ' + (k - c.first + 1) + ' av ' + c.n; };
 
     /* ---------- a mission on ---------- */
     // R: the mission on now: k (which), M, i (the step), S (it), t (time on it), own (its cars), people, and what the
     // steps keep for themselves
     let R = null, beam = null, route = null, routeT = 0, quitT = 0;
-    function newRun(k) { return { k, M: MISSIONS[k], i: -1, S: null, t: 0, own: [], people: [], held: 0, sus: 0, lost: 0, shots: 0, clicks: 0, note: '' }; }
+    function newRun(k) { return { k, M: MISSIONS[k], i: -1, S: null, t: 0, own: [], people: [], held: 0, sus: 0, lost: 0, shots: 0, clicks: 0, spin: 0, rode: false, path: null, note: '' }; }
     function begin(k) {
       if (R) cleanup();
       if (JOBS.job) JOBS.key();
       R = newRun(k);
-      if (R.M.night && !(MP.inRoom && !MP.host)) DAYNIGHT.set(2);
+      // (the time and the weather: not as a friend in someone else's room, where theirs count)
+      const own = !(MP.inRoom && !MP.host);
+      if (R.M.night && own) DAYNIGHT.set(R.M.night);
+      if (R.M.storm && own) WEATHER.force(1);
       if (wanted) endChase(false);
       if (R.M.start && !R.M.start(R)) { cleanup(); toast('Det fanns ingen plats för uppdraget just nu. Försök igen om en stund.'); return; }
       next();
@@ -303,13 +517,14 @@
     let open = false, act = null, alt = null;
     function sign(kind, k, why) {
       const M = MISSIONS[k], nextM = MISSIONS[k + 1], chained = kind === 'done' && nextM && nextM.chain;
-      E.kicker.textContent = 'Kuppen på Nationalmuseum · Uppdrag ' + (k + 1) + ' av ' + N;
+      const C = chapterOf(k), last = k === C.first + C.n - 1;
+      E.kicker.textContent = 'Kapitel ' + (C.i + 1) + ': ' + C.title + ' · ' + inChapter(k);
       E.title.textContent = kind === 'fail' ? M.title + ': det gick inte' : kind === 'done' ? M.title + ': klart!' : kind === 'end' ? 'Tack!' : M.title;
-      const lines = kind === 'offer' ? M.intro : kind === 'done' ? M.outro.concat(chained ? nextM.intro : []) : kind === 'end' ? [K('Tack igen för hjälpen med kuppen! Tack vare dig hänger Rembrandten kvar på museet. Det är lugnt i stan nu.')] : [{ who: '', text: why }];
+      const lines = kind === 'offer' ? M.intro : kind === 'done' ? M.outro.concat(chained ? nextM.intro : []) : kind === 'end' ? [K('Tack igen för all hjälp! Tack vare dig hänger Rembrandten kvar på museet och kungakronan ligger kvar i Skattkammaren. Det är lugnt i stan nu.')] : [{ who: '', text: why }];
       E.lines.replaceChildren(...lines.map((l) => { const p = document.createElement('p'); if (l.who) { const b = document.createElement('b'); b.textContent = l.who + ': '; p.append(b); } p.append(l.text); return p; }));
-      E.pay.textContent = kind === 'offer' ? 'Belöning: ' + fmtKr(M.kr) + ' och ' + M.xp + ' XP' : kind === 'done' ? '+' + fmtKr(M.kr) + ' och ' + M.xp + ' XP' + (k === N - 1 ? '. Du har klarat hela storyn!' : '') : '';
+      E.pay.textContent = kind === 'offer' ? 'Belöning: ' + fmtKr(M.kr) + ' och ' + M.xp + ' XP' : kind === 'done' ? '+' + fmtKr(M.kr) + ' och ' + M.xp + ' XP' + (k === N - 1 ? '. Du har klarat hela storyn!' : last ? '. Du har klarat kapitel ' + (C.i + 1) + '!' : '') : '';
       E.pay.hidden = !E.pay.textContent;
-      if (kind === 'end') E.kicker.textContent = 'Kuppen på Nationalmuseum · Klar';
+      if (kind === 'end') E.kicker.textContent = 'Storyn · Klar';
       // the buttons: what the yellow one does, and the white one
       const go = kind === 'offer' ? ['Kör!', () => begin(k)] : kind === 'fail' ? ['Försök igen', () => begin(k)] : chained ? ['Kör!', () => begin(k + 1)] : ['Okej', null];
       const no = kind === 'offer' ? 'Inte nu' : kind === 'fail' ? 'Stäng' : chained ? 'Senare' : null;
@@ -351,7 +566,7 @@
       if (key === shown) return;
       shown = key;
       B.title.textContent = R.M.title + ': ' + R.S.text;
-      B.hint.textContent = 'Uppdrag ' + (R.k + 1) + ' av ' + N + (hint ? ' · ' + hint : '');
+      B.hint.textContent = 'Kapitel ' + (chapterOf(R.k).i + 1) + ', ' + inChapter(R.k) + (hint ? ' · ' + hint : '');
       B.clock.textContent = clock;
     }
     function target() {
@@ -377,7 +592,7 @@
         if (R.i + 1 < R.M.steps.length) next(); else { win(); hud(); return; }
       } else if (typeof res === 'string') { fail(res); hud(); return; }
       else if (S.limit && R.t > S.limit) { fail('Tiden tog slut.'); hud(); return; }
-      if (R.M.id === 'bat') moveBoat(dt);
+      if (R.path) moveBoat(dt);
       const T = target();
       if (T) beam.position.set(T.x, 0, T.z); else beam.visible = false;
       // the GPS: along the streets, or (for a boat, the helicopter or the parachute) straight there
@@ -388,20 +603,20 @@
       }
       hud();
     }
-    // the gang's boat out over the water along BOAT_PATH, faster and faster up to 16 m/s; past the end it has got away
-    // (R.s < 0)
+    // the getaway boat (or jet ski) out over the water along R.path, faster and faster up to R.top m/s; past the end it
+    // has got away (R.s < 0)
     function moveBoat(dt) {
-      const b = R.boat;
+      const b = R.boat, P = R.path;
       if (!b || !cars.includes(b)) return;
       if (!R.go) { b.vx = b.vz = 0; return; }
-      R.v = Math.min(16, R.v + 3.5 * dt);
+      R.v = Math.min(R.top, R.v + 3.5 * dt);
       let left = R.v * dt;
-      while (left > 0 && R.seg < BOAT_PATH.length) {
-        const [x0, z0] = BOAT_PATH[R.seg - 1], [x1, z1] = BOAT_PATH[R.seg], L = Math.hypot(x1 - x0, z1 - z0);
+      while (left > 0 && R.seg < P.length) {
+        const [x0, z0] = P[R.seg - 1], [x1, z1] = P[R.seg], L = Math.hypot(x1 - x0, z1 - z0);
         if (R.s + left < L) { R.s += left; left = 0; } else { left -= L - R.s; R.s = 0; R.seg++; }
       }
-      if (R.seg >= BOAT_PATH.length) { R.s = -1; return; }
-      const [x0, z0] = BOAT_PATH[R.seg - 1], [x1, z1] = BOAT_PATH[R.seg], L = Math.hypot(x1 - x0, z1 - z0), ux = (x1 - x0) / L, uz = (z1 - z0) / L;
+      if (R.seg >= P.length) { R.s = -1; return; }
+      const [x0, z0] = P[R.seg - 1], [x1, z1] = P[R.seg], L = Math.hypot(x1 - x0, z1 - z0), ux = (x1 - x0) / L, uz = (z1 - z0) / L;
       b.x = x0 + ux * R.s; b.z = z0 + uz * R.s;
       const h = Math.atan2(ux, uz);
       let dh = h - b.h; while (dh > Math.PI) dh -= TAU; while (dh < -Math.PI) dh += TAU;
@@ -430,7 +645,7 @@
         dot(g, X, Y, 8, 1);
         g.fillStyle = '#ffffff'; g.font = '900 10px Overpass, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('K', X, Y + 0.5);
         g.font = '800 12px Overpass, sans-serif'; g.textAlign = 'left'; g.lineWidth = 3; g.strokeStyle = 'rgba(255,255,255,.9)';
-        g.strokeText('Kicki: uppdrag ' + (done + 1), X + 11, Y); g.fillStyle = '#9b1530'; g.fillText('Kicki: uppdrag ' + (done + 1), X + 11, Y);
+        g.strokeText('Kicki: nytt uppdrag', X + 11, Y); g.fillStyle = '#9b1530'; g.fillText('Kicki: nytt uppdrag', X + 11, Y);
       }
       if (!R) return;
       if (route) { g.save(); g.strokeStyle = 'rgba(239,62,92,.9)'; g.lineWidth = 5; g.lineJoin = g.lineCap = 'round'; g.beginPath(); route.forEach(([x, z], i) => (i ? g.lineTo(toX(x), toY(z)) : g.moveTo(toX(x), toY(z)))); g.stroke(); g.restore(); }
@@ -460,8 +675,8 @@
         return true;
       },
       // for the job board: where you are in the story
-      board() { return { done, n: N, next: done < N ? MISSIONS[done].title : null, at: KICKI }; },
+      board() { return { done, n: N, next: done < N ? 'Kapitel ' + (chapterOf(done).i + 1) + ', ' + chapterOf(done).title + ', ' + inChapter(done) + ': ' + MISSIONS[done].title : null, at: KICKI }; },
       // for the tests
-      debug: { MISSIONS, BOAT_PATH, BOSS, TOWER, KICKI, MUSEUM, HIDEOUT, begin, sign, get R() { return R; }, get kicki() { return kicki; }, set done(v) { done = v; save(); }, close }
+      debug: { MISSIONS, BOAT_PATH, BOSS, TOWER, KICKI, MUSEUM, HIDEOUT, GAMLA, HOTORGET, CROWD, WHEEL, PALACE, JET_PATH, begin, sign, get R() { return R; }, get kicki() { return kicki; }, set done(v) { done = v; save(); }, close }
     };
   })();

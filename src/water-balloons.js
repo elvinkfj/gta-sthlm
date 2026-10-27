@@ -361,6 +361,8 @@
 
     return {
       update, use, toss, heard, wetBy,
+      // a few for free (Kicki gives you some in the story)
+      give(n) { count = Math.min(MAX, count + n); },
       get near() { return near; }, get count() { return count; }, get wet() { return player.wetT > 0; },
       prompt() { return near ? (count >= MAX ? 'Fullt med vattenballonger' : 'Köp ' + PACK + ' vattenballonger · ' + fmtKr(PACK_PRICE)) : null; },
       // for the tests
