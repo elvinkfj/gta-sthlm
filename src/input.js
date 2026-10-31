@@ -75,9 +75,10 @@
     else if (code === 'KeyO') DAYNIGHT.key();
     else if (code === 'KeyU') WEATHER.key();
     else if (code === 'KeyI') PROGRESS.toggle();
-    else if (code === 'KeyZ') setBlink(1);
-    else if (code === 'KeyX') setBlink(2);
-    else if (code === 'KeyC') setBlink(3);
+    // Z and X together: the hazard lights
+    else if (code === 'KeyZ') setBlink(keys.KeyX ? 3 : 1);
+    else if (code === 'KeyX') setBlink(keys.KeyZ ? 3 : 2);
+    else if (code === 'KeyC') { firstPerson = !firstPerson; lastLook = -1e9; }
     else if (code === 'KeyP') MP.openPanel();
   }
   window.addEventListener('keydown', (e) => {

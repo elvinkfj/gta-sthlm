@@ -5,6 +5,9 @@
   // the car picker and the big map both pause the game
   const paused = () => pickerOpen || bigmap.open || MP.panelOpen || METRO.boardOpen || WORKSHOP.open || GARAGE.open || PROGRESS.open || JOBS.boardOpen || ACCOUNT.isOpen || STORY.signOpen;
   let camYaw = player.rot, camPitch = 0.3, camDist = 6, lastLook = -1e9, clipT = 1;
+  // C: first person, through your own eyes, on foot and at the wheel
+  let firstPerson = false, fpLastH = 0;
+  const fpEye = new THREE.Vector3();
   const camTarget = new THREE.Vector3(player.x, 1.6, player.z);
   let jumpQueued = false;
   const keys = {}, joy = { x: 0, y: 0 };
@@ -618,6 +621,42 @@
     if (fly) { tx = fly.x; ty = fly.y + 2.2; tz = fly.z; want = 17 + Math.hypot(fly.vx, fly.vz) * 0.08; }
     else if (car) { tx = car.x; ty = car.M.boat ? WATER_Y + (car.M.boat === 'jetski' ? 1.6 : 2.0) : car.M.bus ? 3.2 : car.M.moped ? 1.45 : 1.7; tz = car.z; want = (car.M.bus ? 15 : car.M.moped ? 5.2 : car.M.boat === 'jetski' ? 6.5 : car.M.boat ? 11 : 9.5) + Math.abs(vf) * 0.05; }
     else { tx = player.x; ty = player.y + 1.55; tz = player.z; want = CHUTE.on ? (CHUTE.open ? 13 : 9) : STATION.inside(player.x, player.z) ? 4.2 : 6; }
+    // first person: the camera sits in your head, on foot or in the driver's seat (not in the air, the back seat or a friend's car)
+    const fpCar = car === driving ? car : null;
+    const fp = firstPerson && started && !fly && !CHUTE.on && !METRO.riding && (fpCar || !car);
+    if (driving) driving.driver.visible = !(fp && fpCar);
+    if (fp) {
+      if (fpCar) {
+        // turn with the car, and look ahead again a while after the mouse let go
+        camYaw += wrapAngle(fpCar.h - fpLastH);
+        if (performance.now() - lastLook > 1500) camYaw = lerpAngle(camYaw, fpCar.h, 1 - Math.exp(-3 * dt));
+        fpLastH = fpCar.h;
+        const d = fpCar.driver.position, rider = fpCar.geo.driver.rider || fpCar.M.moped;
+        fpEye.set(d.x, d.y + (rider ? 0.95 : 0.84), d.z - (rider ? 0 : 0.14));
+        fpCar.group.updateMatrixWorld();
+        fpCar.body.localToWorld(fpEye);
+      } else {
+        fpEye.set(player.x + Math.sin(player.rot) * 0.18, player.y + 1.62, player.z + Math.cos(player.rot) * 0.18);
+        player.model.group.visible = false;
+      }
+      const pitch = camPitch - (fpCar ? 0.22 : 0.3), cp = Math.cos(pitch), sp = Math.sin(pitch);
+      camTarget.copy(fpEye);
+      camera.position.copy(fpEye);
+      if (shake > 0.001) {
+        camera.position.x += (Math.random() - 0.5) * shake * 0.3; camera.position.y += (Math.random() - 0.5) * shake * 0.3;
+        shake *= Math.exp(-7 * dt);
+      }
+      camera.lookAt(fpEye.x + Math.sin(camYaw) * cp, fpEye.y - sp, fpEye.z + Math.cos(camYaw) * cp);
+      if (camera.near !== 0.08) { camera.near = 0.08; camera.updateProjectionMatrix(); }
+      const fov = 70 + (reduceMotion ? 0 : Math.min(14, Math.abs(vf) * 0.2));
+      if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = lerp(camera.fov, fov, 1 - Math.exp(-4 * dt)); camera.updateProjectionMatrix(); }
+      sky.position.copy(camera.position);
+      sun.position.copy(camTarget).add(SUN_OFF);
+      sun.target.position.copy(camTarget);
+      return;
+    }
+    if (fpCar) fpLastH = fpCar.h;
+    if (camera.near !== 0.2) { camera.near = 0.2; camera.updateProjectionMatrix(); }
     const kh = 1 - Math.exp(-(car || fly ? 10 : 14) * dt);
     // indoors the camera comes in close and stays between the floor and the ceiling
     const span = car || fly || CHUTE.on ? null : indoorSpan(player.x, player.z, player.y);
