@@ -582,16 +582,16 @@
       // the driver's place: a dash across the front, the big flat wheel, the ticket machine, the sign for the next stop
       const dz = hl - 0.45, dy = y1 + 0.55;
       m.box(2 * hw - 0.25, dy - y1, 0.4, 0x2a2c30, 0, (dy + y1) / 2, dz);
-      m.box(1.0, 0.25, 0.3, 0x2a2c30, drv.x, dy + 0.06, dz - 0.25);
-      screen(G, basic(clusterTex('modern', 100, 3)), 0.36, 0.135, drv.x, dy + 0.12, dz - 0.402, 0.5);
-      I.needles.push(needle(G, drv.x + 0.107, dy + 0.12, dz - 0.403, 0.5, 'kmh', 100), needle(G, drv.x - 0.107, dy + 0.12, dz - 0.403, 0.5, 'rpm', 3000));
-      for (let i = 0; i < 8; i++) m.box(0.03, 0.012, 0.025, [0xd0202a, 0x2ea043, 0xf0b400, 0x3a3d42][i % 4], drv.x - 0.35 + i * 0.05, dy + 0.19, dz - 0.3);
+      m.box(1.0, 0.2, 0.3, 0x2a2c30, drv.x, dy, dz - 0.15);
+      screen(G, basic(clusterTex('modern', 100, 3)), 0.36, 0.135, drv.x, dy + 0.02, dz - 0.302, 0.5);
+      I.needles.push(needle(G, drv.x + 0.107, dy + 0.02, dz - 0.303, 0.5, 'kmh', 100), needle(G, drv.x - 0.107, dy + 0.02, dz - 0.303, 0.5, 'rpm', 3000));
+      for (let i = 0; i < 8; i++) m.box(0.03, 0.012, 0.025, [0xd0202a, 0x2ea043, 0xf0b400, 0x3a3d42][i % 4], drv.x - 0.35 + i * 0.05, dy + 0.105, dz - 0.2);
       m.box(0.24, 0.32, 0.18, 0x1b1c1f, drv.x - 0.75, dy + 0.1, dz - 0.25);
       screen(G, SCREEN.nav, 0.15, 0.09, drv.x - 0.75, dy + 0.18, dz - 0.345, 0.3);
       const by = sh.shellY(0, hl - 0.6) - 0.18;
       m.box(1.3, 0.16, 0.06, 0x111111, 0, by, hl - 0.6);
       screen(G, SCREEN.bus, 1.24, 0.12, 0, by, hl - 0.635);
-      steeringWheel(I, [drv.x, y1 + 0.6, drv.z + 0.68], 0.25, 1.05, {});
+      steeringWheel(I, [drv.x, y1 + 0.68, drv.z + 0.42], 0.25, 1.05, {});
       I.wheelK = 4;
       return { m, k };
     }
@@ -638,7 +638,7 @@
         m.add(new THREE.SphereGeometry(0.05, 14, 10), 0x0b0b0c, 0.22, 1.13, 0.55);
         gauge(-0.2, 1.13, 0.3, 0.7, 80);
         throttle(-0.25, 1.12, 0.12);
-        steeringWheel(I, [0, 1.12, 0.08], 0.16, -0.9, {});
+        steeringWheel(I, [0, 1.12, 0.08], 0.16, 0.9, {});
       } else if (b === 'patrol') {
         // the police boat: radar and chart over the helm, the throttles, the radio in the roof
         m.add(new THREE.BoxGeometry(0.72, 0.26, 0.08), 0x1c1d20, 0.45, 1.3, 1.27, -0.5, 0, 0);
@@ -648,7 +648,7 @@
         throttle(0.12, 1.14, 1.05);
         m.box(0.3, 0.08, 0.2, 0x15161a, 0.1, 2.12, 1.0);
         screen(G, SCREEN.polis, 0.12, 0.04, 0.1, 2.12, 0.899, 0, [0.2, 0.4, 0.8, 0.6]);
-        steeringWheel(I, [0.45, 1.25, 0.98], 0.17, -0.9, {});
+        steeringWheel(I, [0.45, 1.25, 0.98], 0.17, 0.9, {});
       } else if (b === 'riva') {
         // the Riva: a row of chrome-ringed dials in the mahogany dash, the white wheel, chrome throttles
         for (let i = 0; i < 3; i++) {
@@ -657,7 +657,7 @@
           k.add(new THREE.TorusGeometry(0.036, 0.004, 6, 22), 0xc9ced3, x, 1.0, 0.646);
         }
         throttle(-0.05, 1.07, 0.6);
-        steeringWheel(I, [-0.45, 1.12, 0.6], 0.19, -0.5, { classic: true, white: true });
+        steeringWheel(I, [-0.45, 1.12, 0.6], 0.19, 0.5, { classic: true, white: true });
       } else if (b === 'cb90') {
         // Stridsbåt 90: the wheelhouse from the inside (walls round the band of windows), a console with screens
         const yb = 1.36, yt = 3.0, ya = 2.3, yc = 2.78, ins = [0, 2.3, 0];

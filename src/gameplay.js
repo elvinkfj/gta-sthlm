@@ -637,14 +637,14 @@
         if (performance.now() - lastLook > 1500) camYaw = lerpAngle(camYaw, fpCar.h, 1 - Math.exp(-3 * dt));
         fpLastH = fpCar.h;
         const d = fpCar.driver.position, rider = fpCar.geo.driver.rider || fpCar.M.moped;
-        fpEye.set(d.x, d.y + (rider ? 0.72 : 0.84), d.z + (rider ? 0.1 : -0.14));
+        fpEye.set(d.x, d.y + (rider ? 0.66 : 0.84), d.z + (rider ? -0.04 : -0.14));
         fpCar.group.updateMatrixWorld();
         fpCar.body.localToWorld(fpEye);
       } else {
         fpEye.set(player.x + Math.sin(player.rot) * 0.18, player.y + 1.62, player.z + Math.cos(player.rot) * 0.18);
         player.model.group.visible = false;
       }
-      const pitch = camPitch - (!fpCar ? 0.3 : fpCar.M.moped || fpCar.M.boat === 'jetski' ? 0 : 0.22), cp = Math.cos(pitch), sp = Math.sin(pitch);
+      const pitch = camPitch - (!fpCar ? 0.3 : fpCar.M.moped ? -0.2 : fpCar.M.boat === 'jetski' ? 0 : 0.22), cp = Math.cos(pitch), sp = Math.sin(pitch);
       camTarget.copy(fpEye);
       camera.position.copy(fpEye);
       if (shake > 0.001) {
