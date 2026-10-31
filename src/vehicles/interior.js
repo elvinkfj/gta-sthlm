@@ -758,19 +758,30 @@
     }
 
     /* ---------- one per model ---------- */
-    const made = new Map();
+    // (one model's inside is kept, the last one shown: getting back into the same kind of car is free, and a new kind
+    // throws the old one away, so that trying every car doesn't fill the memory)
+    let made = null;
+    function drop(I) {
+      const keep = new Set([matte, shiny, needleMat, ...Object.values(SCREEN)]);
+      for (const root of [I.group, I.steer]) if (root) root.traverse((o) => {
+        if (!o.isMesh) return;
+        if (o.geometry !== needleGeo) o.geometry.dispose();
+        if (!keep.has(o.material)) o.material.dispose();
+      });
+    }
     function make(c) {
       const M = c.M, key = M.id;
-      if (made.has(key)) return made.get(key);
+      if (made && made.key === key) return made;
+      if (made) drop(made);
       assets();
-      const I = { group: new THREE.Group(), steer: null, wheel: null, wheelK: 2.6, needles: [], live: false, tesla: false };
+      const I = { key, group: new THREE.Group(), steer: null, wheel: null, wheelK: 2.6, needles: [], live: false, tesla: false };
       const geo = c.geo;
       const r = M.moped ? buildMoped(M, geo, I) : M.boat ? buildBoat(M, geo, I) : M.mil === 'truck' || (M.mil && !geo.head) ? buildTruck(M, geo, I)
         : M.mil ? buildHatch(M, geo, I) : M.bus ? buildBus(M, geo, I) : geo.cabin && geo.cabin.wheel ? buildCar(M, geo, I) : { m: new Merger(), k: new Merger() };
       const a = new THREE.Mesh(r.m.build(), matte), b = new THREE.Mesh(r.k.build(), shiny);
       a.receiveShadow = true;
       I.group.add(a, b);
-      made.set(key, I);
+      made = I;
       return I;
     }
     let cur = null, curCar = null, redraw = 0, tubKept = null;
