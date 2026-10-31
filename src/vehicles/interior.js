@@ -609,17 +609,43 @@
       I.steer = F;
       roundGauge(I, F, pos.x, pos.y + 0.02, pos.z - 0.03, 0.6 + rake, 80, 0.075);
       k.add(new THREE.CylinderGeometry(0.012, 0.012, 0.03, 10), 0xb9bec4, 0.06, c[1] - 0.04, c[2] - 0.03);
+      // your hands on the grips, in gloves, the sleeves going back to you
+      for (const s of [1, -1]) gripHand(m, [s * 0.31, bar[1] + 0.02, bar[2] - 0.08], s);
       const g1 = m.build(), g2 = k.build(); g1.applyMatrix4(toHead); g2.applyMatrix4(toHead);
       F.add(new THREE.Mesh(g1, matte), new THREE.Mesh(g2, shiny));
       return { m: new Merger(), k: new Merger() };
     }
+    // a gloved hand round a grip at p (side s), the forearm going back and down towards you
+    function gripHand(m, p, s) {
+      m.add(new THREE.SphereGeometry(0.036, 12, 8), 0x1c1c1c, p[0], p[1] + 0.01, p[2]);
+      for (let f = 0; f < 4; f++) m.add(new THREE.CylinderGeometry(0.011, 0.011, 0.05, 6), 0x1c1c1c, p[0] - s * (0.012 * f - 0.02), p[1] + 0.03, p[2] + 0.02, Math.PI / 2, 0, 0);
+      tubeTo(m, [p[0], p[1], p[2] - 0.02], [p[0] + s * 0.03, p[1] - 0.06, p[2] - 0.14], 0.026, SKIN, 0.03);
+      tubeTo(m, [p[0] + s * 0.03, p[1] - 0.06, p[2] - 0.14], [p[0] + s * 0.06, p[1] - 0.14, p[2] - 0.3], 0.034, SLEEVE, 0.04);
+    }
     function buildJetski(M, geo, I) {
-      const m = new Merger(), G = I.group;
-      // a little screen in the console under the windscreen
-      m.add(new THREE.BoxGeometry(0.2, 0.09, 0.05), 0x1c1d20, 0, 0.86, 0.42, 0.5, 0, 0);
+      const m = new Merger(), k = new Merger(), G = I.group;
+      // the screen in the console under the windscreen: your speed, with buttons beside it and a dial for the fuel
+      m.add(new THREE.BoxGeometry(0.24, 0.1, 0.05), 0x1c1d20, 0, 0.86, 0.42, 0.5, 0, 0);
       screen(G, SCREEN.digital, 0.17, 0.064, 0, 0.885, 0.405, 0.5);
       I.live = true;
-      return { m, k: new Merger() };
+      for (const s of [1, -1]) for (let i = 0; i < 2; i++) m.add(new THREE.CylinderGeometry(0.011, 0.011, 0.01, 10), [0x2ea043, 0xd0202a][i], s * 0.105, 0.9 - i * 0.03, 0.41 + i * 0.015, Math.PI / 2 - 0.5, 0, 0);
+      roundGauge(I, G, 0.17, 0.83, 0.47, 0.5, 80, 0.06);
+      // mirrors on stalks at the sides of the hood, the key on its red coiled cord, a grab handle on the console
+      for (const s of [1, -1]) {
+        tubeTo(k, [s * 0.3, 0.78, 0.5], [s * 0.42, 0.9, 0.45], 0.008, 0x2a2c30);
+        m.box(0.14, 0.08, 0.025, 0x1c1d20, s * 0.45, 0.93, 0.45);
+        k.box(0.125, 0.065, 0.004, 0xc9d6dd, s * 0.45, 0.93, 0.437);
+      }
+      m.box(0.05, 0.03, 0.04, 0x111111, -0.08, 0.82, 0.36);
+      for (let i = 0; i < 8; i++) m.add(new THREE.TorusGeometry(0.014, 0.004, 5, 10), 0xd0202a, -0.08 - i * 0.004, 0.8 - i * 0.025, 0.33 - i * 0.03, 0, Math.PI / 2, 0);
+      tubeTo(k, [-0.12, 0.79, 0.55], [0.12, 0.79, 0.55], 0.012, 0x3a3d42);
+      // your hands on the grips (they turn with the bars, about the column)
+      const F = new THREE.Group(), h = new Merger(), rake = geo.rake;
+      for (const s of [1, -1]) gripHand(h, [s * 0.3, 0.255, -0.055], s);
+      const hg = h.build(); hg.applyMatrix4(new THREE.Matrix4().makeRotationX(rake));
+      F.add(new THREE.Mesh(hg, matte));
+      I.steer = F;
+      return { m, k };
     }
 
     /* ---------- the boats ---------- */
