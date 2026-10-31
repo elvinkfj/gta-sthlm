@@ -604,6 +604,8 @@
     // on a ride at Gröna Lund the camera sits in your seat; at the workshop it looks at your car, in the garage at yours
     const seatView = RIDES.view() || WORKSHOP.view() || GARAGE.view();
     if (seatView) {
+      INTERIOR.show(null);
+      if (driving) driving.driver.visible = true;
       const p = seatView.pos, d = seatView.dir;
       camera.position.copy(p); camTarget.copy(p);
       camera.lookAt(p.x + d.x, p.y + d.y, p.z + d.z);

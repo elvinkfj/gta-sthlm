@@ -277,43 +277,62 @@
       const m = new Merger(), k = new Merger(), G = I.group;
       const { hl, r0, r1, r2, r3 } = sh, y1 = cab.y1, eye = [drv.x, drv.y + 0.84, drv.z], open = !!S.open;
       const inside = [0, eye[1] - 0.2, drv.z];
-      // the inside of the shell: the window sills, the pillars and the headliner, a few centimetres in from the body, where
-      // the body is not glass (the same colours as the loft in loftBody, so the pillars fall where they are outside)
-      const zA = Math.max(-hl + 0.12, cab.z0 - 0.05), zB = Math.min(r3, hl - 0.1);
-      const zs = [...new Set([zA, ...sh.Z.filter((z) => z > zA && z < zB), zB])].sort((a, b) => a - b);
+      // (in first person the dark tub that fills the car up to the window line is taken away: see tub. In its place there is
+      // a floor just over the sills, and you sit on a cushion with your eyes where the driver's are)
+      const fy = sh.sill(0) + 0.1, hipY = Math.max(fy + 0.14, drv.y + 0.12);
+      const fw = Math.min(r3 + 0.15, hl - S.rc[1] - 0.05), pz = Math.min(drv.z + 0.86, fw - 0.1);
+      const zA = Math.max(-hl + 0.12, cab.z0 - 0.05);
+      // the inside of the shell: the doors, the window sills, the pillars and the headliner, a few centimetres in from the
+      // body, where the body is not glass (the same colours as the loft in loftBody, so the pillars fall where they are
+      // outside). In front of the windscreen only the sides, down in the footwells
+      const zs = [...new Set([zA, ...sh.Z.filter((z) => z > zA && z < fw), r3, fw])].filter((z) => z <= fw).sort((a, b) => a - b);
       const q = { tag: '', z: 0, x: 0, y: 0, yt: 0, yb: 0, h: 0, side: 1, seam: 0, stripe: 0, grilleBody: 0, roofTone: null };
-      const inset = (p) => (p[2] === 'roof' || p[2] === 'end' || p[2] === 'rail' ? [p[0] * 0.985, p[1] - 0.028] : [Math.max(0, p[0] - 0.028), p[1]]);
+      const inset = (p) => (p[2] === 'roof' || p[2] === 'end' || p[2] === 'rail' ? [p[0] * 0.985, p[1] - 0.028] : [Math.max(0, p[0] - 0.03), Math.max(p[1], fy - 0.02)]);
+      const door = P.wood && LUX.has(M.id) ? shade(P.seat, 0.85) : shade(P.trim, 1.25);
       for (let i = 0; i < zs.length - 1; i++) {
-        const za = zs[i], zb = zs[i + 1], A = sh.ring(za), B = sh.ring(zb);
+        const za = zs[i], zb = zs[i + 1], A = sh.ring(za), B = sh.ring(zb), ahead = za >= r3 - 1e-6;
         q.z = (za + zb) / 2; q.yt = (A.yt + B.yt) / 2; q.yb = (A.yb + B.yb) / 2; q.h = (A.h + B.h) / 2;
         for (let s = 0; s < A.pts.length - 1; s++) {
-          const tag = A.pts[s][2];
-          if (tag === 'under' || tag === 'rocker' || tag === 'side') continue;
+          const tag = A.pts[s][2], low = tag === 'side' || tag === 'rocker';
+          if (tag === 'under' || (ahead && !low)) continue;
           if (open && (tag === 'rail' || tag === 'roof')) continue;
           q.tag = tag; q.x = (A.pts[s][0] + A.pts[s + 1][0] + B.pts[s][0] + B.pts[s + 1][0]) / 4;
           q.y = (A.pts[s][1] + A.pts[s + 1][1] + B.pts[s][1] + B.pts[s + 1][1]) / 4;
-          if (bodyColour(sh, q, 0x010203) === CAR_GLASS) continue;
-          const col = tag === 'ledge' ? P.trim : tag === 'glass' ? P.pillar : P.head;
+          if (!low && bodyColour(sh, q, 0x010203) === CAR_GLASS) continue;
+          const col = low ? door : tag === 'ledge' ? P.trim : tag === 'glass' ? P.pillar : P.head;
           const a0 = inset(A.pts[s]), a1 = inset(A.pts[s + 1]), b0 = inset(B.pts[s]), b1 = inset(B.pts[s + 1]);
           for (const sx of [1, -1]) quad(m, [sx * a0[0], a0[1], za], [sx * a1[0], a1[1], za], [sx * b1[0], b1[1], zb], [sx * b0[0], b0[1], zb], col, inside);
         }
       }
+      // the floor with its carpet, mats in front, the housings of the wheels where they come in
+      const fx = cab.xi + 0.03;
+      quad(m, [-fx, fy, zA], [fx, fy, zA], [fx, fy, fw], [-fx, fy, fw], 0x2a2b2e, [0, 2, 0]);
+      for (const s of [1, -1]) m.box(0.38, 0.008, 0.5, 0x151617, s * drv.x, fy + 0.005, pz - 0.18);
+      for (const az of [M.wb / 2, -M.wb / 2]) if (az + sh.rA > zA && az - sh.rA < fw) for (const s of [1, -1]) {
+        const x0 = wheelX(M) - 0.2, ht = sh.archTop + 0.03 - fy;
+        if (ht > 0.05 && fx > x0) m.box(fx - x0, ht, sh.rA * 1.8, P.trim, s * (fx + x0) / 2, fy + ht / 2, az);
+      }
       // the boot wall behind the back seat, up to the window line
-      m.box(2 * cab.xi, Math.max(0.05, sh.belt(zA) - y1 + 0.02), 0.03, P.trim, 0, (y1 + sh.belt(zA)) / 2 + 0.01, zA + 0.02);
-      // a sill strip along each door, a handle and the window switches
+      m.box(2 * fx, Math.max(0.05, sh.belt(zA) - fy + 0.02), 0.03, P.trim, 0, (fy + sh.belt(zA)) / 2 + 0.01, zA + 0.02);
+      // on each door: an armrest with the window switches, the handle, a pocket, a speaker low down
+      const inX = (z, y) => Math.min(sh.sideX(z, Math.min(y, sh.belt(z) - 0.02)), sh.ring(z).gB + 0.04) - 0.06;
       for (const s of [1, -1]) {
-        const zh = drv.z + 0.22, xh = sh.ring(zh).gB - 0.035, yh = sh.belt(zh);
-        k.box(0.02, 0.024, 0.13, 0xb9bec4, s * xh, yh + 0.004, zh);
-        m.box(0.05, 0.016, 0.11, 0x141517, s * (xh - 0.01), yh + 0.002, drv.z - 0.02);
-        for (let i = 0; i < 2; i++) m.box(0.022, 0.01, 0.03, 0x3a3d42, s * (xh - 0.01), yh + 0.013, drv.z - 0.05 + i * 0.05);
-        // a speaker in the foot of the A-pillar
-        m.add(new THREE.CylinderGeometry(0.035, 0.035, 0.01, 14), 0x0c0d0e, s * (sh.ring(r3 - 0.12).gB - 0.06), sh.belt(r3 - 0.12) + 0.03, r3 - 0.12, 0, 0, Math.PI / 2 * 0.6 * s);
+        const za = drv.z + 0.1, ya = Math.min(hipY + 0.2, sh.belt(za) - 0.08), xa = inX(za, ya);
+        m.box(0.09, 0.05, 0.5, P.trim, s * (xa - 0.03), ya, za);
+        m.box(0.07, 0.006, 0.5, door, s * (xa - 0.03), ya + 0.026, za);
+        for (let i = 0; i < 2; i++) m.box(0.025, 0.012, 0.03, 0x3a3d42, s * (xa - 0.04), ya + 0.03, za + 0.12 + i * 0.045);
+        const zh = drv.z + 0.38, yh = Math.min(ya + 0.12, sh.belt(zh) - 0.04);
+        k.box(0.02, 0.03, 0.12, 0xb9bec4, s * (inX(zh, yh) - 0.005), yh, zh);
+        m.box(0.07, 0.1, 0.45, 0x141517, s * (inX(za, fy + 0.16) - 0.03), fy + 0.16, za + 0.05);
+        const zs2 = Math.min(drv.z + 0.55, fw - 0.15), ysp = fy + 0.2;
+        m.add(new THREE.CylinderGeometry(0.075, 0.075, 0.012, 18), 0x0c0d0e, s * (inX(zs2, ysp) + 0.01), ysp, zs2, 0, 0, Math.PI / 2);
+        k.add(new THREE.TorusGeometry(0.075, 0.005, 6, 24), 0x8a9096, s * (inX(zs2, ysp) + 0.005), ysp, zs2, 0, Math.PI / 2, 0);
         // the seat belt hanging on the B-pillar
-        const pil = (S.pillars || []).find(([pz]) => pz < drv.z + 0.1 && pz > drv.z - 0.9);
+        const pil = (S.pillars || []).find(([pz2]) => pz2 < drv.z + 0.1 && pz2 > drv.z - 0.9);
         if (pil && !open) {
-          const pz = pil[0], rg = sh.ring(pz), yTop = rg.yt + rg.h * 0.75;
-          m.box(0.006, yTop - rg.yt, 0.045, 0x0f1011, s * (rg.gB - 0.04), (yTop + rg.yt) / 2, pz + 0.04);
-          k.box(0.012, 0.03, 0.05, 0x9aa0a6, s * (rg.gB - 0.045), yTop, pz + 0.04);
+          const bz = pil[0], rg = sh.ring(bz), yTop = rg.yt + rg.h * 0.75;
+          m.box(0.006, yTop - hipY, 0.045, 0x0f1011, s * (rg.gB - 0.04), (yTop + hipY) / 2, bz + 0.04);
+          k.box(0.012, 0.03, 0.05, 0x9aa0a6, s * (rg.gB - 0.045), yTop, bz + 0.04);
         }
       }
 
@@ -331,12 +350,19 @@
         }
       }
       // its face towards you, in strips that follow the top, and a soft lip along the edge
-      const wr = xin(zr), face = (x) => topY(x, zr);
+      const wr = xin(zr), face = (x) => topY(x, zr), yk = y1 - 0.03, yl = Math.max(fy + 0.25, yk - 0.16);
       for (let i = 0; i < NX; i++) {
         const xa = -wr + (2 * wr * i) / NX, xb = xa + (2 * wr) / NX;
-        quad(m, [xa, y1, zr], [xb, y1, zr], [xb, face(xb), zr], [xa, face(xa), zr], P.dash, [0, y1 + 0.1, zr - 1]);
+        quad(m, [xa, yk, zr], [xb, yk, zr], [xb, face(xb), zr], [xa, face(xa), zr], P.dash, [0, y1 + 0.1, zr - 1]);
         tubeTo(m, [xa, face(xa) - 0.012, zr - 0.006], [xb, face(xb) - 0.012, zr - 0.006], 0.016, P.dash);
       }
+      // under it the knee pads leaning away from you, the underside of the dash, and the wall to the engine at the front
+      const zk = Math.min(zr + 0.12, fw - 0.05);
+      quad(m, [-wr, yk, zr], [wr, yk, zr], [wr, yl, zk], [-wr, yl, zk], P.dash, [0, fy, zr - 1]);
+      quad(m, [-wr, yl, zk], [wr, yl, zk], [wr, yl, fw], [-wr, yl, fw], 0x141517, [0, fy, zr]);
+      quad(m, [-fx, fy, fw], [fx, fy, fw], [fx, yl, fw], [-fx, yl, fw], 0x1b1c1e, [0, 1, zr]);
+      // the centre stack down to the tunnel between the footwells
+      m.hexa([[-0.14, fy, zr - 0.02], [0.14, fy, zr - 0.02], [0.14, fy, fw], [-0.14, fy, fw], [-0.13, yk, zr - 0.02], [0.13, yk, zr - 0.02], [0.13, yk, fw], [-0.13, yk, fw]], P.console);
       // a band of wood or metal across the face, and a seam for the glovebox in front of the passenger
       const band = P.wood || (M.sport ? 0x2b2d31 : 0x5a5f66), yb = Math.min(face(0) - 0.05, y1 + 0.09);
       m.box(2 * wr - 0.1, 0.022, 0.006, band, 0, yb, zr - 0.012);
@@ -379,7 +405,7 @@
           m.box(0.24, 0.15, 0.02, 0x08090a, 0, ys + 0.07, zr + 0.03);
           screen(G, SCREEN.nav, 0.22, 0.13, 0, ys + 0.07, zr + 0.019, 0.08);
         }
-        for (let i = -1; i <= 1; i++) k.add(new THREE.CylinderGeometry(0.014, 0.014, 0.018, 14), 0x9aa0a6, i * 0.07, y1 + 0.03, zr - 0.012, Math.PI / 2, 0, 0);
+        for (let i = -1; i <= 1; i++) k.add(new THREE.CylinderGeometry(0.014, 0.014, 0.018, 14), 0x9aa0a6, i * 0.07, yk + 0.03, zr - 0.012, Math.PI / 2, 0, 0);
         m.add(new THREE.CylinderGeometry(0.012, 0.012, 0.01, 3), 0xd0202a, 0, Math.max(y1 + 0.03, ys - 0.06 - sh2 - 0.025), zr - 0.014, Math.PI / 2, 0, 0);
       }
       // a speaker grille on top of the dash in each corner, a slot for the demister along the glass
@@ -389,14 +415,20 @@
       steeringWheel(I, W, 0.17, 0.45, { classic: CLASSIC.has(M.id) && !M.sport, wood: WOODEN.has(M.id), sport: M.sport && !CLASSIC.has(M.id), two: TESLA.has(M.id) });
       I.wheelK = 2.6;
 
-      // the seats: the backrest with bolsters and seams, the headrest on its two posts; the cushion is down in the tub
+      // the seats: the cushion on its base and rails, the backrest with bolsters and seams, the headrest on its two posts
       const st = cab.seat;
       if (st) for (const s of [1, -1]) {
-        const x = s * st.sx, h = st.top - st.bot, my = (st.top + st.bot) / 2;
+        const x = s * st.sx, c0 = st.bz + 0.07, c1 = st.bz + 0.6;
+        m.hexa([[x - 0.26, hipY - 0.12, c0], [x + 0.26, hipY - 0.12, c0], [x + 0.26, hipY - 0.1, c1], [x - 0.26, hipY - 0.1, c1], [x - 0.26, hipY, c0], [x + 0.26, hipY, c0], [x + 0.26, hipY + 0.04, c1], [x - 0.26, hipY + 0.04, c1]], P.seat);
+        for (const b of [1, -1]) m.hexa([[x + b * 0.2, hipY - 0.02, c0], [x + b * 0.27, hipY - 0.02, c0], [x + b * 0.27, hipY, c1], [x + b * 0.2, hipY, c1], [x + b * 0.2, hipY + 0.04, c0], [x + b * 0.27, hipY + 0.04, c0], [x + b * 0.27, hipY + 0.07, c1], [x + b * 0.2, hipY + 0.07, c1]], P.side);
+        if (hipY - 0.12 > fy) m.box(0.42, hipY - 0.12 - fy, 0.44, 0x18191b, x, (hipY - 0.12 + fy) / 2, (c0 + c1) / 2);
+        for (const b of [1, -1]) k.box(0.03, 0.02, 0.62, 0x6a6f75, x + b * 0.17, fy + 0.01, (c0 + c1) / 2);
+        m.box(0.03, 0.08, 0.12, 0x26282b, x + s * 0.28, hipY - 0.07, c0 + 0.2);
+        const bot = hipY - 0.02, h = st.top - bot, my = (st.top + bot) / 2;
         m.box(0.54, h, 0.14, P.seat, x, my, st.bz);
         for (const b of [1, -1]) m.box(0.075, h - 0.02, 0.2, P.side, x + b * 0.25, my - 0.01, st.bz + 0.03);
         m.box(0.36, h - 0.1, 0.006, shade(P.seat, 0.86), x, my - 0.02, st.bz + 0.072);
-        for (let i = 1; i < 4; i++) m.box(0.36, 0.006, 0.006, shade(P.seat, 0.7), x, st.bot + (h * i) / 4, st.bz + 0.076);
+        for (let i = 1; i < 4; i++) m.box(0.36, 0.006, 0.006, shade(P.seat, 0.7), x, bot + (h * i) / 4, st.bz + 0.076);
         if (M.sport) m.box(0.06, h - 0.1, 0.008, P.accent, x, my - 0.02, st.bz + 0.077);
         if (st.hTop - st.hBot > 0.08) {
           const hh = st.hTop - st.hBot;
@@ -407,18 +439,21 @@
       // the back seat: a bench split 60/40, three headrests where the roof lets them in
       const rs = cab.rear;
       if (rs) {
-        const h = rs.rTop - rs.rBot, my = (rs.rTop + rs.rBot) / 2;
+        const bot = hipY - 0.04, h = rs.rTop - bot, my = (rs.rTop + bot) / 2, cz = rs.rz + 0.3;
         m.box(rs.rW + 0.04, h, 0.16, P.seat, 0, my, rs.rz);
+        m.box(rs.rW + 0.04, 0.13, 0.46, P.seat, 0, bot - 0.04, cz);
+        if (bot - 0.1 > fy) m.box(rs.rW, bot - 0.1 - fy, 0.42, 0x18191b, 0, (bot - 0.1 + fy) / 2, cz);
         m.box(0.006, h - 0.04, 0.008, shade(P.seat, 0.6), rs.rW * 0.1, my, rs.rz + 0.082);
-        for (let i = 1; i < 3; i++) m.box(rs.rW - 0.1, 0.006, 0.006, shade(P.seat, 0.7), 0, rs.rBot + (h * i) / 3, rs.rz + 0.082);
+        for (let i = 1; i < 3; i++) m.box(rs.rW - 0.1, 0.006, 0.006, shade(P.seat, 0.7), 0, bot + (h * i) / 3, rs.rz + 0.082);
         if (rs.ceil - rs.rTop > 0.2) for (const x of [-(rs.rW / 2 - 0.24), 0, rs.rW / 2 - 0.24]) m.box(0.24, 0.13, 0.09, P.seat, x, rs.rTop + 0.085, rs.rz - 0.02);
       }
 
       // the console between the seats: the gear lever, cup holders, an armrest at the back
       const cw = st ? clamp(st.sx - 0.31, 0.06, 0.13) : 0.1, c0 = st ? st.bz + 0.06 : drv.z - 0.25, c1 = zr - 0.01;
-      m.hexa([[-cw, y1 - 0.01, c0], [cw, y1 - 0.01, c0], [cw, y1 - 0.01, c1], [-cw, y1 - 0.01, c1], [-cw, y1 + 0.06, c0], [cw, y1 + 0.06, c0], [cw * 0.9, y1 + 0.1, c1], [-cw * 0.9, y1 + 0.1, c1]], P.console);
-      m.box(cw * 2 + 0.02, 0.06, 0.26, P.seat, 0, y1 + 0.09, c0 + 0.14);
-      const gz = c0 + 0.36, gy = y1 + 0.065 + (0.04 * (gz - c0)) / Math.max(0.1, c1 - c0);
+      const ct0 = Math.min(hipY + 0.2, yk - 0.08), ct1 = Math.min(hipY + 0.27, yk - 0.02);
+      m.hexa([[-cw, fy, c0], [cw, fy, c0], [cw, fy, c1], [-cw, fy, c1], [-cw, ct0, c0], [cw, ct0, c0], [cw * 0.9, ct1, c1], [-cw * 0.9, ct1, c1]], P.console);
+      m.box(cw * 2 + 0.02, 0.06, 0.26, P.seat, 0, ct0 + 0.03, c0 + 0.14);
+      const gz = c0 + 0.36, gy = ct0 + 0.005 + ((ct1 - ct0) * (gz - c0)) / Math.max(0.1, c1 - c0);
       for (const s of [1, -1]) m.add(new THREE.CylinderGeometry(0.032, 0.032, 0.006, 16), 0x060607, s * 0.045, gy + 0.008, gz + 0.12);
       if (M.ev && !CLASSIC.has(M.id)) {
         // a phone charging pad and a rotary drive selector
@@ -438,7 +473,36 @@
       }
       // the parking brake button, the drive modes, belt buckles beside the seats
       m.box(0.03, 0.01, 0.03, 0x2b2d31, cw * 0.5, gy + 0.008, gz - 0.13);
-      if (st) for (const s of [1, -1]) { m.box(0.03, 0.08, 0.03, 0x0f1011, s * (cw + 0.03), y1 + 0.03, st.bz + 0.12); k.box(0.028, 0.02, 0.035, 0x9aa0a6, s * (cw + 0.03), y1 + 0.075, st.bz + 0.12); }
+      if (st) for (const s of [1, -1]) { m.box(0.03, 0.08, 0.03, 0x0f1011, s * (cw + 0.03), hipY + 0.03, st.bz + 0.12); k.box(0.028, 0.02, 0.035, 0x9aa0a6, s * (cw + 0.03), hipY + 0.075, st.bz + 0.12); }
+
+      // the pedals: the accelerator on the right, the brake, a clutch in a manual car (or a rest for the left foot)
+      const manual = CLASSIC.has(M.id) || ['rs27', 'cobra', 'gt40', 'f40', 'countach', 'mx5', 'elise'].includes(M.id);
+      const pedals = [[drv.x - 0.17, 0.06, 0.12], [drv.x - 0.02, 0.09, 0.07], [drv.x + 0.15, manual ? 0.09 : 0.12, 0.07]];
+      pedals.forEach(([x, w, h], i) => {
+        if (i === 2 && !manual) { m.add(new THREE.BoxGeometry(w, 0.02, 0.2), 0x2b2d31, x, fy + 0.07, pz - 0.02, -0.6, 0, 0); return; }
+        k.add(new THREE.BoxGeometry(w, h, 0.015), 0x6a6f75, x, fy + 0.12, pz, -0.45, 0, 0);
+        tubeTo(m, [x, fy + 0.12 + h / 2, pz + 0.02], [x, yl - 0.02, pz + 0.1], 0.01, 0x1a1a1a);
+      });
+      // and you: your legs down to the pedals, your body, your upper arms out to the wheel
+      const PANTS = playerId.pants, hipZ = st ? st.bz + 0.18 : drv.z;
+      for (const [hx, fx2] of [[drv.x + 0.11, drv.x + 0.15], [drv.x - 0.1, drv.x - 0.17]]) {
+        const knee = [hx + (fx2 - hx) * 0.4, Math.min(hipY + 0.16, yl - 0.08), Math.min(hipZ + 0.45, zk - 0.02)], foot = [fx2, fy + 0.12, pz - 0.1];
+        tubeTo(m, [hx, hipY + 0.07, hipZ], knee, 0.075, PANTS, 0.065);
+        m.add(new THREE.SphereGeometry(0.065, 10, 8), PANTS, ...knee);
+        tubeTo(m, knee, foot, 0.06, PANTS, 0.048);
+        m.add(new THREE.BoxGeometry(0.1, 0.08, 0.27), 0x1c1c1c, fx2, fy + 0.08, pz - 0.04, -0.5, 0, 0);
+      }
+      const chest = [drv.x, eye[1] - 0.3, drv.z - 0.06];
+      tubeTo(m, [drv.x, hipY + 0.08, hipZ - 0.04], chest, 0.15, SLEEVE, 0.17);
+      const ca = Math.cos(0.45), sa = Math.sin(0.45);
+      for (const s of [1, -1]) {
+        const lx = s * 0.2, ly = -0.14, lz = -0.22;
+        const elbow = [W[0] + lx, W[1] + ly * ca - lz * sa, W[2] + ly * sa + lz * ca];
+        const shoulder = [drv.x + s * 0.2, eye[1] - 0.3, drv.z - 0.1];
+        m.add(new THREE.SphereGeometry(0.075, 10, 8), SLEEVE, ...shoulder);
+        tubeTo(m, shoulder, elbow, 0.055, SLEEVE, 0.04);
+      }
+
 
       // the mirror at the top of the windscreen, the sun visors and the light in the roof
       if (!open) {
@@ -462,7 +526,7 @@
         screen(G, SCREEN.polis, 0.05, 0.025, 0, gy + 0.045, gz + 0.099, 0.6, [0.2, 0.3, 0.8, 0.6]);
         for (let i = 0; i < 4; i++) m.box(0.025, 0.01, 0.02, [0x1f4fae, 0xd0202a, 0xf0b400, 0x2ea043][i], -0.045 + i * 0.03, gy + 0.06, gz + 0.14);
         const lx = -Math.max(0.25, drv.x - 0.05), ly = face(lx) + 0.09, lz = zr - 0.06;
-        tubeTo(m, [lx * 0.4, y1 + 0.08, zr - 0.02], [lx, ly - 0.08, lz], 0.012, 0x1a1b1e);
+        tubeTo(m, [lx * 0.4, yk + 0.05, zr - 0.02], [lx, ly - 0.08, lz], 0.012, 0x1a1b1e);
         m.add(new THREE.BoxGeometry(0.3, 0.2, 0.015), 0x15161a, lx, ly, lz, -0.25, 0.25, 0);
         const lap = screen(G, SCREEN.polis, 0.28, 0.175, lx, ly, lz - 0.009, 0.25);
         lap.rotation.y = Math.PI + 0.25;
@@ -681,14 +745,38 @@
       made.set(key, I);
       return I;
     }
-    let cur = null, curCar = null, redraw = 0;
+    let cur = null, curCar = null, redraw = 0, tubKept = null;
+    // the dark tub that fills a car up to the window line (so that from outside you don't see the driver's legs sunk in
+    // it) is flattened onto its bottom in your own car while you are in first person, and put back afterwards. The car gets
+    // a geometry of its own for it, as for a dent (ownGeometry)
+    function tub(c, on) {
+      const t = c.geo.cabin && c.geo.cabin.tub;
+      if (!t || c.M.bus || t[1] <= t[0]) return;
+      if (on) {
+        ownGeometry(c);
+        const g = c.geo.body, A = g.attributes.position, P = A.array;
+        if (!g.userData.orig) g.userData.orig = P.slice();
+        tubKept = { g, P: P.slice(t[0] * 3, t[1] * 3) };
+        let y0 = Infinity;
+        for (let i = t[0]; i < t[1]; i++) y0 = Math.min(y0, P[i * 3 + 1]);
+        for (let i = t[0]; i < t[1]; i++) P[i * 3 + 1] = y0;
+        A.needsUpdate = true;
+      } else if (tubKept && tubKept.g === c.geo.body) {
+        c.geo.body.attributes.position.array.set(tubKept.P, t[0] * 3);
+        c.geo.body.attributes.position.needsUpdate = true;
+        tubKept = null;
+      }
+    }
     // show the inside of car c (null: of none)
     function show(c) {
       if (c === curCar) return;
-      if (cur) { cur.group.removeFromParent(); if (cur.steer) cur.steer.removeFromParent(); }
+      if (cur) { if (cur.group.parent) cur.group.parent.remove(cur.group); if (cur.steer && cur.steer.parent) cur.steer.parent.remove(cur.steer); }
+      if (curCar) tub(curCar, false);
       cur = null; curCar = c;
       if (!c) return;
       cur = make(c);
+      tub(c, true);
+
       c.body.add(cur.group);
       if (cur.steer && c.steerGroup) c.steerGroup.add(cur.steer);
     }

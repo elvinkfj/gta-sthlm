@@ -961,7 +961,10 @@
       let yMin = 9;
       for (let z = z0; z <= z1; z += 0.1) yMin = Math.min(yMin, sh.belt(z));
       const xi = hw - S.shoulder - 0.05, y0 = sh.sill(0) + 0.08, y1 = yMin - 0.03;
+      // (the tub's vertices are kept, so that first person can take it away from your own car: INTERIOR)
+      const t0 = mg.p.length / 3;
       if (z1 > z0) mg.box(2 * xi, y1 - y0, z1 - z0, 0x1a1b1e, 0, (y0 + y1) / 2, (z0 + z1) / 2);
+      cabin.tub = [t0, mg.p.length / 3];
       const seat = S.seatCol || 0x2b2d31, sy = y1 + 0.2;
       Object.assign(cabin, { z0, z1, y1, xi });
       if (M.bus) {
