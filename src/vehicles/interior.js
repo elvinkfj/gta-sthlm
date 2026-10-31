@@ -529,7 +529,7 @@
         for (let i = 0; i < 4; i++) m.box(0.025, 0.01, 0.02, [0x1f4fae, 0xd0202a, 0xf0b400, 0x2ea043][i], -0.045 + i * 0.03, gy + 0.06, gz + 0.14);
         const lx = -Math.max(0.25, drv.x - 0.05), ly = face(lx) + 0.09, lz = zr - 0.06;
         tubeTo(m, [lx * 0.4, yk + 0.05, zr - 0.02], [lx, ly - 0.08, lz], 0.012, 0x1a1b1e);
-        m.add(new THREE.BoxGeometry(0.3, 0.2, 0.015), 0x15161a, lx, ly, lz, -0.25, 0.25, 0);
+        m.add(new THREE.BoxGeometry(0.3, 0.2, 0.015), 0x15161a, lx, ly, lz, 0.25, 0.25, 0);
         const lap = screen(G, SCREEN.polis, 0.28, 0.175, lx, ly, lz - 0.009, 0.25);
         lap.rotation.y = Math.PI + 0.25;
       }
@@ -633,7 +633,7 @@
       };
       if (b === 'console') {
         // the Anytec: a chart plotter, a compass, the throttle beside the wheel
-        m.add(new THREE.BoxGeometry(0.34, 0.22, 0.04), 0x111214, 0, 1.2, 0.45, -0.55, 0, 0);
+        m.add(new THREE.BoxGeometry(0.34, 0.22, 0.04), 0x111214, 0, 1.2, 0.45, 0.55, 0, 0);
         screen(G, SCREEN.plotter, 0.3, 0.18, 0, 1.2, 0.425, 0.55);
         m.add(new THREE.SphereGeometry(0.05, 14, 10), 0x0b0b0c, 0.22, 1.13, 0.55);
         gauge(-0.2, 1.13, 0.3, 0.7, 80);
@@ -641,7 +641,7 @@
         steeringWheel(I, [0, 1.12, 0.08], 0.16, 0.9, {});
       } else if (b === 'patrol') {
         // the police boat: radar and chart over the helm, the throttles, the radio in the roof
-        m.add(new THREE.BoxGeometry(0.72, 0.26, 0.08), 0x1c1d20, 0.45, 1.3, 1.27, -0.5, 0, 0);
+        m.add(new THREE.BoxGeometry(0.72, 0.26, 0.08), 0x1c1d20, 0.45, 1.3, 1.27, 0.5, 0, 0);
         screen(G, SCREEN.radar, 0.22, 0.2, 0.62, 1.3, 1.225, 0.5);
         screen(G, SCREEN.plotter, 0.32, 0.2, 0.33, 1.3, 1.225, 0.5);
         gauge(0.18, 1.14, 1.0, 0.8, 80);
