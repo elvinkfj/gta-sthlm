@@ -630,7 +630,7 @@
       mg.box(0.66, 0.84, 0.7, WHITE, 0, 0.64, 0.45);
       mg.box(0.62, 0.06, 0.5, BLACK, 0, 1.08, 0.4);
       gl.hexa([[-0.36, 1.06, 0.68], [0.36, 1.06, 0.68], [0.36, 1.06, 0.74], [-0.36, 1.06, 0.74], [-0.33, 1.42, 0.52], [0.33, 1.42, 0.52], [0.33, 1.42, 0.58], [-0.33, 1.42, 0.58]], 0xffffff);
-      mg.add(new THREE.TorusGeometry(0.16, 0.02, 6, 18), BLACK, 0, 1.12, 0.08, -0.9, 0, 0);
+      mg.add(new THREE.TorusGeometry(0.16, 0.02, 6, 18), BLACK, 0, 1.12, 0.08, 0.9, 0, 0);
       mg.box(0.9, 0.5, 0.45, SEAT, 0, 0.47, -0.45);
       mg.box(0.9, 0.5, 0.12, SEAT, 0, 0.95, -0.66);
       mg.box(1.2, 0.3, 0.9, 0xd9d4c6, 0, 0.37, 1.8);
@@ -662,7 +662,7 @@
       gl.hexa([[-w + 0.08, 1.22, z1 - 0.06], [w - 0.08, 1.22, z1 - 0.06], [w - 0.08, 1.22, z1 - 0.03], [-w + 0.08, 1.22, z1 - 0.03], [-w + 0.1, top - 0.02, zt - 0.02], [w - 0.1, top - 0.02, zt - 0.02], [w - 0.1, top - 0.02, zt + 0.01], [-w + 0.1, top - 0.02, zt + 0.01]], 0xffffff);
       // inside: the helm on the right, a seat behind it, a bench for the other constable
       mg.box(0.7, 0.55, 0.3, GREY, 0.45, 0.85, z1 - 0.35);
-      mg.add(new THREE.TorusGeometry(0.17, 0.022, 6, 18), BLACK, 0.45, 1.25, z1 - 0.52, -0.9, 0, 0);
+      mg.add(new THREE.TorusGeometry(0.17, 0.022, 6, 18), BLACK, 0.45, 1.25, z1 - 0.52, 0.9, 0, 0);
       mg.box(0.5, 0.45, 0.5, SEAT, 0.45, 0.52, 0.3);
       mg.box(0.5, 0.45, 0.5, SEAT, -0.45, 0.52, 0.3);
       // on the roof: the light bar, the radar dome, the searchlight and the aerials
@@ -744,7 +744,7 @@
       mg.box(2.1, 0.12, 2.6, 0x5a2a12, 0, 0.66, -0.5);
       for (const z of [0.15, -1.25]) { mg.box(2.0, 0.28, 0.7, leather, 0, 0.88, z); mg.box(2.0, 0.42, 0.14, leather, 0, 1.12, z - 0.35); }
       mg.box(2.1, 0.22, 0.2, 0x5a2a12, 0, 0.95, 0.75);
-      mg.add(new THREE.TorusGeometry(0.19, 0.022, 6, 22), 0xf2f2ee, -0.45, 1.12, 0.6, -0.5, 0, 0);
+      mg.add(new THREE.TorusGeometry(0.19, 0.022, 6, 22), 0xf2f2ee, -0.45, 1.12, 0.6, 0.5, 0, 0);
       gl.hexa([[-1.05, 0.92, 0.92], [1.05, 0.92, 0.92], [1.05, 0.92, 0.97], [-1.05, 0.92, 0.97], [-0.98, 1.25, 0.82], [0.98, 1.25, 0.82], [0.98, 1.25, 0.87], [-0.98, 1.25, 0.87]], 0xffffff);
       mg.box(2.12, 0.03, 0.06, CHROME, 0, 1.26, 0.84);
       for (const s of [1, -1]) mg.box(0.03, 0.36, 0.06, CHROME, s * 1.05, 1.08, 0.9);
@@ -954,13 +954,19 @@
     else if (!M.bus) Object.assign(driver, fitSeat(driver.x, driver.y, driver.z, 0.22));
     // the back seat, where an arrested driver is put (behind the driver, as the police do)
     const rear = M.sport || M.bus ? null : fitSeat(driver.x, driver.y, seatZ - 0.88, 0.2);
+    // (where the tub, the seats and the wheel are, for the inside seen in first person: INTERIOR in src/vehicles/interior.js)
+    const cabin = { z0: 0, z1: 0, y1: 0, xi: 0, seat: null, rear: null, wheel: null };
     {
       const z0 = Math.max(r0, -hl + S.rc[0] * 0.7) + 0.05, z1 = Math.min(r3, hl - S.rc[1]) - 0.05;
       let yMin = 9;
       for (let z = z0; z <= z1; z += 0.1) yMin = Math.min(yMin, sh.belt(z));
       const xi = hw - S.shoulder - 0.05, y0 = sh.sill(0) + 0.08, y1 = yMin - 0.03;
+      // (the tub's vertices are kept, so that first person can take it away from your own car: INTERIOR)
+      const t0 = mg.p.length / 3;
       if (z1 > z0) mg.box(2 * xi, y1 - y0, z1 - z0, 0x1a1b1e, 0, (y0 + y1) / 2, (z0 + z1) / 2);
+      cabin.tub = [t0, mg.p.length / 3];
       const seat = S.seatCol || 0x2b2d31, sy = y1 + 0.2;
+      Object.assign(cabin, { z0, z1, y1, xi });
       if (M.bus) {
         for (let z = hl - 3.2; z > -hl + 1.2; z -= 0.85) for (const sx of [1, -1]) if (!S.busDoors.some(([a, b]) => z > a - 0.3 && z < b + 0.3)) mg.box(0.9, 0.5, 0.1, 0x2f4f7a, sx * (hw - 0.6), y1 + 0.25, z);
       } else {
@@ -969,6 +975,7 @@
         const inner = (z, y) => { const r = sh.ring(z); return lerp(r.gB, r.gT, clamp((y - r.yt) / Math.max(1e-3, r.top - r.yt), 0, 1)) - 0.06; };
         const bz = seatZ - 0.32, bot = sy - 0.275, top = Math.min(sy + 0.275, ceil(bz)), roomTop = ceil(bz - 0.02);
         const sx = Math.min(driver.x, xi - 0.28, inner(bz, top) - 0.25);
+        cabin.seat = { sx, bz, bot, top, hBot: top + 0.02, hTop: Math.min(sy + 0.465, roomTop) };
         for (const s of [1, -1]) {
           mg.box(0.5, top - bot, 0.12, seat, s * sx, (top + bot) / 2, bz);
           const hTop = Math.min(sy + 0.465, roomTop), hBot = top + 0.02;
@@ -977,9 +984,14 @@
         const rz = seatZ - 1.2;
         if (!M.sport && rz > z0) {
           const rBot = sy - 0.28, rTop = Math.min(sy + 0.22, ceil(rz));
-          if (rTop - rBot > 0.25) mg.box(2 * Math.min(xi, inner(rz, rTop)) - 0.1, rTop - rBot, 0.12, seat, 0, (rTop + rBot) / 2, rz);
+          if (rTop - rBot > 0.25) {
+            mg.box(2 * Math.min(xi, inner(rz, rTop)) - 0.1, rTop - rBot, 0.12, seat, 0, (rTop + rBot) / 2, rz);
+            cabin.rear = { rz, rBot, rTop, rW: 2 * Math.min(xi, inner(rz, rTop)) - 0.1, ceil: ceil(rz) };
+          }
         }
-        mg.add(new THREE.TorusGeometry(0.17, 0.025, 6, 18), 0x15171a, driver.x, y1 + 0.16, seatZ + 0.42, -0.45, 0, 0);
+        // (the wheel a little under the eyes, as in a real car, but never down in the tub)
+        cabin.wheel = [driver.x, clamp(driver.y + 0.6, y1 + 0.08, y1 + 0.16), seatZ + 0.42];
+        mg.add(new THREE.TorusGeometry(0.17, 0.025, 6, 18), 0x15171a, ...cabin.wheel, 0.45, 0, 0);
       }
     }
     // mirrors on the doors at the foot of the windscreen
@@ -1298,7 +1310,7 @@
     const beltMax = Math.max(...sh.Z.filter((z) => Math.abs(z) < hl * 0.7).map(sh.belt)), roofMax = Math.max(...sh.Z.map(sh.topAt));
     const parts = M.bus ? [{ cz: 0, hw, hl, top: roofMax }]
       : [{ cz: 0, hw, hl, top: beltMax }, { cz: (Math.max(r1, -hl + 0.3) + r2) / 2, hw: hw - 0.12, hl: (r2 - Math.max(r1, -hl + 0.3)) / 2, top: roofMax + 0.03 }];
-    return { body: mg.build(), glass: gl.build(), decal, plates: plateB.build(), flashers, driver, rear, parts };
+    return { body: mg.build(), glass: gl.build(), decal, plates: plateB.build(), flashers, driver, rear, parts, cabin };
   }
   // one geometry per model and colour, shared by every car like it until a crash dents one (see ownGeometry)
   const carGeoCache = new Map();

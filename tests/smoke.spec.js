@@ -91,6 +91,31 @@ test('alla bilar och båtar går att bygga', async () => {
   expect(errors).toEqual([]);
 });
 
+test('förstaperson: alla fordon har en insida, och bilens mörka låda tas bort och kommer tillbaka', async () => {
+  const r = await page.evaluate(() => {
+    const verts = (o) => { let n = 0; o.traverse((m) => { if (m.isMesh) n += m.geometry.attributes.position.count; }); return n; };
+    const out = { ids: MODELS.length, inside: [], tub: null };
+    for (const M of MODELS) {
+      const c = makeCar(M, M.colors[0]), before = verts(c.group);
+      INTERIOR.show(c);
+      if (verts(c.group) > before + 100) out.inside.push(M.id);
+      if (M.id === 'kombi') {
+        const t = c.geo.cabin.tub, P = () => c.geo.body.attributes.position.array, top = () => { let y = -9; for (let i = t[0]; i < t[1]; i++) y = Math.max(y, P()[i * 3 + 1]); return y; };
+        const shown = top();
+        INTERIOR.show(null);
+        out.tub = { shown, back: top(), y1: c.geo.cabin.y1 };
+      }
+      INTERIOR.show(null);
+      removeCar(c);
+    }
+    return out;
+  });
+  expect(r.inside.length).toBe(r.ids);
+  expect(r.tub.shown).toBeLessThan(r.tub.y1 - 0.3);
+  expect(r.tub.back).toBeCloseTo(r.tub.y1, 3);
+  expect(errors).toEqual([]);
+});
+
 test('polis och tjuv: polisen tar tjuven och leken räknar poäng', async () => {
   // a pretend room with one friend, Oscar, standing a little way off; you have the room and are the police first
   const r = await page.evaluate(() => {

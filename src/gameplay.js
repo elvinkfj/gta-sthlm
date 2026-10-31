@@ -604,6 +604,8 @@
     // on a ride at Gröna Lund the camera sits in your seat; at the workshop it looks at your car, in the garage at yours
     const seatView = RIDES.view() || WORKSHOP.view() || GARAGE.view();
     if (seatView) {
+      INTERIOR.show(null);
+      if (driving) driving.driver.visible = true;
       const p = seatView.pos, d = seatView.dir;
       camera.position.copy(p); camTarget.copy(p);
       camera.lookAt(p.x + d.x, p.y + d.y, p.z + d.z);
@@ -625,6 +627,9 @@
     const fpCar = car === driving ? car : null;
     const fp = firstPerson && started && !fly && !CHUTE.on && !METRO.riding && (fpCar || !car);
     if (driving) driving.driver.visible = !(fp && fpCar);
+    // the inside of the vehicle you drive, with its moving needles and wheel, only in first person
+    INTERIOR.show(fp ? fpCar : null);
+    if (fp && fpCar) INTERIOR.update(fpCar, dt, vf);
     if (fp) {
       if (fpCar) {
         // turn with the car, and look ahead again a while after the mouse let go
@@ -632,14 +637,14 @@
         if (performance.now() - lastLook > 1500) camYaw = lerpAngle(camYaw, fpCar.h, 1 - Math.exp(-3 * dt));
         fpLastH = fpCar.h;
         const d = fpCar.driver.position, rider = fpCar.geo.driver.rider || fpCar.M.moped;
-        fpEye.set(d.x, d.y + (rider ? 0.95 : 0.84), d.z - (rider ? 0 : 0.14));
+        fpEye.set(d.x, d.y + (rider ? 0.66 : 0.84), d.z + (rider ? -0.04 : -0.14));
         fpCar.group.updateMatrixWorld();
         fpCar.body.localToWorld(fpEye);
       } else {
         fpEye.set(player.x + Math.sin(player.rot) * 0.18, player.y + 1.62, player.z + Math.cos(player.rot) * 0.18);
         player.model.group.visible = false;
       }
-      const pitch = camPitch - (fpCar ? 0.22 : 0.3), cp = Math.cos(pitch), sp = Math.sin(pitch);
+      const pitch = camPitch - (!fpCar ? 0.3 : fpCar.M.moped ? -0.2 : fpCar.M.boat === 'jetski' ? 0 : 0.22), cp = Math.cos(pitch), sp = Math.sin(pitch);
       camTarget.copy(fpEye);
       camera.position.copy(fpEye);
       if (shake > 0.001) {
