@@ -954,6 +954,8 @@
     else if (!M.bus) Object.assign(driver, fitSeat(driver.x, driver.y, driver.z, 0.22));
     // the back seat, where an arrested driver is put (behind the driver, as the police do)
     const rear = M.sport || M.bus ? null : fitSeat(driver.x, driver.y, seatZ - 0.88, 0.2);
+    // (where the tub, the seats and the wheel are, for the inside seen in first person: INTERIOR in src/vehicles/interior.js)
+    const cabin = { z0: 0, z1: 0, y1: 0, xi: 0, seat: null, rear: null, wheel: null };
     {
       const z0 = Math.max(r0, -hl + S.rc[0] * 0.7) + 0.05, z1 = Math.min(r3, hl - S.rc[1]) - 0.05;
       let yMin = 9;
@@ -961,6 +963,7 @@
       const xi = hw - S.shoulder - 0.05, y0 = sh.sill(0) + 0.08, y1 = yMin - 0.03;
       if (z1 > z0) mg.box(2 * xi, y1 - y0, z1 - z0, 0x1a1b1e, 0, (y0 + y1) / 2, (z0 + z1) / 2);
       const seat = S.seatCol || 0x2b2d31, sy = y1 + 0.2;
+      Object.assign(cabin, { z0, z1, y1, xi });
       if (M.bus) {
         for (let z = hl - 3.2; z > -hl + 1.2; z -= 0.85) for (const sx of [1, -1]) if (!S.busDoors.some(([a, b]) => z > a - 0.3 && z < b + 0.3)) mg.box(0.9, 0.5, 0.1, 0x2f4f7a, sx * (hw - 0.6), y1 + 0.25, z);
       } else {
@@ -969,6 +972,7 @@
         const inner = (z, y) => { const r = sh.ring(z); return lerp(r.gB, r.gT, clamp((y - r.yt) / Math.max(1e-3, r.top - r.yt), 0, 1)) - 0.06; };
         const bz = seatZ - 0.32, bot = sy - 0.275, top = Math.min(sy + 0.275, ceil(bz)), roomTop = ceil(bz - 0.02);
         const sx = Math.min(driver.x, xi - 0.28, inner(bz, top) - 0.25);
+        cabin.seat = { sx, bz, bot, top, hBot: top + 0.02, hTop: Math.min(sy + 0.465, roomTop) };
         for (const s of [1, -1]) {
           mg.box(0.5, top - bot, 0.12, seat, s * sx, (top + bot) / 2, bz);
           const hTop = Math.min(sy + 0.465, roomTop), hBot = top + 0.02;
@@ -977,9 +981,14 @@
         const rz = seatZ - 1.2;
         if (!M.sport && rz > z0) {
           const rBot = sy - 0.28, rTop = Math.min(sy + 0.22, ceil(rz));
-          if (rTop - rBot > 0.25) mg.box(2 * Math.min(xi, inner(rz, rTop)) - 0.1, rTop - rBot, 0.12, seat, 0, (rTop + rBot) / 2, rz);
+          if (rTop - rBot > 0.25) {
+            mg.box(2 * Math.min(xi, inner(rz, rTop)) - 0.1, rTop - rBot, 0.12, seat, 0, (rTop + rBot) / 2, rz);
+            cabin.rear = { rz, rBot, rTop, rW: 2 * Math.min(xi, inner(rz, rTop)) - 0.1, ceil: ceil(rz) };
+          }
         }
-        mg.add(new THREE.TorusGeometry(0.17, 0.025, 6, 18), 0x15171a, driver.x, y1 + 0.16, seatZ + 0.42, -0.45, 0, 0);
+        // (the wheel a little under the eyes, as in a real car, but never down in the tub)
+        cabin.wheel = [driver.x, clamp(driver.y + 0.6, y1 + 0.08, y1 + 0.16), seatZ + 0.42];
+        mg.add(new THREE.TorusGeometry(0.17, 0.025, 6, 18), 0x15171a, ...cabin.wheel, 0.45, 0, 0);
       }
     }
     // mirrors on the doors at the foot of the windscreen
@@ -1298,7 +1307,7 @@
     const beltMax = Math.max(...sh.Z.filter((z) => Math.abs(z) < hl * 0.7).map(sh.belt)), roofMax = Math.max(...sh.Z.map(sh.topAt));
     const parts = M.bus ? [{ cz: 0, hw, hl, top: roofMax }]
       : [{ cz: 0, hw, hl, top: beltMax }, { cz: (Math.max(r1, -hl + 0.3) + r2) / 2, hw: hw - 0.12, hl: (r2 - Math.max(r1, -hl + 0.3)) / 2, top: roofMax + 0.03 }];
-    return { body: mg.build(), glass: gl.build(), decal, plates: plateB.build(), flashers, driver, rear, parts };
+    return { body: mg.build(), glass: gl.build(), decal, plates: plateB.build(), flashers, driver, rear, parts, cabin };
   }
   // one geometry per model and colour, shared by every car like it until a crash dents one (see ownGeometry)
   const carGeoCache = new Map();

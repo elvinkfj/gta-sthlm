@@ -625,6 +625,9 @@
     const fpCar = car === driving ? car : null;
     const fp = firstPerson && started && !fly && !CHUTE.on && !METRO.riding && (fpCar || !car);
     if (driving) driving.driver.visible = !(fp && fpCar);
+    // the inside of the vehicle you drive, with its moving needles and wheel, only in first person
+    INTERIOR.show(fp ? fpCar : null);
+    if (fp && fpCar) INTERIOR.update(fpCar, dt, vf);
     if (fp) {
       if (fpCar) {
         // turn with the car, and look ahead again a while after the mouse let go
@@ -632,7 +635,7 @@
         if (performance.now() - lastLook > 1500) camYaw = lerpAngle(camYaw, fpCar.h, 1 - Math.exp(-3 * dt));
         fpLastH = fpCar.h;
         const d = fpCar.driver.position, rider = fpCar.geo.driver.rider || fpCar.M.moped;
-        fpEye.set(d.x, d.y + (rider ? 0.95 : 0.84), d.z - (rider ? 0 : 0.14));
+        fpEye.set(d.x, d.y + (rider ? 0.72 : 0.84), d.z + (rider ? 0.1 : -0.14));
         fpCar.group.updateMatrixWorld();
         fpCar.body.localToWorld(fpEye);
       } else {
