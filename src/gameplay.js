@@ -644,7 +644,7 @@
         fpEye.set(player.x + Math.sin(player.rot) * 0.18, player.y + 1.62, player.z + Math.cos(player.rot) * 0.18);
         player.model.group.visible = false;
       }
-      const pitch = camPitch - (fpCar ? 0.22 : 0.3), cp = Math.cos(pitch), sp = Math.sin(pitch);
+      const pitch = camPitch - (!fpCar ? 0.3 : fpCar.M.moped || fpCar.M.boat === 'jetski' ? 0 : 0.22), cp = Math.cos(pitch), sp = Math.sin(pitch);
       camTarget.copy(fpEye);
       camera.position.copy(fpEye);
       if (shake > 0.001) {

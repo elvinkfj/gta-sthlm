@@ -35,6 +35,7 @@ The game is these files, loaded in this order:
 - `src/people.js` (about 130 lines): person models, the spawn spot and the player.
 - `src/vehicles/models.js` (about 740 lines): every car, boat, police and military model as data, and the gearbox.
 - `src/vehicles/cars.js` (about 1,490 lines): car materials, body and wheel geometry, `makeCar`.
+- `src/vehicles/interior.js` (about 800 lines): the inside of the vehicles, seen in first person (C): dashboards with moving needles and screens, the steering wheel with your hands, seats, doors, pedals, your body.
 - `src/vehicles/physics.js` (about 590 lines): car physics, smoke and sparks, skid marks, damage, people physics.
 - `src/traffic.js` (about 300 lines): the traffic AI and the pedestrians.
 - `src/police.js` (about 870 lines): wanted stars, chases, the sjöpolis and the navy, the helicopter.
@@ -85,6 +86,7 @@ Line numbers drift with every change, so search instead of trusting numbers. Eac
 | `src/people.js` | `people` | Person models and the player | `persons`, `player`, `makePerson` |
 | `src/vehicles/models.js` | `vehicles`, `gearbox and engine` | **All car, boat, police and military models as data**, then the gearbox | `MODELS`, `MODEL`, `PICKABLE`, `SECRET` |
 | `src/vehicles/cars.js` | `car materials` | Car materials, car body, moped, boat and military geometry, wheels, building a car | `carShape`, `wheelGeometry`, `cars`, `makeCar` |
+| `src/vehicles/interior.js` | `the inside of the vehicles` | Built only for the vehicle you drive in first person (`firstPerson` in `src/gameplay.js`, toggled by C), once per model, from the body's own shape (`carShape`, `bodyColour`) and where `carGeometry` puts the tub, the seats and the wheel (`geo.cabin`). Cars, the bus, the moped (on `steerGroup`), the boats and the army each have a builder. While it is shown, the dark tub of your car is flattened (`tub`, on a geometry of its own like a dent) and put back after. Nothing of Three.js is made at load (the baseline). `update` turns the wheel and the needles and redraws the digital screens. | `INTERIOR` |
 | `src/vehicles/physics.js` | `car physics`, `particles…`, `skid marks`, `damage`, `people physics` | Driving physics, smoke and sparks, crashes | `crash` |
 | `src/traffic.js` | `traffic AI`, `pedestrians` | Bot drivers and walkers | `botThink`, `npcThink` |
 | `src/police.js` | `police`, `the sjöpolis and the navy`, `the police helicopter` | Wanted stars, chases, police boats, military, helicopter | `limitAt`, `startChase`, `endChase`, `policeThink`, `policeUpdate`, `WATER`, `updateHeli` |

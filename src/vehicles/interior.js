@@ -230,8 +230,11 @@
         const hx = s * r, hy = 0.01;
         m.add(new THREE.SphereGeometry(0.032, 12, 8), SKIN, hx, hy, -0.012);
         for (let f = 0; f < 4; f++) m.add(new THREE.CylinderGeometry(0.011, 0.011, 0.05, 6), SKIN, hx - s * 0.015, hy + 0.03 - f * 0.02, 0.01, 0, 0, Math.PI / 2);
-        tubeTo(m, [hx, hy - 0.02, -0.03], [hx + s * 0.015, hy - 0.07, -0.1], 0.022, SKIN, 0.025);
-        tubeTo(m, [hx + s * 0.015, hy - 0.07, -0.1], [hx + s * 0.03, hy - 0.15, -0.22], 0.03, SLEEVE, 0.034);
+        // (the forearm goes back towards you and a little down in the vehicle, whatever the tilt of the wheel)
+        const loc = (x, y, z) => [hx + x, hy + y * Math.cos(rx) + z * Math.sin(rx), -y * Math.sin(rx) + z * Math.cos(rx)];
+        const wrist = loc(s * 0.012, -0.02, -0.1), elbow = loc(s * 0.03, -0.05, -0.25);
+        tubeTo(m, [hx, hy - 0.01, -0.03], wrist, 0.022, SKIN, 0.025);
+        tubeTo(m, wrist, elbow, 0.03, SLEEVE, 0.034);
       }
       const tm = new THREE.Mesh(m.build(), matte), tk = new THREE.Mesh(k.build(), shiny);
       tm.receiveShadow = true;
@@ -496,8 +499,7 @@
       tubeTo(m, [drv.x, hipY + 0.08, hipZ - 0.04], chest, 0.15, SLEEVE, 0.17);
       const ca = Math.cos(0.45), sa = Math.sin(0.45);
       for (const s of [1, -1]) {
-        const lx = s * 0.2, ly = -0.14, lz = -0.22;
-        const elbow = [W[0] + lx, W[1] + ly * ca - lz * sa, W[2] + ly * sa + lz * ca];
+        const elbow = [W[0] + s * 0.2, W[1] + 0.01 * ca - 0.05, W[2] + 0.01 * sa - 0.25];
         const shoulder = [drv.x + s * 0.2, eye[1] - 0.3, drv.z - 0.1];
         m.add(new THREE.SphereGeometry(0.075, 10, 8), SLEEVE, ...shoulder);
         tubeTo(m, shoulder, elbow, 0.055, SLEEVE, 0.04);
@@ -589,7 +591,7 @@
       const by = sh.shellY(0, hl - 0.6) - 0.18;
       m.box(1.3, 0.16, 0.06, 0x111111, 0, by, hl - 0.6);
       screen(G, SCREEN.bus, 1.24, 0.12, 0, by, hl - 0.635);
-      steeringWheel(I, [drv.x, y1 + 0.75, drv.z + 0.55], 0.25, 1.05, {});
+      steeringWheel(I, [drv.x, y1 + 0.6, drv.z + 0.68], 0.25, 1.05, {});
       I.wheelK = 4;
       return { m, k };
     }
